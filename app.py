@@ -31,18 +31,15 @@ def load_all_data():
     ]
     df_proc = df_proc.fillna("-")
 
-    # 2. Φόρτωση ΟΛΩΝ των Προτύπων Χρόνων (Σάρωση όλων των στηλών)
+    # 2. Φόρτωση Πρότυπων Χρόνων
     tasks_dict = {}
     try:
         df_times_raw = pd.read_csv(TIMES_CSV_URL, header=None)
-        
-        # Σαρώνουμε ανά ζεύγη στηλών (0-1, 3-4, 7-8 κτλ.)
         for col_idx in range(len(df_times_raw.columns) - 1):
             for row_idx in range(len(df_times_raw)):
                 task_name = str(df_times_raw.iloc[row_idx, col_idx]).strip()
                 time_val_raw = df_times_raw.iloc[row_idx, col_idx + 1]
                 
-                # Έλεγχος αν είναι έγκυρο όνομα εργασίας και αριθμητικός χρόνος
                 if task_name and task_name.lower() not in ["nan", "none", "τύπος εργασίας / υλικό"] and not task_name.startswith("TASK"):
                     try:
                         time_val = float(str(time_val_raw).replace(',', '.'))
@@ -53,7 +50,7 @@ def load_all_data():
     except Exception as e:
         tasks_dict = {"Έλεγχος (εύκολο)": 1.0, "Συναρμολόγηση": 2.0, "Συσκευασία": 1.5}
 
-    # 3. Φόρτωση Ομάδας / Προσωπικού
+    # 3. Φόρτωση Ομάδας
     try:
         df_team_raw = pd.read_csv(TEAM_CSV_URL)
         team_members = [c.strip() for c in df_team_raw.columns if c and "Unnamed" not in c and c not in ["Ημέρα", "Σύνολο διαθέσιμων ωρών"]]
@@ -90,6 +87,11 @@ if option == "Καρτέλα Project":
         
         card_title = f"🆔 {item_id} | {material} — (Ποσότητα: {qty} τμχ) | Status: {status}"
         
+        # Διαχείριση δυναμικού αριθμού tasks στο session state
+        state_key = f"num_tasks_{item_id}"
+        if state_key not in st.session_state:
+            st.session_state[state_key] = 1 # Ξεκινάει με 1 εργασία
+
         with st.expander(card_title):
             col_info, col_tasks = st.columns([1, 2.5])
             
@@ -102,19 +104,19 @@ if option == "Καρτέλα Project":
                 st.divider()
 
             with col_tasks:
-                st.markdown("**⚙️ Στάδια Παραγωγής & Αυτόματοι Χρόνοι**")
+                st.markdown("**⚙️ Λίστα Εργασιών Παραγωγής**")
                 
-                for t_num in [1, 2]:
-                    st.caption(f"**Στάδιο {t_num}**")
+                # Εμφάνιση των εργασιών δυναμικά
+                for t_idx in range(st.session_state[state_key]):
                     c_check, c_task, c_user, c_date, c_time = st.columns([0.1, 0.35, 0.25, 0.20, 0.10])
                     
                     # Checkbox
-                    done = c_check.checkbox("", key=f"chk_{item_id}_{t_num}")
+                    done = c_check.checkbox("", key=f"chk_{item_id}_{t_idx}")
                     
                     # Dropdown Εργασιών
                     selected_task = c_task.selectbox(
                         "Εργασία", task_options, 
-                        key=f"task_{item_id}_{t_num}", 
+                        key=f"task_{item_id}_{t_idx}", 
                         label_visibility="collapsed"
                     )
                     
@@ -123,23 +125,29 @@ if option == "Καρτέλα Project":
                     # Dropdown Ομάδας
                     assigned_user = c_user.selectbox(
                         "Ανάθεση", team_options, 
-                        key=f"user_{item_id}_{t_num}", 
+                        key=f"user_{item_id}_{t_idx}", 
                         label_visibility="collapsed"
                     )
                     
-                    # Ημερομηνία Ανάθεσης
+                    # Ημερομηνία
                     assign_date = c_date.date_input(
                         "Ημερομηνία", value=date.today(), 
                         format="DD/MM/YYYY",
-                        key=f"date_{item_id}_{t_num}", 
+                        key=f"date_{item_id}_{t_idx}", 
                         label_visibility="collapsed"
                     )
                     
-                    # Εμφάνιση Αυτόματου Χρόνου
+                    # Χρόνος
                     c_time.metric("λ/τμχ", f"{auto_time}λ")
                     
                     task_hours = (auto_time * qty) / 60
                     total_project_hours += task_hours
+
+                # Κουμπί Προσθήκης Νέας Εργασίας
+                col_btn1, col_btn2 = st.columns([0.4, 0.6])
+                if col_btn1.button("➕ Προσθήκη Εργασίας", key=f"add_btn_{item_id}"):
+                    st.session_state[state_key] += 1
+                    st.rerun()
 
     st.divider()
     st.success(f"🎯 **Συνολικός Χρόνος Παραγωγής για το Project {selected_project}: {round(total_project_hours, 1)} Ώρες**")
