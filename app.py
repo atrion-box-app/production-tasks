@@ -13,10 +13,36 @@ CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&
 @st.cache_data(ttl=10)
 def load_procurement_data():
     try:
-        # Διαβάζουμε το CSV
-        df = pd.read_csv(CSV_URL)
-        df.columns = df.columns.str.strip()
-        return df
+        # Διαβάζουμε το CSV χωρίς επικεφαλίδες πρώτα για να έχουμε ακριβείς θέσεις στηλών A=0, B=1, C=2 κτλ.
+        df_raw = pd.read_csv(CSV_URL, header=None)
+        
+        # Οι στήλες που ζητήθηκαν βάσει των γραμμάτων του Excel:
+        # B=1 (Project), C=2 (Ποσότητα), D=3 (Ημ. Παράδοσης), E=4 (Αναμ. Ημ. Παραλαβής), 
+        # F=5 (Προμηθευτής), G=6 (Υλικό), K=10 (Αναμ. Ποσότητα), M=12 (Status Procurement), 
+        # R=17 (Είδος Δώρου), S=18 (ID)
+        indices = [18, 3, 17, 1, 2, 5, 6, 4, 10, 12]
+        
+        # Παίρνουμε μόνο αυτές τις στήλες
+        df_selected = df_raw.iloc[1:, indices].copy() # Παραλείπουμε την πρώτη γραμμή τίτλων
+        
+        # Ορίζουμε τους δικούς μας καθαρούς τίτλους στα ελληνικά
+        df_selected.columns = [
+            "ID", 
+            "Ημερομηνία Παράδοσης", 
+            "Είδος Δώρου", 
+            "Project", 
+            "Ποσότητα", 
+            "Προμηθευτής", 
+            "Υλικό / Προϊόν", 
+            "Αναμενόμενη Ημ. Παραλαβής", 
+            "Αναμενόμενη Ποσότητα Παραλαβής", 
+            "Status Procurement"
+        ]
+        
+        # Καθαρισμός κενών τιμών
+        df_selected = df_selected.fillna("-")
+        return df_selected
+        
     except Exception as e:
         st.error(f"Σφάλμα κατά τη σύνδεση με το Google Sheet του Procurement: {e}")
         return pd.DataFrame()
@@ -30,83 +56,39 @@ option = st.sidebar.selectbox(
 )
 
 if not procurement_df.empty:
-    
-    # Χαρτογράφηση των 10 στηλών με βάση τα πραγματικά ονόματα του Procurement Sheet
-    # ID (S), Ημ. Παράδοσης (D), Είδος Δώρου (R), Project (B), Ποσότητα (C), Προμηθευτής (F), Υλικό (G), Αναμ. Ημ. Παραλαβής (E), Αναμ. Ποσότητα (K), Status (M)
-    
-    column_mapping = {}
-    for col in procurement_df.columns:
-        c_lower = col.lower()
-        if c_lower in ['id', 'sku']:
-            column_mapping['ID'] = col
-        elif 'project\'s due date' in c_lower or 'ημερομηνία παράδοσης' in c_lower:
-            column_mapping['Ημερομηνία Παράδοσης'] = col
-        elif 'type of gift' in c_lower or 'είδος δώρου' in c_lower:
-            column_mapping['Είδος Δώρου'] = col
-        elif c_lower == 'project':
-            column_mapping['Project'] = col
-        elif 'project\'s q' in c_lower or 'quantity order' in c_lower or 'ποσότητα' in c_lower:
-            column_mapping['Ποσότητα'] = col
-        elif 'suppliers' in c_lower or 'προμηθευτής' in c_lower:
-            column_mapping['Προμηθευτής'] = col
-        elif 'description' in c_lower or 'υλικό' in c_lower:
-            column_mapping['Υλικό / Προϊόν'] = col
-        elif 'order\'s due date' in c_lower or 'received date' in c_lower or 'αναμενόμενη ημερομηνία' in c_lower:
-            column_mapping['Αναμενόμενη Ημ. Παραλαβής'] = col
-        elif 'quantity stock' in c_lower or 'αναμενόμενη ποσότητα' in c_lower:
-            column_mapping['Αναμενόμενη Ποσότητα'] = col
-        elif 'status' in c_lower:
-            column_mapping['Status Procurement'] = col
 
-    # Ανάκτηση των διαθέσιμων στηλών
-    selected_cols_raw = list(column_mapping.values())
-    
     if option == "Καρτέλα Project":
         st.header("📋 Προβολή & Διαχείριση ανά Project")
         
-        project_col_raw = column_mapping.get('Project', 'Project')
+        projects_list = sorted([p for p in procurement_df["Project"].unique().tolist() if p != "-"])
+        selected_project = st.selectbox("Επιλέξτε Project:", projects_list)
         
-        if project_col_raw in procurement_df.columns:
-            projects_list = sorted(procurement_df[project_col_raw].dropna().unique().tolist())
-            selected_project = st.selectbox("Επιλέξτε Project:", projects_list)
-            
-            st.subheader(f"Υλικά Procurement για το Project: {selected_project}")
-            
-            # Φιλτράρισμα και μετονομασία στηλών στα ελληνικά
-            filtered_df = procurement_df[procurement_df[project_col_raw] == selected_project][selected_cols_raw].copy()
-            
-            # Αντίστροφη μετονομασία για όμορφη εμφανιση
-            rename_dict = {v: k for k, v in column_mapping.items()}
-            filtered_df = filtered_df.rename(columns=rename_dict)
-            
-            # Κεντράρισμα όλων των στηλών
-            column_config = {
-                col: st.column_config.Column(alignment="center") for col in filtered_df.columns
-            }
-            
-            st.dataframe(
-                filtered_df, 
-                use_container_width=True,
-                column_config=column_config,
-                hide_index=True
-            )
-            
-        else:
-            st.warning("Δεν βρέθηκε η στήλη 'Project' στο αρχείο.")
-
-    elif option == "Όλα τα Υλικά Παραγωγής":
-        st.header("📦 Ζωντανή Λίστα Υλικών Procurement (10 Στήλες)")
+        st.subheader(f"Υλικά Procurement για το Project: {selected_project}")
         
-        display_df = procurement_df[selected_cols_raw].copy()
-        rename_dict = {v: k for k, v in column_mapping.items()}
-        display_df = display_df.rename(columns=rename_dict)
+        # Φιλτράρισμα υλικών για το επιλεγμένο Project
+        filtered_df = procurement_df[procurement_df["Project"] == selected_project].copy()
         
+        # Κεντράρισμα όλων των στηλών
         column_config = {
-            col: st.column_config.Column(alignment="center") for col in display_df.columns
+            col: st.column_config.Column(alignment="center") for col in filtered_df.columns
         }
         
         st.dataframe(
-            display_df, 
+            filtered_df, 
+            use_container_width=True,
+            column_config=column_config,
+            hide_index=True
+        )
+
+    elif option == "Όλα τα Υλικά Παραγωγής":
+        st.header("📦 Ζωντανή Λίστα Υλικών Procurement (Όλες οι 10 Στήλες)")
+        
+        column_config = {
+            col: st.column_config.Column(alignment="center") for col in procurement_df.columns
+        }
+        
+        st.dataframe(
+            procurement_df, 
             use_container_width=True,
             column_config=column_config,
             hide_index=True
