@@ -13,6 +13,7 @@ CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&
 @st.cache_data(ttl=10)
 def load_procurement_data():
     try:
+        # Διαβάζουμε το CSV
         df = pd.read_csv(CSV_URL)
         df.columns = df.columns.str.strip()
         return df
@@ -30,47 +31,59 @@ option = st.sidebar.selectbox(
 
 if not procurement_df.empty:
     
-    # Συνάρτηση αναζήτησης στηλών
-    def get_column(df, possible_names):
-        for name in possible_names:
-            matches = [col for col in df.columns if name.lower() in col.lower()]
-            if matches:
-                return matches[0]
-        return None
+    # Χαρτογράφηση των 10 στηλών με βάση τα πραγματικά ονόματα του Procurement Sheet
+    # ID (S), Ημ. Παράδοσης (D), Είδος Δώρου (R), Project (B), Ποσότητα (C), Προμηθευτής (F), Υλικό (G), Αναμ. Ημ. Παραλαβής (E), Αναμ. Ποσότητα (K), Status (M)
+    
+    column_mapping = {}
+    for col in procurement_df.columns:
+        c_lower = col.lower()
+        if c_lower in ['id', 'sku']:
+            column_mapping['ID'] = col
+        elif 'project\'s due date' in c_lower or 'ημερομηνία παράδοσης' in c_lower:
+            column_mapping['Ημερομηνία Παράδοσης'] = col
+        elif 'type of gift' in c_lower or 'είδος δώρου' in c_lower:
+            column_mapping['Είδος Δώρου'] = col
+        elif c_lower == 'project':
+            column_mapping['Project'] = col
+        elif 'project\'s q' in c_lower or 'quantity order' in c_lower or 'ποσότητα' in c_lower:
+            column_mapping['Ποσότητα'] = col
+        elif 'suppliers' in c_lower or 'προμηθευτής' in c_lower:
+            column_mapping['Προμηθευτής'] = col
+        elif 'description' in c_lower or 'υλικό' in c_lower:
+            column_mapping['Υλικό / Προϊόν'] = col
+        elif 'order\'s due date' in c_lower or 'received date' in c_lower or 'αναμενόμενη ημερομηνία' in c_lower:
+            column_mapping['Αναμενόμενη Ημ. Παραλαβής'] = col
+        elif 'quantity stock' in c_lower or 'αναμενόμενη ποσότητα' in c_lower:
+            column_mapping['Αναμενόμενη Ποσότητα'] = col
+        elif 'status' in c_lower:
+            column_mapping['Status Procurement'] = col
 
-    # Εύρεση των 10 στηλών Procurement
-    col_id = get_column(procurement_df, ['id', 'sku'])
-    col_date = get_column(procurement_df, ["project's due date", 'ημερομηνία παράδοσης', 'due date'])
-    col_gift = get_column(procurement_df, ['type of gift', 'είδος δώρου', 'gift'])
-    col_project = get_column(procurement_df, ['project'])
-    col_qty = get_column(procurement_df, ["project's q", 'ποσότητα', 'quantity order'])
-    col_supplier = get_column(procurement_df, ['suppliers', 'προμηθευτής'])
-    col_material = get_column(procurement_df, ['description', 'υλικό', 'προϊόν'])
-    col_expected_date = get_column(procurement_df, ["order's due date", 'received date', 'αναμενόμενη ημερομηνία'])
-    col_expected_qty = get_column(procurement_df, ['quantity stock', 'αναμενόμενη ποσότητα'])
-    col_status = get_column(procurement_df, ['status', 'status procurement'])
-
-    # Λίστα με τις 10 στήλες
-    selected_cols = [c for c in [col_id, col_date, col_gift, col_project, col_qty, col_supplier, col_material, col_expected_date, col_expected_qty, col_status] if c is not None]
-
+    # Ανάκτηση των διαθέσιμων στηλών
+    selected_cols_raw = list(column_mapping.values())
+    
     if option == "Καρτέλα Project":
         st.header("📋 Προβολή & Διαχείριση ανά Project")
         
-        if col_project:
-            projects_list = sorted(procurement_df[col_project].dropna().unique().tolist())
+        project_col_raw = column_mapping.get('Project', 'Project')
+        
+        if project_col_raw in procurement_df.columns:
+            projects_list = sorted(procurement_df[project_col_raw].dropna().unique().tolist())
             selected_project = st.selectbox("Επιλέξτε Project:", projects_list)
             
             st.subheader(f"Υλικά Procurement για το Project: {selected_project}")
             
-            # Φιλτράρισμα υλικών για το επιλεγμένο Project
-            filtered_df = procurement_df[procurement_df[col_project] == selected_project][selected_cols].copy()
+            # Φιλτράρισμα και μετονομασία στηλών στα ελληνικά
+            filtered_df = procurement_df[procurement_df[project_col_raw] == selected_project][selected_cols_raw].copy()
             
-            # Ρύθμιση Κεντραρίσματος για όλες τις στήλες
+            # Αντίστροφη μετονομασία για όμορφη εμφανιση
+            rename_dict = {v: k for k, v in column_mapping.items()}
+            filtered_df = filtered_df.rename(columns=rename_dict)
+            
+            # Κεντράρισμα όλων των στηλών
             column_config = {
-                col: st.column_config.Column(alignment="center") for col in selected_cols
+                col: st.column_config.Column(alignment="center") for col in filtered_df.columns
             }
             
-            # Εμφάνιση πίνακα με Κεντραρισμένα Κελιά
             st.dataframe(
                 filtered_df, 
                 use_container_width=True,
@@ -84,12 +97,16 @@ if not procurement_df.empty:
     elif option == "Όλα τα Υλικά Παραγωγής":
         st.header("📦 Ζωντανή Λίστα Υλικών Procurement (10 Στήλες)")
         
+        display_df = procurement_df[selected_cols_raw].copy()
+        rename_dict = {v: k for k, v in column_mapping.items()}
+        display_df = display_df.rename(columns=rename_dict)
+        
         column_config = {
-            col: st.column_config.Column(alignment="center") for col in selected_cols
+            col: st.column_config.Column(alignment="center") for col in display_df.columns
         }
         
         st.dataframe(
-            procurement_df[selected_cols], 
+            display_df, 
             use_container_width=True,
             column_config=column_config,
             hide_index=True
