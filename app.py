@@ -31,23 +31,27 @@ def load_all_data():
     ]
     df_proc = df_proc.fillna("-")
 
-    # 2. Φόρτωση Προτύπων Χρόνων
+    # 2. Φόρτωση ΟΛΩΝ των Προτύπων Χρόνων (Σάρωση όλων των στηλών)
+    tasks_dict = {}
     try:
-        df_times_raw = pd.read_csv(TIMES_CSV_URL)
-        tasks_dict = {}
-        for col_idx in range(0, len(df_times_raw.columns), 3):
-            sub_df = df_times_raw.iloc[:, col_idx:col_idx+2].dropna()
-            if len(sub_df.columns) >= 2:
-                for _, row in sub_df.iterrows():
-                    task_name = str(row.iloc[0]).strip()
+        df_times_raw = pd.read_csv(TIMES_CSV_URL, header=None)
+        
+        # Σαρώνουμε ανά ζεύγη στηλών (0-1, 3-4, 7-8 κτλ.)
+        for col_idx in range(len(df_times_raw.columns) - 1):
+            for row_idx in range(len(df_times_raw)):
+                task_name = str(df_times_raw.iloc[row_idx, col_idx]).strip()
+                time_val_raw = df_times_raw.iloc[row_idx, col_idx + 1]
+                
+                # Έλεγχος αν είναι έγκυρο όνομα εργασίας και αριθμητικός χρόνος
+                if task_name and task_name.lower() not in ["nan", "none", "τύπος εργασίας / υλικό"] and not task_name.startswith("TASK"):
                     try:
-                        time_val = float(row.iloc[1])
-                        if task_name and task_name != "nan" and not task_name.startswith("TASK"):
+                        time_val = float(str(time_val_raw).replace(',', '.'))
+                        if time_val >= 0:
                             tasks_dict[task_name] = time_val
-                    except:
+                    except ValueError:
                         pass
     except Exception as e:
-        tasks_dict = {"Γενικός Έλεγχος": 1.0, "Συναρμολόγηση": 2.0, "Συσκευασία": 1.5}
+        tasks_dict = {"Έλεγχος (εύκολο)": 1.0, "Συναρμολόγηση": 2.0, "Συσκευασία": 1.5}
 
     # 3. Φόρτωση Ομάδας / Προσωπικού
     try:
@@ -75,7 +79,7 @@ if option == "Καρτέλα Project":
     st.subheader(f"📦 Υλικά & Tasks για το {selected_project} ({len(filtered_df)} Υλικά)")
     
     total_project_hours = 0.0
-    task_options = ["- Επιλογή Εργασίας -"] + list(tasks_database.keys())
+    task_options = ["- Επιλογή Εργασίας -"] + sorted(list(tasks_database.keys()))
     team_options = ["- Χωρίς Ανάθεση -"] + team_database
 
     for idx, row in filtered_df.iterrows():
@@ -123,7 +127,7 @@ if option == "Καρτέλα Project":
                         label_visibility="collapsed"
                     )
                     
-                    # Ημερομηνία Ανάθεσης σε μορφή ΗΗ/ΜΜ/ΕΕΕΕ (DD/MM/YYYY)
+                    # Ημερομηνία Ανάθεσης
                     assign_date = c_date.date_input(
                         "Ημερομηνία", value=date.today(), 
                         format="DD/MM/YYYY",
@@ -144,8 +148,8 @@ elif option == "Πρότυπα Χρόνων & Ομάδα":
     st.header("📊 Βάση Δεδομένων Χρόνων & Ομάδας")
     col_a, col_b = st.columns(2)
     with col_a:
-        st.subheader("⏱️ Πρότυπα Χρόνων (από Google Sheet)")
+        st.subheader(f"⏱️ Πρότυπα Χρόνων ({len(tasks_database)} Εργασίες)")
         st.json(tasks_database)
     with col_b:
-        st.subheader("👥 Ομάδα Παραγωγής (από Google Sheet)")
+        st.subheader("👥 Ομάδα Παραγωγής")
         st.write(team_database)
