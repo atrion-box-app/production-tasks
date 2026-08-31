@@ -76,6 +76,10 @@ if option == "Καρτέλα Project":
     st.subheader(f"📦 Υλικά & Tasks για το {selected_project} ({len(filtered_df)} Υλικά)")
     
     total_project_hours = 0.0
+    completed_project_hours = 0.0
+    total_tasks_count = 0
+    completed_tasks_count = 0
+
     task_options = ["- Επιλογή Εργασίας -"] + sorted(list(tasks_database.keys()))
     team_options = ["- Χωρίς Ανάθεση -"] + team_database
 
@@ -109,7 +113,7 @@ if option == "Καρτέλα Project":
                     c_check, c_task, c_user, c_date, c_time, c_del = st.columns([0.08, 0.32, 0.23, 0.18, 0.11, 0.08])
                     
                     # Checkbox
-                    done = c_check.checkbox("", key=f"chk_{item_id}_{t_idx}")
+                    is_done = c_check.checkbox("", key=f"chk_{item_id}_{t_idx}")
                     
                     # Dropdown Εργασιών
                     selected_task = c_task.selectbox(
@@ -135,17 +139,23 @@ if option == "Καρτέλα Project":
                         label_visibility="collapsed"
                     )
                     
-                    # Χρόνος
-                    c_time.metric("λ/τμχ", f"{auto_time}λ")
+                    # Υπολογισμοί Ωρών
+                    task_hours = (auto_time * qty) / 60
+                    total_project_hours += task_hours
+                    total_tasks_count += 1
                     
-                    # Κουμπί Διαγραφής Συγκεκριμένης Γραμμής (🗑️)
+                    if is_done:
+                        completed_project_hours += task_hours
+                        completed_tasks_count += 1
+                        c_time.markdown("✅ **Done**")
+                    else:
+                        c_time.metric("λ/τμχ", f"{auto_time}λ")
+                    
+                    # Κουμπί Διαγραφής
                     if c_del.button("🗑️", key=f"del_{item_id}_{t_idx}"):
                         if st.session_state[state_key] > 1:
                             st.session_state[state_key] -= 1
                             st.rerun()
-
-                    task_hours = (auto_time * qty) / 60
-                    total_project_hours += task_hours
 
                 # Κουμπιά Προσθήκης / Αφαίρεσης Εργασίας
                 col_btn1, col_btn2, col_empty = st.columns([0.35, 0.35, 0.3])
@@ -158,8 +168,18 @@ if option == "Καρτέλα Project":
                         st.session_state[state_key] -= 1
                         st.rerun()
 
+    # Υπολογισμός Πρόοδου Project
     st.divider()
-    st.success(f"🎯 **Συνολικός Χρόνος Παραγωγής για το Project {selected_project}: {round(total_project_hours, 1)} Ώρες**")
+    progress_pct = int((completed_tasks_count / total_tasks_count) * 100) if total_tasks_count > 0 else 0
+    remaining_hours = round(total_project_hours - completed_project_hours, 1)
+
+    st.markdown(f"### 📊 Πρόοδος Παραγωγής Project {selected_project}: **{progress_pct}%**")
+    st.progress(progress_pct / 100)
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Συνολικές Ώρες", f"{round(total_project_hours, 1)} Ώρες")
+    m2.metric("Ώρες που Ολοκληρώθηκαν", f"{round(completed_project_hours, 1)} Ώρες")
+    m3.metric("Υπολειπόμενες Ώρες", f"{remaining_hours} Ώρες", delta=f"-{remaining_hours}h" if remaining_hours > 0 else "Έτοιμο!")
 
 elif option == "Πρότυπα Χρόνων & Ομάδα":
     st.header("📊 Βάση Δεδομένων Χρόνων & Ομάδας")
