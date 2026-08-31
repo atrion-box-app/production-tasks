@@ -5,53 +5,66 @@ st.set_page_config(page_title="Production Tasks App", layout="wide")
 
 st.title("🏭 Σύστημα Διαχείρισης Παραγωγής & Tasks")
 
+# Google Sheet URL του Procurement (CSV export link)
+SHEET_ID = "1QhTd58vuulaC_73sgbjuwG5MVxT6c1c_-MbhypGx0fA"
+GID = "1639392743"
+CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}"
+
+# Συνάρτηση για ζωντανή ανάγνωση των δεδομένων
+@st.cache_data(ttl=10)  # Ανανέωση δεδομένων κάθε 10 δευτερόλεπτα
+def load_procurement_data():
+    try:
+        df = pd.read_csv(CSV_URL)
+        return df
+    except Exception as e:
+        st.error(f"Σφάλμα κατά τη σύνδεση με το Google Sheet του Procurement: {e}")
+        return pd.DataFrame()
+
+# Φόρτωση Δεδομένων
+procurement_df = load_procurement_data()
+
 # Πλευρικό μενού (Sidebar)
 option = st.sidebar.selectbox(
     "Επιλογή Οθόνης",
-    ["Καρτέλα Project", "Καταχώρηση Procurement", "Ημερολόγιο Διαθεσιμότητας"]
+    ["Καρτέλα Project", "Όλα τα Υλικά Παραγωγής", "Ημερολόγιο Διαθεσιμότητας"]
 )
 
-if option == "Καρτέλα Project":
-    st.header("📋 Προβολή & Διαχείριση ανά Project")
+if not procurement_df.empty:
     
-    project = st.selectbox("Επιλέξτε Project:", ["PWC", "CONSTRAT", "STARBULK"])
-    
-    st.subheader(f"Υλικά & Tasks για το Project: {project}")
-    
-    # Αυτόματος πίνακας χωρίς κίνδυνο μετατόπισης γραμμών
-    data = {
-        "ID": [101, 102, 103],
-        "Υλικό": ["Χαρτοσακούλα 29x22x4.5", "Είδος κορδέλας BLACK", "Προϊόν 3"],
-        "Ποσότητα": [50, 50, 50],
-        "Task 1": ["Έλεγχος", "Κόψιμο", "Συναρμολόγηση"],
-        "Status Task 1": [True, False, False],
-        "Task 2": ["Συναρμολόγηση", "Τοποθέτηση", "Συσκευασία"],
-        "Status Task 2": [False, False, False]
-    }
-    df = pd.DataFrame(data)
-    
-    # Επεξεργάσιμος πίνακας
-    st.data_editor(df, use_container_width=True)
-    
-    st.success("⏱️ Συνολικός Χρόνος Παραγωγής Project: **4.2 Ώρες** (~1 ημέρα)")
+    if option == "Καρτέλα Project":
+        st.header("📋 Προβολή & Διαχείριση ανά Project")
+        
+        # Καθαρισμός και εύρεση μοναδικών Projects
+        # Προσαρμόστε το όνομα της στήλης αν στο αρχείο λέγεται 'Project'
+        project_column = [col for col in procurement_df.columns if 'Project' in col or 'project' in col]
+        
+        if project_column:
+            proj_col_name = project_column[0]
+            projects_list = procurement_df[proj_col_name].dropna().unique().tolist()
+            
+            selected_project = st.selectbox("Επιλέξτε Project:", sorted(projects_list))
+            
+            st.subheader(f"Υλικά Procurement για το Project: {selected_project}")
+            
+            # Φιλτράρισμα υλικών μόνο για το επιλεγμένο Project
+            filtered_df = procurement_df[procurement_df[proj_col_name] == selected_project]
+            
+            st.dataframe(filtered_df, use_container_width=True)
+        else:
+            st.warning("Δεν βρέθηκε στήλη με όνομα 'Project' στο αρχείο.")
+            st.dataframe(procurement_df.head(), use_container_width=True)
 
-elif option == "Καταχώρηση Procurement":
-    st.header("➕ Νέα Καταχώρηση Παραγγελίας από Procurement")
-    
-    with st.form("new_order"):
-        proj_name = st.text_input("Όνομα Project")
-        mat_name = st.text_input("Περιγραφή Υλικού")
-        qty = st.number_input("Ποσότητα", min_value=1, value=100)
-        submitted = st.form_submit_button("Αποθήκευση Παραγγελίας")
-        if submitted:
-            st.success(f"Η παραγγελία {proj_name} καταχωρήθηκε με ασφάλεια στο ID σύστημα!")
+    elif option == "Όλα τα Υλικά Παραγωγής":
+        st.header("📦 Ζωντανή Λίστα Υλικών από Procurement")
+        st.dataframe(procurement_df, use_container_width=True)
 
-elif option == "Ημερολόγιο Διαθεσιμότητας":
-    st.header("🗓️ Ημερήσιο Πλάνο & Διαθεσιμότητα Ομάδας")
-    
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Άτομα Βάρδιας", "4 άτομα")
-    col2.metric("Διαθέσιμες Ώρες", "32 ώρες")
-    col3.metric("Δεσμευμένες Ώρες", "18.5 ώρες", "-13.5 ώρες υπόλοιπο")
-    
-    st.info("💡 Όλα τα projects υπολογίζονται αυτόματα χωρίς χειροκίνητους τύπους Excel!")
+    elif option == "Ημερολόγιο Διαθεσιμότητας":
+        st.header("🗓️ Ημερήσιο Πλάνο & Διαθεσιμότητα Ομάδας")
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Άτομα Βάρδιας", "4 άτομα")
+        col2.metric("Συνολικά Υλικά Procurement", len(procurement_df))
+        col3.metric("Ενεργά Projects", len(procurement_df[project_column[0]].unique()) if project_column else 0)
+
+else:
+    st.info("Βεβαιωθείτε ότι το αρχείο του Procurement έχει ρυθμιστεί σε 'Anyone with the link can view'.")
