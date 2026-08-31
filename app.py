@@ -34,7 +34,6 @@ def load_all_data():
     # 2. Φόρτωση Προτύπων Χρόνων
     try:
         df_times_raw = pd.read_csv(TIMES_CSV_URL)
-        # Καθαρισμός & εξαγωγή εργασιών/χρόνων
         tasks_dict = {}
         for col_idx in range(0, len(df_times_raw.columns), 3):
             sub_df = df_times_raw.iloc[:, col_idx:col_idx+2].dropna()
@@ -53,7 +52,6 @@ def load_all_data():
     # 3. Φόρτωση Ομάδας / Προσωπικού
     try:
         df_team_raw = pd.read_csv(TEAM_CSV_URL)
-        # Εξαγωγή ονομάτων από τις επικεφαλίδες ή τις πρώτες στήλες
         team_members = [c.strip() for c in df_team_raw.columns if c and "Unnamed" not in c and c not in ["Ημέρα", "Σύνολο διαθέσιμων ωρών"]]
         if not team_members:
             team_members = ["Βαγγέλης Μ.", "Βαγγέλης JR.", "Εποχικός 1", "Εποχικός 2", "Ana", "Alex"]
@@ -104,39 +102,38 @@ if option == "Καρτέλα Project":
                 
                 for t_num in [1, 2]:
                     st.caption(f"**Στάδιο {t_num}**")
-                    c_check, c_task, c_user, c_date, c_time = st.columns([0.1, 0.35, 0.25, 0.18, 0.12])
+                    c_check, c_task, c_user, c_date, c_time = st.columns([0.1, 0.35, 0.25, 0.20, 0.10])
                     
                     # Checkbox
                     done = c_check.checkbox("", key=f"chk_{item_id}_{t_num}")
                     
-                    # Dropdown Εργασιών από τη Βάση Χρόνων
+                    # Dropdown Εργασιών
                     selected_task = c_task.selectbox(
                         "Εργασία", task_options, 
                         key=f"task_{item_id}_{t_num}", 
                         label_visibility="collapsed"
                     )
                     
-                    # Αυτόματος εντοπισμός χρόνου από τη Βάση
                     auto_time = tasks_database.get(selected_task, 0.0)
                     
-                    # Dropdown Ομάδας από το Sheet Διαθεσιμότητας
+                    # Dropdown Ομάδας
                     assigned_user = c_user.selectbox(
                         "Ανάθεση", team_options, 
                         key=f"user_{item_id}_{t_num}", 
                         label_visibility="collapsed"
                     )
                     
-                    # Ημερομηνία Ανάθεσης
+                    # Ημερομηνία Ανάθεσης σε μορφή ΗΗ/ΜΜ/ΕΕΕΕ (DD/MM/YYYY)
                     assign_date = c_date.date_input(
                         "Ημερομηνία", value=date.today(), 
+                        format="DD/MM/YYYY",
                         key=f"date_{item_id}_{t_num}", 
                         label_visibility="collapsed"
                     )
                     
-                    # Εμφάνιση Αυτόματου Χρόνου (λεπτά/τεμάχιο)
+                    # Εμφάνιση Αυτόματου Χρόνου
                     c_time.metric("λ/τμχ", f"{auto_time}λ")
                     
-                    # Υπολογισμός συνολικών ωρών
                     task_hours = (auto_time * qty) / 60
                     total_project_hours += task_hours
 
