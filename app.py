@@ -87,10 +87,9 @@ if option == "Καρτέλα Project":
         
         card_title = f"🆔 {item_id} | {material} — (Ποσότητα: {qty} τμχ) | Status: {status}"
         
-        # Διαχείριση δυναμικού αριθμού tasks στο session state
         state_key = f"num_tasks_{item_id}"
         if state_key not in st.session_state:
-            st.session_state[state_key] = 1 # Ξεκινάει με 1 εργασία
+            st.session_state[state_key] = 1
 
         with st.expander(card_title):
             col_info, col_tasks = st.columns([1, 2.5])
@@ -106,9 +105,8 @@ if option == "Καρτέλα Project":
             with col_tasks:
                 st.markdown("**⚙️ Λίστα Εργασιών Παραγωγής**")
                 
-                # Εμφάνιση των εργασιών δυναμικά
                 for t_idx in range(st.session_state[state_key]):
-                    c_check, c_task, c_user, c_date, c_time = st.columns([0.1, 0.35, 0.25, 0.20, 0.10])
+                    c_check, c_task, c_user, c_date, c_time, c_del = st.columns([0.08, 0.32, 0.23, 0.18, 0.11, 0.08])
                     
                     # Checkbox
                     done = c_check.checkbox("", key=f"chk_{item_id}_{t_idx}")
@@ -140,14 +138,25 @@ if option == "Καρτέλα Project":
                     # Χρόνος
                     c_time.metric("λ/τμχ", f"{auto_time}λ")
                     
+                    # Κουμπί Διαγραφής Συγκεκριμένης Γραμμής (🗑️)
+                    if c_del.button("🗑️", key=f"del_{item_id}_{t_idx}"):
+                        if st.session_state[state_key] > 1:
+                            st.session_state[state_key] -= 1
+                            st.rerun()
+
                     task_hours = (auto_time * qty) / 60
                     total_project_hours += task_hours
 
-                # Κουμπί Προσθήκης Νέας Εργασίας
-                col_btn1, col_btn2 = st.columns([0.4, 0.6])
+                # Κουμπιά Προσθήκης / Αφαίρεσης Εργασίας
+                col_btn1, col_btn2, col_empty = st.columns([0.35, 0.35, 0.3])
                 if col_btn1.button("➕ Προσθήκη Εργασίας", key=f"add_btn_{item_id}"):
                     st.session_state[state_key] += 1
                     st.rerun()
+                
+                if st.session_state[state_key] > 1:
+                    if col_btn2.button("➖ Αφαίρεση Εργασίας", key=f"rem_btn_{item_id}"):
+                        st.session_state[state_key] -= 1
+                        st.rerun()
 
     st.divider()
     st.success(f"🎯 **Συνολικός Χρόνος Παραγωγής για το Project {selected_project}: {round(total_project_hours, 1)} Ώρες**")
