@@ -121,16 +121,19 @@ FIXED_PROJECT_TASKS = [
     "Τοποθέτηση σε χαρτοκιβώτια"
 ]
 
-option = st.sidebar.selectbox("Επιλογή Οθόνης", [
-    "Dashboard Παραγωγής",
-    "Καρτέλα Project", 
-    "Ημερήσιο Πλάνο Παραγωγής", 
-    "Ημερήσιο Πρόγραμμα (Ανά Τεχνίτη)", 
-    "Εβδομαδιαίο Projection",
-    "Πρότυπα Χρόνων & Ομάδα"
+# --- 📌 TABS ΣΤΟ ΠΑΝΩ ΜΕΡΟΣ ΤΗΣ ΣΕΛΙΔΑΣ ---
+tab_dash, tab_proj, col_plan, tab_tech, tab_projec, tab_rep, tab_data = st.tabs([
+    "📈 Dashboard", 
+    "📋 Καρτέλα Project", 
+    "🗓️ Ημερήσιο Πλάνο", 
+    "👤 Πρόγραμμα Τεχνίτη", 
+    "📆 Εβδομαδιαίο Projection", 
+    "📝 Daily Report",
+    "📊 Βάση Δεδομένων"
 ])
 
-if option == "Dashboard Παραγωγής":
+# --- 1. DASHBOARD ---
+with tab_dash:
     st.header("📈 Dashboard & Επισκόπηση Παραγωγής")
     
     if not procurement_df.empty:
@@ -216,7 +219,8 @@ if option == "Dashboard Παραγωγής":
             dash_df = pd.DataFrame(dashboard_data)
             st.dataframe(dash_df, use_container_width=True, hide_index=True)
 
-elif option == "Καρτέλα Project":
+# --- 2. ΚΑΡΤΕΛΑ PROJECT ---
+with tab_proj:
     st.header("📋 Διαχείριση Παραγωγής & Αναθέσεις ανά Project")
     
     if not procurement_df.empty:
@@ -410,7 +414,8 @@ elif option == "Καρτέλα Project":
         m2.metric("Ώρες που Ολοκληρώθηκαν", f"{round(completed_project_hours, 1)} Ώρες")
         m3.metric("Υπολειπόμενες Ώρες", f"{remaining_hours} Ώρες", delta=f"-{remaining_hours}h" if remaining_hours > 0 else "Έτοιμο!")
 
-elif option == "Ημερήσιο Πλάνο Παραγωγής":
+# --- 3. ΗΜΕΡΗΣΙΟ ΠΛΑΝΟ ---
+with col_plan:
     st.header("🗓️ Συγκεντρωτικό Πλάνο Παραγωγής & Έλεγχος Διαθεσιμότητας")
     
     target_date = st.date_input("Επιλέξτε Ημερομηνία Πλάνου:", value=date.today(), format="DD/MM/YYYY")
@@ -526,11 +531,12 @@ elif option == "Ημερήσιο Πλάνο Παραγωγής":
     else:
         st.info(f"Δεν έχουν προγραμματιστεί εργασίες για τις {target_date.strftime('%d/%m/%Y')}.")
 
-elif option == "Ημερήσιο Πρόγραμμα (Ανά Τεχνίτη)":
+# --- 4. ΠΡΟΓΡΑΜΜΑ ΤΕΧΝΙΤΗ ---
+with tab_tech:
     st.header("👤 Ημερήσιο Πρόγραμμα Εργασιών ανά Τεχνίτη")
     
     c_date, c_user = st.columns([1, 1])
-    target_date = c_date.date_input("Ημερομηνία:", value=date.today(), format="DD/MM/YYYY")
+    target_date = c_date.date_input("Ημερομηνία:", value=date.today(), format="DD/MM/YYYY", key="tech_date")
     selected_member = c_user.selectbox("Επιλέξτε Τεχνίτη / Εργαζόμενο:", team_database)
     
     st.divider()
@@ -619,7 +625,8 @@ elif option == "Ημερήσιο Πρόγραμμα (Ανά Τεχνίτη)":
     else:
         st.success(f"🎉 Δεν έχουν ανατεθεί εργασίες στον/στην {selected_member} για τις {target_date.strftime('%d/%m/%Y')}.")
 
-elif option == "Εβδομαδιαίο Projection":
+# --- 5. ΕΒΔΟΜΑΔΙΑΙΟ PROJECTION ---
+with tab_projec:
     st.header("📆 Πρόβλεψη Φόρτου Εργασίας (Projection)")
     
     start_monday = date.today() - timedelta(days=date.today().weekday())
@@ -639,7 +646,7 @@ elif option == "Εβδομαδιαίο Projection":
         "4 Εβδομάδες / Μήνας"
     ])
     
-    include_weekends = col_weekend.checkbox("📅 Συμπερίληψη Σαββατοκύριακων (ΣΚ)", value=False)
+    include_weekends = col_weekend.checkbox("📅 Συμπερίληψη Σαββατοκύριακων (ΣΚ)", value=False, key="proj_wknd")
     
     num_weeks = 1
     if "2 Εβδομάδες" in range_weeks:
@@ -654,7 +661,7 @@ elif option == "Εβδομαδιαίο Projection":
     elif week_choice == "Μεθεπόμενη Εβδομάδα (+2)":
         sel_start = start_monday + timedelta(days=14)
     else:
-        sel_start = st.date_input("Επιλέξτε Δευτέρα Εναρξης:", value=start_monday, format="DD/MM/YYYY")
+        sel_start = st.date_input("Επιλέξτε Δευτέρα Εναρξης:", value=start_monday, format="DD/MM/YYYY", key="proj_start")
     
     days_per_week = 7 if include_weekends else 5
     
@@ -683,7 +690,6 @@ elif option == "Εβδομαδιαίο Projection":
         w_matrix = {m: {f"{WEEKDAYS_SHORT_GREEK[d.weekday()]} {d.strftime('%d/%m')}": 0.0 for d in w_days} for m in team_database}
         d_totals = {f"{WEEKDAYS_SHORT_GREEK[d.weekday()]} {d.strftime('%d/%m')}": 0.0 for d in w_days}
         
-        # 1. Project Level Tasks
         for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
             if isinstance(p_tasks_dict, dict):
                 proj_name = p_key.replace("proj_", "")
@@ -705,7 +711,6 @@ elif option == "Εβδομαδιαίο Projection":
                             w_matrix[t_user][col_str] += hrs
                             d_totals[col_str] += hrs
 
-        # 2. Item Level Tasks
         if not procurement_df.empty:
             for idx, row in procurement_df.iterrows():
                 item_id = str(row["ID"])
@@ -754,7 +759,6 @@ elif option == "Εβδομαδιαίο Projection":
 
     st.divider()
 
-    # Συνάρτηση Μορφοποίησης Τελευταίας Γραμμής (Bold & Highlight)
     def highlight_total_row(row):
         if row.name == "Σύνολο Ημέρας (h)":
             return ["background-color: #2b303a; font-weight: bold; color: #00e676; border-top: 2px solid #00e676;"] * len(row)
@@ -772,13 +776,106 @@ elif option == "Εβδομαδιαίο Projection":
         total_row.name = "Σύνολο Ημέρας (h)"
         proj_df = pd.concat([proj_df, pd.DataFrame(total_row).T])
 
-        # Εφαρμογή Styling
         styled_df = proj_df.style.apply(highlight_total_row, axis=1)
-
         st.dataframe(styled_df, use_container_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-elif option == "Πρότυπα Χρόνων & Ομάδα":
+# --- 6. DAILY REPORT ---
+with tab_rep:
+    st.header("📝 Ημερήσιος Απολογισμός Παραγωγής (Daily Report)")
+    
+    rep_date = st.date_input("Επιλέξτε Ημερομηνία Απολογισμού:", value=date.today(), format="DD/MM/YYYY", key="rep_date_input")
+    st.divider()
+
+    rep_completed = []
+    rep_pending = []
+
+    # 1. Project Tasks
+    for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
+        if isinstance(p_tasks_dict, dict):
+            proj_name = p_key.replace("proj_", "")
+            proj_qty = 1
+            if not procurement_df.empty:
+                p_items = procurement_df[procurement_df["Project"] == proj_name]
+                for _, r in p_items.iterrows():
+                    if str(r["Ποσότητα"]).isdigit():
+                        proj_qty = max(proj_qty, int(r["Ποσότητα"]))
+
+            for task_name, p_data in p_tasks_dict.items():
+                if isinstance(p_data, dict) and p_data.get("active", False):
+                    if p_data.get("date") == rep_date:
+                        auto_time = tasks_database.get(task_name, 0.0)
+                        hrs = round((auto_time * proj_qty) / 60, 2)
+                        
+                        item_info = {
+                            "Project": proj_name,
+                            "Εργασία": task_name,
+                            "Υλικό / Είδος": "Γενική Σύνθεση / Box",
+                            "Υπεύθυνος": p_data.get("user", "-"),
+                            "Ώρες": hrs
+                        }
+                        
+                        if p_data.get("done", False):
+                            rep_completed.append(item_info)
+                        else:
+                            rep_pending.append(item_info)
+
+    # 2. Item Tasks
+    if not procurement_df.empty:
+        for idx, row in procurement_df.iterrows():
+            item_id = str(row["ID"])
+            unique_item_key = f"{item_id}_{idx}"
+            project_name = row["Project"]
+            material = row["Υλικό / Προϊόν"]
+            qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+            
+            item_tasks = st.session_state["tasks_store"].get(unique_item_key, [])
+            for t_data in item_tasks:
+                if t_data.get("task") != "- Επιλογή Εργασίας -" and t_data.get("date") == rep_date:
+                    auto_time = tasks_database.get(t_data["task"], 0.0)
+                    hrs = round((auto_time * qty) / 60, 2)
+                    
+                    item_info = {
+                        "Project": project_name,
+                        "Εργασία": t_data["task"],
+                        "Υλικό / Είδος": f"[{item_id}] {material}",
+                        "Υπεύθυνος": t_data.get("user", "-"),
+                        "Ώρες": hrs
+                    }
+                    
+                    if t_data.get("done", False):
+                        rep_completed.append(item_info)
+                    else:
+                        rep_pending.append(item_info)
+
+    rc1, rc2, rc3 = st.columns(3)
+    tot_done_hrs = sum(x["Ώρες"] for x in rep_completed)
+    tot_pend_hrs = sum(x["Ώρες"] for x in rep_pending)
+    
+    rc1.metric("Ολοκληρωμένα Tasks", len(rep_completed), delta=f"{round(tot_done_hrs, 1)}h παράχθηκαν")
+    rc2.metric("Εκκρεμή Tasks Ημέρας", len(rep_pending), delta=f"-{round(tot_pend_hrs, 1)}h υπόλοιπο", delta_color="inverse")
+    
+    completion_rate = int((len(rep_completed) / (len(rep_completed) + len(rep_pending))) * 100) if (len(rep_completed) + len(rep_pending)) > 0 else 100
+    rc3.metric("Ποσοστό Ολοκλήρωσης Ημέρας", f"{completion_rate}%")
+
+    st.divider()
+
+    st.subheader("✅ Ολοκληρωμένες Εργασίες Ημέρας")
+    if rep_completed:
+        st.dataframe(pd.DataFrame(rep_completed), use_container_width=True, hide_index=True)
+    else:
+        st.info("Δεν έχουν σημειωθείλοκληρωμένες εργασίες για αυτή την ημερομηνία.")
+
+    st.divider()
+
+    st.subheader("⏳ Εκκρεμότητες Ημέρας (Unfinished Tasks)")
+    if rep_pending:
+        st.dataframe(pd.DataFrame(rep_pending), use_container_width=True, hide_index=True)
+    else:
+        st.success("🎉 Όλες οι προγραμματισμένες εργασίες της ημέρας έχουν ολοκληρωθεί!")
+
+# --- 7. ΒΑΣΗ ΔΕΔΟΜΕΝΩΝ ---
+with tab_data:
     st.header("📊 Βάση Δεδομένων Χρόνων & Ομάδας")
     col_a, col_b = st.columns(2)
     with col_a:
