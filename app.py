@@ -18,6 +18,17 @@ TEAM_GID = "1303086311"
 TIMES_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TIMES_GID}"
 TEAM_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TEAM_GID}"
 
+# Χαρτογράφηση ημερών από Python σε ελληνικά ονόματα για το Sheet
+WEEKDAYS_GREEK = {
+    0: "Δευτέρα",
+    1: "Τρίτη",
+    2: "Τετάρτη",
+    3: "Πέμπτη",
+    4: "Παρασκευή",
+    5: "Σάββατο",
+    6: "Κυριακή"
+}
+
 @st.cache_data(ttl=10)
 def load_all_data():
     # 1. Φόρτωση Procurement
@@ -50,18 +61,36 @@ def load_all_data():
     except Exception as e:
         tasks_dict = {"Έλεγχος (εύκολο)": 1.0, "Συναρμολόγηση": 2.0, "Συσκευασία": 1.5}
 
-    # 3. Φόρτωση Ομάδας
+    # 3. Φόρτωση Ομάδας & Διαθεσιμότητας Ωρών ανά Ημέρα
+    team_members = []
+    availability_dict = {}
     try:
         df_team_raw = pd.read_csv(TEAM_CSV_URL)
-        team_members = [c.strip() for c in df_team_raw.columns if c and "Unnamed" not in c and c not in ["Ημέρα", "Σύνολο διαθέσιμων ωρών"]]
-        if not team_members:
-            team_members = ["Βαγγέλης Μ.", "Βαγγέλης JR.", "Εποχικός 1", "Εποχικός 2", "Ana", "Alex"]
+        df_team_raw.columns = [str(c).strip() for c in df_team_raw.columns]
+        
+        # Εντοπισμός στηλών με ονόματα
+        ignore_cols = ["Ημέρα", "Σύνολο διαθέσιμων ωρών", "Unnamed: 0"]
+        team_members = [c for c in df_team_raw.columns if c and c not in ignore_cols and "Unnamed" not in c]
+        
+        # Ανάγνωση πίνακα διαθεσιμότητας
+        if "Ημέρα" in df_team_raw.columns:
+            for _, row in df_team_raw.iterrows():
+                day_name = str(row["Ημέρα"]).strip()
+                if day_name in WEEKDAYS_GREEK.values():
+                    availability_dict[day_name] = {}
+                    for member in team_members:
+                        try:
+                            val = float(str(row[member]).replace(',', '.'))
+                            availability_dict[day_name][member] = val
+                        except:
+                            availability_dict[day_name][member] = 8.0 # Default αν λείπει
     except Exception as e:
         team_members = ["Βαγγέλης Μ.", "Βαγγέλης JR.", "Εποχικός 1", "Εποχικός 2", "Ana", "Alex"]
+        availability_dict = {day: {m: 6.0 for m in team_members} for day in WEEKDAYS_GREEK.values()}
 
-    return df_proc, tasks_dict, team_members
+    return df_proc, tasks_dict, team_members, availability_dict
 
-procurement_df, tasks_database, team_database = load_all_data()
+procurement_df, tasks_database, team_database, availability_database = load_all_data()
 
 # Κεντρική Αποθήκη Δεδομένων στη Μνήμη (Session State)
 if "tasks_store" not in st.session_state:
@@ -70,7 +99,6 @@ if "tasks_store" not in st.session_state:
 if "project_tasks_store" not in st.session_state:
     st.session_state["project_tasks_store"] = {}
 
-# Οι 5 Σταθερές Γενικές Εργασίες Project
 FIXED_PROJECT_TASKS = [
     "Σύνθεση (κουτί)",
     "Σύνθεση (πουγκί / τσάντα)",
@@ -89,7 +117,6 @@ if option == "Καρτέλα Project":
     
     filtered_df = procurement_df[procurement_df["Project"] == selected_project].copy()
     
-    # Ποσότητα Project
     project_main_qty = 1
     for _, r in filtered_df.iterrows():
         if str(r["Ποσότητα"]).isdigit():
@@ -205,7 +232,6 @@ if option == "Καρτέλα Project":
     
     proj_key = f"proj_{selected_project}"
     
-    # Ασφαλής Αρχικοποίηση αν είναι παλιά λίστα ή δεν υπάρχει
     if proj_key not in st.session_state["project_tasks_store"] or not isinstance(st.session_state["project_tasks_store"][proj_key], dict):
         st.session_state["project_tasks_store"][proj_key] = {
             t_name: {"active": False, "done": False, "user": "- Χωρίς Ανάθεση -", "date": date.today()}
@@ -279,13 +305,16 @@ if option == "Καρτέλα Project":
     m3.metric("Υπολειπόμενες Ώρες", f"{remaining_hours} Ώρες", delta=f"-{remaining_hours}h" if remaining_hours > 0 else "Έτοιμο!")
 
 elif option == "Ημερήσιο Πλάνο Παραγωγής":
-    st.header("🗓️ Συγκεντρωτικό Πλάνο Παραγωγής ανά Ημέρα")
+    st.header("🗓️ Συγκεντρωτικό Πλάνο Παραγωγής & Έλεγχος Διαθεσιμότητας")
     
     target_date = st.date_input("Επιλέξτε Ημερομηνία Πλάνου:", value=date.today(), format="DD/MM/YYYY")
+    greek_day_name = WEEKDAYS_GREEK.get(target_date.weekday(), "Δευτέρα")
+    st.caption(f"Ημέρα εβδομάδας: **{greek_day_name}**")
     st.divider()
 
     daily_tasks = []
     
+    # 1. Συλλογή Γενικών Tasks Projects
     for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
         if isinstance(p_tasks_dict, dict):
             proj_name = p_key.replace("proj_", "")
@@ -314,6 +343,7 @@ elif option == "Ημερήσιο Πλάνο Παραγωγής":
                         "Κατάσταση": "✅ Ολοκληρώθηκε" if t_done else "⏳ Σε Εκκρεμότητα"
                     })
 
+    # 2. Συλλογή Tasks ανά Υλικό
     for idx, row in procurement_df.iterrows():
         item_id = str(row["ID"])
         project_name = row["Project"]
@@ -348,12 +378,37 @@ elif option == "Ημερήσιο Πλάνο Παραγωγής":
         
         st.subheader(f"📌 Εργασίες για τις {target_date.strftime('%d/%m/%Y')} ({len(daily_df)} Tasks)")
         
-        st.markdown("#### 👥 Φόρτος Εργασίας ανά Τεχνίτη")
+        # 👥 ΦΟΡΤΟΣ ΕΡΓΑΣΙΑΣ & ΣΥΓΚΡΙΣΗ ΜΕ ΔΙΑΘΕΣΙΜΟΤΗΤΑ SHEET
+        st.markdown("#### 👥 Φόρτος Εργασίας & Διαθεσιμότητα Ομάδας")
+        
+        day_availability = availability_database.get(greek_day_name, {})
         team_summary = daily_df.groupby("Υπεύθυνος")["Ώρες"].sum().reset_index()
         
-        cols = st.columns(len(team_summary))
+        cols = st.columns(max(len(team_summary), 1))
         for i, r in team_summary.iterrows():
-            cols[i].metric(r["Υπεύθυνος"], f"{r['Ώρες']} Ώρες")
+            member_name = r["Υπεύθυνος"]
+            assigned_hrs = round(r["Ώρες"], 2)
+            
+            if member_name != "- Χωρίς Ανάθεση -":
+                max_hrs = day_availability.get(member_name, 8.0)
+                delta_hrs = round(assigned_hrs - max_hrs, 2)
+                
+                if delta_hrs > 0:
+                    cols[i].metric(
+                        f"⚠️ {member_name}", 
+                        f"{assigned_hrs} / {max_hrs}h", 
+                        delta=f"+{delta_hrs}h Υπερκάλυψη", 
+                        delta_color="inverse"
+                    )
+                else:
+                    cols[i].metric(
+                        f"🟢 {member_name}", 
+                        f"{assigned_hrs} / {max_hrs}h", 
+                        delta=f"{delta_hrs}h Διαθέσιμο", 
+                        delta_color="normal"
+                    )
+            else:
+                cols[i].metric(f"❓ {member_name}", f"{assigned_hrs} Ώρες")
             
         st.divider()
         st.markdown("#### 📋 Αναλυτικός Πίνακας Εργασιών")
@@ -372,5 +427,5 @@ elif option == "Πρότυπα Χρόνων & Ομάδα":
         st.subheader(f"⏱️ Πρότυπα Χρόνων ({len(tasks_database)} Εργασίες)")
         st.json(tasks_database)
     with col_b:
-        st.subheader("👥 Ομάδα Παραγωγής")
-        st.write(team_database)
+        st.subheader("👥 Ομάδα Παραγωγής & Ημερήσια Όρια Ώρων")
+        st.write(availability_database)
