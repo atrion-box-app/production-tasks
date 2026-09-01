@@ -213,6 +213,14 @@ def toggle_item_task(u_key, t_idx, chk_key):
     st.session_state["tasks_store"][u_key][t_idx]["done"] = st.session_state[chk_key]
     save_all_assignments_to_sheet()
 
+def update_item_field(u_key, t_idx, field, widget_key):
+    st.session_state["tasks_store"][u_key][t_idx][field] = st.session_state[widget_key]
+    save_all_assignments_to_sheet()
+
+def update_proj_field(p_key, task_name, field, widget_key):
+    st.session_state["project_tasks_store"][p_key][task_name][field] = st.session_state[widget_key]
+    save_all_assignments_to_sheet()
+
 # --- 📌 TABS ΣΤΟ ΠΑΝΩ ΜΕΡΟΣ ΤΗΣ ΣΕΛΙΔΑΣ ---
 tab_dash, tab_proj, col_plan, tab_tech, tab_projec, tab_rep, tab_data = st.tabs([
     "📈 Dashboard", 
@@ -378,26 +386,28 @@ with tab_proj:
                         )
                         
                         task_idx = task_options.index(t_data["task"]) if t_data["task"] in task_options else 0
+                        task_k = f"task_{unique_item_key}_{t_idx}"
                         selected_task = c_task.selectbox(
                             "Εργασία", task_options, index=task_idx, 
-                            key=f"task_{unique_item_key}_{t_idx}", label_visibility="collapsed"
+                            key=task_k, label_visibility="collapsed",
+                            on_change=update_item_field, args=(unique_item_key, t_idx, "task", task_k)
                         )
                         
                         user_idx = team_options.index(t_data["user"]) if t_data["user"] in team_options else 0
+                        user_k = f"user_{unique_item_key}_{t_idx}"
                         assigned_user = c_user.selectbox(
                             "Ανάθεση", team_options, index=user_idx, 
-                            key=f"user_{unique_item_key}_{t_idx}", label_visibility="collapsed"
+                            key=user_k, label_visibility="collapsed",
+                            on_change=update_item_field, args=(unique_item_key, t_idx, "user", user_k)
                         )
                         
+                        date_k = f"date_{unique_item_key}_{t_idx}"
                         assign_date = c_date.date_input(
                             "Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", 
-                            key=f"date_{unique_item_key}_{t_idx}", label_visibility="collapsed"
+                            key=date_k, label_visibility="collapsed",
+                            on_change=update_item_field, args=(unique_item_key, t_idx, "date", date_k)
                         )
 
-                        st.session_state["tasks_store"][unique_item_key][t_idx]["task"] = selected_task
-                        st.session_state["tasks_store"][unique_item_key][t_idx]["user"] = assigned_user
-                        st.session_state["tasks_store"][unique_item_key][t_idx]["date"] = assign_date
-                        
                         auto_time = tasks_database.get(selected_task, 0.0)
                         
                         if selected_task != "- Επιλογή Εργασίας -":
@@ -455,7 +465,11 @@ with tab_proj:
                 
                 c_active, c_name, c_done, c_user, c_date, c_time = st.columns([0.06, 0.30, 0.10, 0.22, 0.18, 0.14])
                 
-                is_active = c_active.checkbox("", value=t_data["active"], key=f"pact_{proj_key}_{task_name}")
+                pact_k = f"pact_{proj_key}_{task_name}"
+                is_active = c_active.checkbox(
+                    "", value=t_data["active"], key=pact_k,
+                    on_change=update_proj_field, args=(proj_key, task_name, "active", pact_k)
+                )
                 c_name.markdown(f"**{task_name}**" if is_active else f"<span style='color:gray;'>{task_name}</span>", unsafe_allow_html=True)
                 
                 is_done = False
@@ -469,20 +483,20 @@ with tab_proj:
                     c_done.caption("—")
                     
                 user_idx = team_options.index(t_data["user"]) if t_data["user"] in team_options else 0
+                puser_k = f"puser_{proj_key}_{task_name}"
                 assigned_user = c_user.selectbox(
                     "Ανάθεση", team_options, index=user_idx, 
-                    key=f"puser_{proj_key}_{task_name}", label_visibility="collapsed", disabled=not is_active
+                    key=puser_k, label_visibility="collapsed", disabled=not is_active,
+                    on_change=update_proj_field, args=(proj_key, task_name, "user", puser_k)
                 )
                 
+                pdate_k = f"pdate_{proj_key}_{task_name}"
                 assign_date = c_date.date_input(
                     "Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", 
-                    key=f"pdate_{proj_key}_{task_name}", label_visibility="collapsed", disabled=not is_active
+                    key=pdate_k, label_visibility="collapsed", disabled=not is_active,
+                    on_change=update_proj_field, args=(proj_key, task_name, "date", pdate_k)
                 )
 
-                st.session_state["project_tasks_store"][proj_key][task_name]["active"] = is_active
-                st.session_state["project_tasks_store"][proj_key][task_name]["user"] = assigned_user
-                st.session_state["project_tasks_store"][proj_key][task_name]["date"] = assign_date
-                
                 auto_time = tasks_database.get(task_name, 0.0)
                 
                 if is_active:
@@ -510,10 +524,6 @@ with tab_proj:
         m1.metric("Συνολικές Ώρες (Γενικές + Υλικών)", f"{round(total_project_hours, 1)} Ώρες")
         m2.metric("Ώρες που Ολοκληρώθηκαν", f"{round(completed_project_hours, 1)} Ώρες")
         m3.metric("Υπολειπόμενες Ώρες", f"{remaining_hours} Ώρες", delta=f"-{remaining_hours}h" if remaining_hours > 0 else "Έτοιμο!")
-
-        if st.button("💾 Αποθήκευση Αλλαγών στο Google Sheet", use_container_width=True):
-            save_all_assignments_to_sheet()
-            st.success("✅ Όλες οι αναθέσεις αποθηκεύτηκαν επιτυχώς στο Google Sheet!")
 
 # --- 3. ΗΜΕΡΗΣΙΟ ΠΛΑΝΟ (INTERACTIVE) ---
 with col_plan:
