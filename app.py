@@ -27,7 +27,7 @@ WEEKDAYS_SHORT_GREEK = {
     0: "Δευ", 1: "Τρι", 2: "Τετ", 3: "Πεμ", 4: "Παρ", 5: "Σαβ", 6: "Κυρ"
 }
 
-# --- Google Sheets API Connection με Αναλυτικό Debugging ---
+# --- Google Sheets API Connection με Ασφαλή Καθαρισμό PEM Key ---
 @st.cache_resource
 def get_gspread_client():
     if "gcp_service_account" not in st.secrets:
@@ -35,9 +35,14 @@ def get_gspread_client():
     
     try:
         creds_dict = dict(st.secrets["gcp_service_account"])
-        # Διόρθωση privatekey σε περίπτωση που περιέχει εισαγωγικά ή λάθος αλλαγές γραμμής
+        
+        # Καθαρισμός private_key για αποφυγή PEM errors
         if "private_key" in creds_dict:
-            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+            pk = creds_dict["private_key"]
+            pk = pk.replace("\\n", "\n").strip()
+            if pk.startswith('"') and pk.endswith('"'):
+                pk = pk[1:-1]
+            creds_dict["private_key"] = pk
             
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
@@ -45,13 +50,6 @@ def get_gspread_client():
         return client, None
     except Exception as e:
         return None, str(e)
-
-gc, connection_error = get_gspread_client()
-
-if connection_error:
-    st.error(f"❌ Σφάλμα Σύνδεσης Google Sheets API: {connection_error}")
-else:
-    st.success("✅ Η σύνδεση με το Google Sheets API είναι ενεργή!")
 
 # --- Φόρτωση / Αποθήκευση Αναθέσεων από το Google Sheet (Assignments) ---
 def load_assignments_from_sheet():
