@@ -145,16 +145,17 @@ if option == "Καρτέλα Project":
 
         for idx, row in filtered_df.iterrows():
             item_id = str(row["ID"])
+            unique_item_key = f"{item_id}_{idx}"
             material = row["Υλικό / Προϊόν"]
             qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
             status = row["Status Procurement"]
             
-            if item_id not in st.session_state["tasks_store"]:
-                st.session_state["tasks_store"][item_id] = [
+            if unique_item_key not in st.session_state["tasks_store"]:
+                st.session_state["tasks_store"][unique_item_key] = [
                     {"done": False, "task": "- Επιλογή Εργασίας -", "user": "- Χωρίς Ανάθεση -", "date": date.today()}
                 ]
             
-            item_tasks = st.session_state["tasks_store"][item_id]
+            item_tasks = st.session_state["tasks_store"][unique_item_key]
             card_title = f"🆔 {item_id} | {material} — (Ποσότητα: {qty} τμχ) | Status: {status}"
             
             with st.expander(card_title):
@@ -177,26 +178,26 @@ if option == "Καρτέλα Project":
                     for t_idx, t_data in enumerate(list(item_tasks)):
                         c_check, c_task, c_user, c_date, c_time, c_del = st.columns([0.08, 0.32, 0.23, 0.18, 0.11, 0.08])
                         
-                        is_done = c_check.checkbox("", value=t_data["done"], key=f"chk_{item_id}_{t_idx}")
+                        is_done = c_check.checkbox("", value=t_data["done"], key=f"chk_{unique_item_key}_{t_idx}")
                         
                         task_idx = task_options.index(t_data["task"]) if t_data["task"] in task_options else 0
                         selected_task = c_task.selectbox(
                             "Εργασία", task_options, index=task_idx, 
-                            key=f"task_{item_id}_{t_idx}", label_visibility="collapsed"
+                            key=f"task_{unique_item_key}_{t_idx}", label_visibility="collapsed"
                         )
                         
                         user_idx = team_options.index(t_data["user"]) if t_data["user"] in team_options else 0
                         assigned_user = c_user.selectbox(
                             "Ανάθεση", team_options, index=user_idx, 
-                            key=f"user_{item_id}_{t_idx}", label_visibility="collapsed"
+                            key=f"user_{unique_item_key}_{t_idx}", label_visibility="collapsed"
                         )
                         
                         assign_date = c_date.date_input(
                             "Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", 
-                            key=f"date_{item_id}_{t_idx}", label_visibility="collapsed"
+                            key=f"date_{unique_item_key}_{t_idx}", label_visibility="collapsed"
                         )
 
-                        st.session_state["tasks_store"][item_id][t_idx] = {
+                        st.session_state["tasks_store"][unique_item_key][t_idx] = {
                             "done": is_done,
                             "task": selected_task,
                             "user": assigned_user,
@@ -219,20 +220,20 @@ if option == "Καρτέλα Project":
                         else:
                             c_time.caption("0.0λ")
                         
-                        if c_del.button("🗑️", key=f"del_{item_id}_{t_idx}"):
-                            st.session_state["tasks_store"][item_id].pop(t_idx)
+                        if c_del.button("🗑️", key=f"del_{unique_item_key}_{t_idx}"):
+                            st.session_state["tasks_store"][unique_item_key].pop(t_idx)
                             st.rerun()
 
                     col_btn1, col_btn2, _ = st.columns([0.35, 0.35, 0.3])
-                    if col_btn1.button("➕ Προσθήκη Εργασίας Υλικού", key=f"add_btn_{item_id}"):
-                        st.session_state["tasks_store"][item_id].append(
+                    if col_btn1.button("➕ Προσθήκη Εργασίας Υλικού", key=f"add_btn_{unique_item_key}"):
+                        st.session_state["tasks_store"][unique_item_key].append(
                             {"done": False, "task": "- Επιλογή Εργασίας -", "user": "- Χωρίς Ανάθεση -", "date": date.today()}
                         )
                         st.rerun()
                     
                     if len(item_tasks) > 0:
-                        if col_btn2.button("➖ Αφαίρεση Εργασίας", key=f"rem_btn_{item_id}"):
-                            st.session_state["tasks_store"][item_id].pop()
+                        if col_btn2.button("➖ Αφαίρεση Εργασίας", key=f"rem_btn_{unique_item_key}"):
+                            st.session_state["tasks_store"][unique_item_key].pop()
                             st.rerun()
 
         st.divider()
@@ -356,11 +357,12 @@ elif option == "Ημερήσιο Πλάνο Παραγωγής":
     if not procurement_df.empty:
         for idx, row in procurement_df.iterrows():
             item_id = str(row["ID"])
+            unique_item_key = f"{item_id}_{idx}"
             project_name = row["Project"]
             material = row["Υλικό / Προϊόν"]
             qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
             
-            item_tasks = st.session_state["tasks_store"].get(item_id, [])
+            item_tasks = st.session_state["tasks_store"].get(unique_item_key, [])
             
             for t_data in item_tasks:
                 t_task = t_data["task"]
@@ -440,7 +442,6 @@ elif option == "Ημερήσιο Πρόγραμμα (Ανά Τεχνίτη)":
 
     worker_tasks = []
 
-    # 1. Γενικά Project Tasks
     for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
         if isinstance(p_tasks_dict, dict):
             proj_name = p_key.replace("proj_", "")
@@ -469,16 +470,16 @@ elif option == "Ημερήσιο Πρόγραμμα (Ανά Τεχνίτη)":
                             "status_proc": "READY"
                         })
 
-    # 2. Item Level Tasks
     if not procurement_df.empty:
         for idx, row in procurement_df.iterrows():
             item_id = str(row["ID"])
+            unique_item_key = f"{item_id}_{idx}"
             project_name = row["Project"]
             material = row["Υλικό / Προϊόν"]
             qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
             proc_status = row["Status Procurement"]
             
-            item_tasks = st.session_state["tasks_store"].get(item_id, [])
+            item_tasks = st.session_state["tasks_store"].get(unique_item_key, [])
             
             for t_data in item_tasks:
                 if t_data.get("user") == selected_member and t_data.get("date") == target_date:
@@ -488,7 +489,7 @@ elif option == "Ημερήσιο Πρόγραμμα (Ανά Τεχνίτη)":
                         hours = (auto_time * qty) / 60
                         worker_tasks.append({
                             "type": "item",
-                            "key": f"i_{item_id}_{t_task}",
+                            "key": f"i_{unique_item_key}_{t_task}",
                             "project": project_name,
                             "item": f"[{item_id}] {material}",
                             "qty": qty,
@@ -516,7 +517,6 @@ elif option == "Ημερήσιο Πρόγραμμα (Ανά Τεχνίτη)":
             col_qty.write(f"{wt['qty']} τμχ")
             col_h.caption(f"{wt['hours']}h")
             
-            # Status Procurement
             if wt['status_proc'] in ["OK STOCK", "RECEIVED", "READY"]:
                 col_proc.success(wt['status_proc'])
             else:
