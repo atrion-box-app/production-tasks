@@ -63,7 +63,8 @@ def load_all_data():
 
 procurement_df, tasks_database, team_database = load_all_data()
 
-option = st.sidebar.selectbox("Επιλογή Οθόνης", ["Καρτέλα Project", "Πρότυπα Χρόνων & Ομάδα"])
+# Επιλογή Οθόνης στο Sidebar
+option = st.sidebar.selectbox("Επιλογή Οθόνης", ["Καρτέλα Project", "Ημερήσιο Πλάνο Παραγωγής", "Πρότυπα Χρόνων & Ομάδα"])
 
 if option == "Καρτέλα Project":
     st.header("📋 Διαχείριση Παραγωγής & Αναθέσεις ανά Project")
@@ -115,10 +116,8 @@ if option == "Καρτέλα Project":
                 for t_idx in range(st.session_state[state_key]):
                     c_check, c_task, c_user, c_date, c_time, c_del = st.columns([0.08, 0.32, 0.23, 0.18, 0.11, 0.08])
                     
-                    # Checkbox
                     is_done = c_check.checkbox("", key=f"chk_{item_id}_{t_idx}")
                     
-                    # Dropdown Εργασιών
                     selected_task = c_task.selectbox(
                         "Εργασία", task_options, 
                         key=f"task_{item_id}_{t_idx}", 
@@ -127,14 +126,12 @@ if option == "Καρτέλα Project":
                     
                     auto_time = tasks_database.get(selected_task, 0.0)
                     
-                    # Dropdown Ομάδας
                     assigned_user = c_user.selectbox(
                         "Ανάθεση", team_options, 
                         key=f"user_{item_id}_{t_idx}", 
                         label_visibility="collapsed"
                     )
                     
-                    # Ημερομηνία
                     assign_date = c_date.date_input(
                         "Ημερομηνία", value=date.today(), 
                         format="DD/MM/YYYY",
@@ -142,7 +139,6 @@ if option == "Καρτέλα Project":
                         label_visibility="collapsed"
                     )
                     
-                    # Υπολογισμοί Ωρών ΜΟΝΟ αν έχει επιλεγεί πραγματική εργασία
                     if selected_task != "- Επιλογή Εργασίας -":
                         task_hours = (auto_time * qty) / 60
                         total_project_hours += task_hours
@@ -157,12 +153,10 @@ if option == "Καρτέλα Project":
                     else:
                         c_time.caption("0.0λ")
                     
-                    # Κουμπί Διαγραφής (Επιτρέπεται διαγραφή μέχρι και το 0)
                     if c_del.button("🗑️", key=f"del_{item_id}_{t_idx}"):
                         st.session_state[state_key] -= 1
                         st.rerun()
 
-                # Κουμπιά Προσθήκης / Αφαίρεσης Εργασίας
                 col_btn1, col_btn2, col_empty = st.columns([0.35, 0.35, 0.3])
                 if col_btn1.button("➕ Προσθήκη Εργασίας", key=f"add_btn_{item_id}"):
                     st.session_state[state_key] += 1
@@ -173,7 +167,6 @@ if option == "Καρτέλα Project":
                         st.session_state[state_key] -= 1
                         st.rerun()
 
-    # Υπολογισμός Πρόοδου Project
     st.divider()
     progress_pct = int((completed_tasks_count / total_tasks_count) * 100) if total_tasks_count > 0 else 0
     remaining_hours = round(total_project_hours - completed_project_hours, 1)
@@ -185,6 +178,68 @@ if option == "Καρτέλα Project":
     m1.metric("Συνολικές Ώρες", f"{round(total_project_hours, 1)} Ώρες")
     m2.metric("Ώρες που Ολοκληρώθηκαν", f"{round(completed_project_hours, 1)} Ώρες")
     m3.metric("Υπολειπόμενες Ώρες", f"{remaining_hours} Ώρες", delta=f"-{remaining_hours}h" if remaining_hours > 0 else "Έτοιμο!")
+
+elif option == "Ημερήσιο Πλάνο Παραγωγής":
+    st.header("🗓️ Συγκεντρωτικό Πλάνο Παραγωγής ανά Ημέρα")
+    
+    target_date = st.date_input("Επιλέξτε Ημερομηνία Πλάνου:", value=date.today(), format="DD/MM/YYYY")
+    st.divider()
+
+    # Συλλογή όλων των tasks από όλα τα projects για τη συγκεκριμένη ημερομηνία
+    daily_tasks = []
+    
+    for idx, row in procurement_df.iterrows():
+        item_id = row["ID"]
+        project_name = row["Project"]
+        material = row["Υλικό / Προϊόν"]
+        qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+        
+        state_key = f"num_tasks_{item_id}"
+        num_tasks = st.session_state.get(state_key, 1)
+        
+        for t_idx in range(num_tasks):
+            t_task = st.session_state.get(f"task_{item_id}_{t_idx}", "- Επιλογή Εργασίας -")
+            t_user = st.session_state.get(f"user_{item_id}_{t_idx}", "- Χωρίς Ανάθεση -")
+            t_date = st.session_state.get(f"date_{item_id}_{t_idx}", date.today())
+            t_done = st.session_state.get(f"chk_{item_id}_{t_idx}", False)
+            
+            if t_task != "- Επιλογή Εργασίας -" and t_date == target_date:
+                auto_time = tasks_database.get(t_task, 0.0)
+                hours = (auto_time * qty) / 60
+                
+                daily_tasks.append({
+                    "ID": item_id,
+                    "Project": project_name,
+                    "Υλικό": material,
+                    "Ποσότητα": qty,
+                    "Εργασία": t_task,
+                    "Υπεύθυνος": t_user,
+                    "Ώρες": round(hours, 2),
+                    "Κατάσταση": "✅ Ολοκληρώθηκε" if t_done else "⏳ Σε Εκκρεμότητα"
+                })
+
+    if daily_tasks:
+        daily_df = pd.DataFrame(daily_tasks)
+        
+        st.subheader(f"📌 Εργασίες για τις {target_date.strftime('%d/%m/%Y')} ({len(daily_df)} Tasks)")
+        
+        # Προβολή ανά Τεχνίτη
+        st.markdown("#### 👥 Φόρτος Εργασίας ανά Τεχνίτη")
+        team_summary = daily_df.groupby("Υπεύθυνος")["Ώρες"].sum().reset_index()
+        
+        cols = st.columns(len(team_summary))
+        for i, r in team_summary.iterrows():
+            cols[i].metric(r["Υπεύθυνος"], f"{r['Ώρες']} Ώρες")
+            
+        st.divider()
+        st.markdown("#### 📋 Αναλυτικός Πίνακας Εργασιών")
+        
+        column_config = {
+            col: st.column_config.Column(alignment="center") for col in daily_df.columns
+        }
+        st.dataframe(daily_df, use_container_width=True, hide_index=True, column_config=column_config)
+    else:
+        st.info(f"Δεν έχουν προγραμματιστεί εργασίες για τις {target_date.strftime('%d/%m/%Y')}.")
 
 elif option == "Πρότυπα Χρόνων & Ομάδα":
     st.header("📊 Βάση Δεδομένων Χρόνων & Ομάδας")
