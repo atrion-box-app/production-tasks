@@ -27,20 +27,31 @@ WEEKDAYS_SHORT_GREEK = {
     0: "Δευ", 1: "Τρι", 2: "Τετ", 3: "Πεμ", 4: "Παρ", 5: "Σαβ", 6: "Κυρ"
 }
 
-# --- Google Sheets API Connection ---
+# --- Google Sheets API Connection με Αναλυτικό Debugging ---
 @st.cache_resource
 def get_gspread_client():
+    if "gcp_service_account" not in st.secrets:
+        return None, "Το [gcp_service_account] δεν βρέθηκε στα Secrets του Streamlit."
+    
     try:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        # Διόρθωση privatekey σε περίπτωση που περιέχει εισαγωγικά ή λάθος αλλαγές γραμμής
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+            
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        credentials = Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"], scopes=scope
-        )
+        credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(credentials)
-        return client
+        return client, None
     except Exception as e:
-        return None
+        return None, str(e)
 
-gc = get_gspread_client()
+gc, connection_error = get_gspread_client()
+
+if connection_error:
+    st.error(f"❌ Σφάλμα Σύνδεσης Google Sheets API: {connection_error}")
+else:
+    st.success("✅ Η σύνδεση με το Google Sheets API είναι ενεργή!")
 
 # --- Φόρτωση / Αποθήκευση Αναθέσεων από το Google Sheet (Assignments) ---
 def load_assignments_from_sheet():
@@ -89,13 +100,12 @@ def load_assignments_from_sheet():
 
 def save_all_assignments_to_sheet():
     if not gc:
-        st.warning("Δεν υπάρχει σύνδεση με το Google Sheets API (get_gspread_client failed).")
+        st.warning("Δεν είναι δυνατή η αποθήκευση λόγω σφάλματος σύνδεσης API.")
         return
     try:
         sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
         rows = [["Project", "Item_ID", "Task_Name", "Assigned_User", "Assigned_Date", "Status_Done", "Task_Type"]]
 
-        # 1. Item Level Tasks
         for u_key, t_list in st.session_state["tasks_store"].items():
             item_id = u_key.split("_")[0]
             for t in t_list:
@@ -104,7 +114,6 @@ def save_all_assignments_to_sheet():
                         "-", item_id, t.get("task"), t.get("user"), str(t.get("date")), str(t.get("done")), "ITEM"
                     ])
 
-        # 2. Project Level Tasks
         for p_key, p_dict in st.session_state["project_tasks_store"].items():
             proj_name = p_key.replace("proj_", "")
             if isinstance(p_dict, dict):
@@ -182,7 +191,6 @@ def load_all_data():
 
 procurement_df, tasks_database, team_database, availability_database = load_all_data()
 
-# Αρχικοποίηση Session State από το Google Sheet
 sheet_item_assignments, sheet_proj_assignments = load_assignments_from_sheet()
 
 if "tasks_store" not in st.session_state:
@@ -209,7 +217,6 @@ FIXED_PROJECT_TASKS = [
     "Τοποθέτηση σε χαρτοκιβώτια"
 ]
 
-# --- CALLBACK FUNCTIONS ΓΙΑ ΑΜΕΣΗ ΕΝΗΜΕΡΩΣΗ & ΑΠΟΘΗΚΕΥΣΗ ---
 def toggle_project_task(p_key, task_name, chk_key):
     st.session_state["project_tasks_store"][p_key][task_name]["done"] = st.session_state[chk_key]
     save_all_assignments_to_sheet()
@@ -226,7 +233,6 @@ def update_proj_field(p_key, task_name, field, widget_key):
     st.session_state["project_tasks_store"][p_key][task_name][field] = st.session_state[widget_key]
     save_all_assignments_to_sheet()
 
-# --- 📌 TABS ΣΤΟ ΠΑΝΩ ΜΕΡΟΣ ΤΗΣ ΣΕΛΙΔΑΣ ---
 tab_dash, tab_proj, col_plan, tab_tech, tab_projec, tab_rep, tab_data = st.tabs([
     "📈 Dashboard", 
     "📋 Καρτέλα Project", 
