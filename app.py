@@ -414,9 +414,9 @@ with tab_proj:
         m2.metric("Ώρες που Ολοκληρώθηκαν", f"{round(completed_project_hours, 1)} Ώρες")
         m3.metric("Υπολειπόμενες Ώρες", f"{remaining_hours} Ώρες", delta=f"-{remaining_hours}h" if remaining_hours > 0 else "Έτοιμο!")
 
-# --- 3. ΗΜΕΡΗΣΙΟ ΠΛΑΝΟ ---
+# --- 3. ΗΜΕΡΗΣΙΟ ΠΛΑΝΟ (INTERACTIVE) ---
 with col_plan:
-    st.header("🗓️ Συγκεντρωτικό Πλάνο Παραγωγής & Έλεγχος Διαθεσιμότητας")
+    st.header("🗓️ Συγκεντρωτικό Πλάνο Παραγωγής & Διαδραστική Αλλαγή Status")
     
     target_date = st.date_input("Επιλέξτε Ημερομηνία Πλάνου:", value=date.today(), format="DD/MM/YYYY")
     greek_day_name = WEEKDAYS_GREEK.get(target_date.weekday(), "Δευτέρα")
@@ -444,6 +444,9 @@ with col_plan:
                     hours = (auto_time * proj_qty) / 60
                     
                     daily_tasks.append({
+                        "type": "project",
+                        "p_key": p_key,
+                        "task_name": task_name,
                         "ID": "Project Task",
                         "Project": proj_name,
                         "Υλικό": "Γενική Σύνθεση / Box",
@@ -451,7 +454,7 @@ with col_plan:
                         "Εργασία": task_name,
                         "Υπεύθυνος": t_user,
                         "Ώρες": round(hours, 2),
-                        "Κατάσταση": "✅ Ολοκληρώθηκε" if t_done else "⏳ Σε Εκκρεμότητα"
+                        "done": t_done
                     })
 
     if not procurement_df.empty:
@@ -464,7 +467,7 @@ with col_plan:
             
             item_tasks = st.session_state["tasks_store"].get(unique_item_key, [])
             
-            for t_data in item_tasks:
+            for t_idx, t_data in enumerate(item_tasks):
                 t_task = t_data["task"]
                 t_user = t_data["user"]
                 t_date = t_data["date"]
@@ -475,6 +478,9 @@ with col_plan:
                     hours = (auto_time * qty) / 60
                     
                     daily_tasks.append({
+                        "type": "item",
+                        "u_key": unique_item_key,
+                        "t_idx": t_idx,
                         "ID": item_id,
                         "Project": project_name,
                         "Υλικό": material,
@@ -482,58 +488,75 @@ with col_plan:
                         "Εργασία": t_task,
                         "Υπεύθυνος": t_user,
                         "Ώρες": round(hours, 2),
-                        "Κατάσταση": "✅ Ολοκληρώθηκε" if t_done else "⏳ Σε Εκκρεμότητα"
+                        "done": t_done
                     })
 
     if daily_tasks:
-        daily_df = pd.DataFrame(daily_tasks)
-        
-        st.subheader(f"📌 Εργασίες για τις {target_date.strftime('%d/%m/%Y')} ({len(daily_df)} Tasks)")
+        st.subheader(f"📌 Εργασίες για τις {target_date.strftime('%d/%m/%Y')} ({len(daily_tasks)} Tasks)")
         
         st.markdown("#### 👥 Φόρτος Εργασίας & Διαθεσιμότητα Ομάδας")
         
         day_availability = availability_database.get(greek_day_name, {})
-        team_summary = daily_df.groupby("Υπεύθυνος")["Ώρες"].sum().reset_index()
         
-        cols = st.columns(max(len(team_summary), 1))
-        for i, r in team_summary.iterrows():
-            member_name = r["Υπεύθυνος"]
-            assigned_hrs = round(r["Ώρες"], 2)
-            
+        # Υπολογισμός Φόρτου
+        user_hours = {}
+        for d in daily_tasks:
+            u = d["Υπεύθυνος"]
+            user_hours[u] = user_hours.get(u, 0.0) + d["Ώρες"]
+
+        cols = st.columns(max(len(user_hours), 1))
+        for i, (member_name, assigned_hrs) in enumerate(user_hours.items()):
+            assigned_hrs = round(assigned_hrs, 2)
             if member_name != "- Χωρίς Ανάθεση -":
                 max_hrs = day_availability.get(member_name, 6.0)
                 delta_hrs = round(assigned_hrs - max_hrs, 2)
                 
                 if delta_hrs > 0:
                     cols[i].metric(
-                        f"⚠️ {member_name}", 
-                        f"{assigned_hrs} / {max_hrs}h", 
-                        delta=f"+{delta_hrs}h Υπερκάλυψη", 
-                        delta_color="inverse"
+                        f"⚠️ {member_name}", f"{assigned_hrs} / {max_hrs}h", 
+                        delta=f"+{delta_hrs}h Υπερκάλυψη", delta_color="inverse"
                     )
                 else:
                     cols[i].metric(
-                        f"🟢 {member_name}", 
-                        f"{assigned_hrs} / {max_hrs}h", 
-                        delta=f"{delta_hrs}h Διαθέσιμο", 
-                        delta_color="normal"
+                        f"🟢 {member_name}", f"{assigned_hrs} / {max_hrs}h", 
+                        delta=f"{delta_hrs}h Διαθέσιμο", delta_color="normal"
                     )
             else:
                 cols[i].metric(f"❓ {member_name}", f"{assigned_hrs} Ώρες")
             
         st.divider()
-        st.markdown("#### 📋 Αναλυτικός Πίνακας Εργασιών")
+        st.markdown("#### 📋 Διαδραστική Λίστα Εργασιών (Τσεκάρετε [✓] για Ολοκλήρωση)")
         
-        column_config = {
-            col: st.column_config.Column(alignment="center") for col in daily_df.columns
-        }
-        st.dataframe(daily_df, use_container_width=True, hide_index=True, column_config=column_config)
+        for d_idx, dt in enumerate(daily_tasks):
+            col_chk, col_p, col_mat, col_tsk, col_user, col_hrs = st.columns([0.08, 0.22, 0.30, 0.22, 0.18, 0.10])
+            
+            # Interactive Checkbox
+            if dt["type"] == "project":
+                state_chk_key = f"plan_pdone_{dt['p_key']}_{dt['task_name']}"
+                is_done = col_chk.checkbox("Done", value=dt["done"], key=state_chk_key)
+                st.session_state["project_tasks_store"][dt['p_key']][dt['task_name']]["done"] = is_done
+            else:
+                state_chk_key = f"plan_idone_{dt['u_key']}_{dt['t_idx']}"
+                is_done = col_chk.checkbox("Done", value=dt["done"], key=state_chk_key)
+                st.session_state["tasks_store"][dt['u_key']][dt['t_idx']]["done"] = is_done
+
+            col_p.markdown(f"**{dt['Project']}**")
+            col_mat.caption(f"{dt['Υλικό']} ({dt['Ποσότητα']} τμχ)")
+            
+            if is_done:
+                col_tsk.markdown(f"~~{dt['Εργασία']}~~ ✅")
+            else:
+                col_tsk.markdown(f"**{dt['Εργασία']}**")
+                
+            col_user.write(dt['Υπεύθυνος'])
+            col_hrs.write(f"{dt['Ώρες']}h")
+
     else:
         st.info(f"Δεν έχουν προγραμματιστεί εργασίες για τις {target_date.strftime('%d/%m/%Y')}.")
 
-# --- 4. ΠΡΟΓΡΑΜΜΑ ΤΕΧΝΙΤΗ ---
+# --- 4. ΠΡΟΓΡΑΜΜΑ ΤΕΧΝΙΤΗ (INTERACTIVE) ---
 with tab_tech:
-    st.header("👤 Ημερήσιο Πρόγραμμα Εργασιών ανά Τεχνίτη")
+    st.header("👤 Ημερήσιο Πρόγραμμα Εργασιών ανά Τεχνίτη (Interactive)")
     
     c_date, c_user = st.columns([1, 1])
     target_date = c_date.date_input("Ημερομηνία:", value=date.today(), format="DD/MM/YYYY", key="tech_date")
@@ -561,7 +584,8 @@ with tab_tech:
                         hours = (auto_time * proj_qty) / 60
                         worker_tasks.append({
                             "type": "project",
-                            "key": f"p_{p_key}_{task_name}",
+                            "p_key": p_key,
+                            "task_name": task_name,
                             "project": proj_name,
                             "item": "Γενική Σύνθεση / Box",
                             "qty": proj_qty,
@@ -582,7 +606,7 @@ with tab_tech:
             
             item_tasks = st.session_state["tasks_store"].get(unique_item_key, [])
             
-            for t_data in item_tasks:
+            for t_idx, t_data in enumerate(item_tasks):
                 if t_data.get("user") == selected_member and t_data.get("date") == target_date:
                     t_task = t_data.get("task")
                     if t_task != "- Επιλογή Εργασίας -":
@@ -590,7 +614,8 @@ with tab_tech:
                         hours = (auto_time * qty) / 60
                         worker_tasks.append({
                             "type": "item",
-                            "key": f"i_{unique_item_key}_{t_task}",
+                            "u_key": unique_item_key,
+                            "t_idx": t_idx,
                             "project": project_name,
                             "item": f"[{item_id}] {material}",
                             "qty": qty,
@@ -609,12 +634,26 @@ with tab_tech:
         st.divider()
 
         for w_idx, wt in enumerate(worker_tasks):
-            col_c, col_proj, col_mat, col_task, col_qty, col_h, col_proc = st.columns([0.08, 0.20, 0.28, 0.22, 0.08, 0.10, 0.14])
+            col_c, col_proj, col_mat, col_task, col_qty, col_h, col_proc = st.columns([0.10, 0.20, 0.26, 0.20, 0.08, 0.08, 0.12])
             
-            col_c.write(f"#{w_idx+1}")
+            # Interactive Checkbox για Τεχνίτη
+            if wt["type"] == "project":
+                state_chk_key = f"tech_pdone_{wt['p_key']}_{wt['task_name']}"
+                is_done = col_c.checkbox("Done", value=wt["done"], key=state_chk_key)
+                st.session_state["project_tasks_store"][wt['p_key']][wt['task_name']]["done"] = is_done
+            else:
+                state_chk_key = f"tech_idone_{wt['u_key']}_{wt['t_idx']}"
+                is_done = col_c.checkbox("Done", value=wt["done"], key=state_chk_key)
+                st.session_state["tasks_store"][wt['u_key']][wt['t_idx']]["done"] = is_done
+
             col_proj.markdown(f"**{wt['project']}**")
             col_mat.write(wt['item'])
-            col_task.markdown(f"`{wt['task']}`")
+            
+            if is_done:
+                col_task.markdown(f"~~{wt['task']}~~ ✅")
+            else:
+                col_task.markdown(f"`{wt['task']}`")
+                
             col_qty.write(f"{wt['qty']} τμχ")
             col_h.caption(f"{wt['hours']}h")
             
@@ -790,7 +829,6 @@ with tab_rep:
     rep_completed = []
     rep_pending = []
 
-    # 1. Project Tasks
     for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
         if isinstance(p_tasks_dict, dict):
             proj_name = p_key.replace("proj_", "")
@@ -820,7 +858,6 @@ with tab_rep:
                         else:
                             rep_pending.append(item_info)
 
-    # 2. Item Tasks
     if not procurement_df.empty:
         for idx, row in procurement_df.iterrows():
             item_id = str(row["ID"])
@@ -864,7 +901,7 @@ with tab_rep:
     if rep_completed:
         st.dataframe(pd.DataFrame(rep_completed), use_container_width=True, hide_index=True)
     else:
-        st.info("Δεν έχουν σημειωθείλοκληρωμένες εργασίες για αυτή την ημερομηνία.")
+        st.info("Δεν έχουν σημειωθεί ολοκληρωμένες εργασίες για αυτή την ημερομηνία.")
 
     st.divider()
 
