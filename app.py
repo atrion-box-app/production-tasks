@@ -112,13 +112,103 @@ FIXED_PROJECT_TASKS = [
 ]
 
 option = st.sidebar.selectbox("Επιλογή Οθόνης", [
+    "Dashboard Παραγωγής",
     "Καρτέλα Project", 
     "Ημερήσιο Πλάνο Παραγωγής", 
     "Ημερήσιο Πρόγραμμα (Ανά Τεχνίτη)", 
     "Πρότυπα Χρόνων & Ομάδα"
 ])
 
-if option == "Καρτέλα Project":
+if option == "Dashboard Παραγωγής":
+    st.header("📈 Dashboard & Επισκόπηση Παραγωγής")
+    
+    if not procurement_df.empty:
+        projects_list = sorted([p for p in procurement_df["Project"].unique().tolist() if p != "-"])
+        
+        dashboard_data = []
+        tot_all_hours = 0.0
+        tot_done_hours = 0.0
+        tot_tasks_count = 0
+        tot_done_tasks = 0
+        
+        for p_name in projects_list:
+            filtered_p = procurement_df[procurement_df["Project"] == p_name]
+            
+            p_main_qty = 1
+            for _, r in filtered_p.iterrows():
+                if str(r["Ποσότητα"]).isdigit():
+                    p_main_qty = max(p_main_qty, int(r["Ποσότητα"]))
+
+            p_total_hrs = 0.0
+            p_done_hrs = 0.0
+            p_tasks_cnt = 0
+            p_done_cnt = 0
+            
+            # 1. Item Tasks
+            for idx, r in filtered_p.iterrows():
+                item_id = str(r["ID"])
+                u_key = f"{item_id}_{idx}"
+                qty = int(r["Ποσότητα"]) if str(r["Ποσότητα"]).isdigit() else 1
+                
+                item_tasks = st.session_state["tasks_store"].get(u_key, [])
+                for t in item_tasks:
+                    if t["task"] != "- Επιλογή Εργασίας -":
+                        auto_t = tasks_database.get(t["task"], 0.0)
+                        hrs = (auto_t * qty) / 60
+                        p_total_hrs += hrs
+                        p_tasks_cnt += 1
+                        if t["done"]:
+                            p_done_hrs += hrs
+                            p_done_cnt += 1
+
+            # 2. Project Tasks
+            p_key = f"proj_{p_name}"
+            p_tasks_dict = st.session_state["project_tasks_store"].get(p_key, {})
+            if isinstance(p_tasks_dict, dict):
+                for t_name, p_data in p_tasks_dict.items():
+                    if isinstance(p_data, dict) and p_data.get("active", False):
+                        auto_t = tasks_database.get(t_name, 0.0)
+                        hrs = (auto_t * p_main_qty) / 60
+                        p_total_hrs += hrs
+                        p_tasks_cnt += 1
+                        if p_data.get("done", False):
+                            p_done_hrs += hrs
+                            p_done_cnt += 1
+
+            tot_all_hours += p_total_hrs
+            tot_done_hours += p_done_hrs
+            tot_tasks_count += p_tasks_cnt
+            tot_done_tasks += p_done_cnt
+            
+            p_progress = int((p_done_cnt / p_tasks_cnt) * 100) if p_tasks_cnt > 0 else 0
+            
+            dashboard_data.append({
+                "Project": p_name,
+                "Υλικά": len(filtered_p),
+                "Σύνολο Tasks": p_tasks_cnt,
+                "Ολοκληρωμένα Tasks": p_done_cnt,
+                "Συνολικές Ώρες": round(p_total_hrs, 1),
+                "Υπολειπόμενες Ώρες": round(p_total_hrs - p_done_hrs, 1),
+                "Πρόοδος (%)": f"{p_progress}%"
+            })
+
+        # Top Metrics
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Ενεργά Projects", len(projects_list))
+        c2.metric("Συνολικές Ώρες Παραγωγής", f"{round(tot_all_hours, 1)}h")
+        
+        overall_pct = int((tot_done_tasks / tot_tasks_count) * 100) if tot_tasks_count > 0 else 0
+        c3.metric("Συνολική Πρόοδος Παραγωγής", f"{overall_pct}%")
+        c4.metric("Εκκρεμή Tasks", tot_tasks_count - tot_done_tasks)
+
+        st.divider()
+        st.subheader("📊 Κατάσταση & Πρόοδος ανά Project")
+        
+        if dashboard_data:
+            dash_df = pd.DataFrame(dashboard_data)
+            st.dataframe(dash_df, use_container_width=True, hide_index=True)
+
+elif option == "Καρτέλα Project":
     st.header("📋 Διαχείριση Παραγωγής & Αναθέσεις ανά Project")
     
     if not procurement_df.empty:
