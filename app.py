@@ -27,7 +27,7 @@ WEEKDAYS_SHORT_GREEK = {
     0: "Δευ", 1: "Τρι", 2: "Τετ", 3: "Πεμ", 4: "Παρ", 5: "Σαβ", 6: "Κυρ"
 }
 
-# --- Google Sheets API Connection με Ασφαλή Καθαρισμό PEM Key ---
+# --- Google Sheets API Connection ---
 @st.cache_resource
 def get_gspread_client():
     if "gcp_service_account" not in st.secrets:
@@ -35,11 +35,8 @@ def get_gspread_client():
     
     try:
         creds_dict = dict(st.secrets["gcp_service_account"])
-        
-        # Καθαρισμός private_key για αποφυγή PEM errors
         if "private_key" in creds_dict:
-            pk = creds_dict["private_key"]
-            pk = pk.replace("\\n", "\n").strip()
+            pk = str(creds_dict["private_key"]).replace("\\n", "\n").strip()
             if pk.startswith('"') and pk.endswith('"'):
                 pk = pk[1:-1]
             creds_dict["private_key"] = pk
@@ -50,6 +47,14 @@ def get_gspread_client():
         return client, None
     except Exception as e:
         return None, str(e)
+
+# Ορισμός της μεταβλητής gc στην αρχή
+gc, connection_error = get_gspread_client()
+
+if connection_error:
+    st.error(f"❌ Σφάλμα Σύνδεσης Google Sheets API: {connection_error}")
+else:
+    st.success("✅ Η σύνδεση με το Google Sheets API είναι ενεργή!")
 
 # --- Φόρτωση / Αποθήκευση Αναθέσεων από το Google Sheet (Assignments) ---
 def load_assignments_from_sheet():
@@ -104,7 +109,7 @@ def save_all_assignments_to_sheet():
         sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
         rows = [["Project", "Item_ID", "Task_Name", "Assigned_User", "Assigned_Date", "Status_Done", "Task_Type"]]
 
-        for u_key, t_list in st.session_state["tasks_store"].items():
+        for u_key, t_list in st.session_state.get("tasks_store", {}).items():
             item_id = u_key.split("_")[0]
             for t in t_list:
                 if t.get("task") and t.get("task") != "- Επιλογή Εργασίας -":
@@ -112,7 +117,7 @@ def save_all_assignments_to_sheet():
                         "-", item_id, t.get("task"), t.get("user"), str(t.get("date")), str(t.get("done")), "ITEM"
                     ])
 
-        for p_key, p_dict in st.session_state["project_tasks_store"].items():
+        for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
             proj_name = p_key.replace("proj_", "")
             if isinstance(p_dict, dict):
                 for t_name, p_data in p_dict.items():
