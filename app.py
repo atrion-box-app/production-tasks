@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import date
+from datetime import date, timedelta
 
 st.set_page_config(page_title="Production Tasks App", layout="wide")
 
@@ -116,6 +116,7 @@ option = st.sidebar.selectbox("Επιλογή Οθόνης", [
     "Καρτέλα Project", 
     "Ημερήσιο Πλάνο Παραγωγής", 
     "Ημερήσιο Πρόγραμμα (Ανά Τεχνίτη)", 
+    "Εβδομαδιαίο Projection",
     "Πρότυπα Χρόνων & Ομάδα"
 ])
 
@@ -192,7 +193,6 @@ if option == "Dashboard Παραγωγής":
                 "Πρόοδος (%)": f"{p_progress}%"
             })
 
-        # Top Metrics
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Ενεργά Projects", len(projects_list))
         c2.metric("Συνολικές Ώρες Παραγωγής", f"{round(tot_all_hours, 1)}h")
@@ -402,7 +402,8 @@ elif option == "Καρτέλα Project":
 
         m1, m2, m3 = st.columns(3)
         m1.metric("Συνολικές Ώρες (Γενικές + Υλικών)", f"{round(total_project_hours, 1)} Ώρες")
-        m2.metric("Ώρες που Ολοκληρώθηκαν", f"{round(completed_project_hours, 1)} Ώρες")
+        m1_completed = round(completed_project_hours, 1)
+        m2.metric("Ώρες που Ολοκληρώθηκαν", f"{m1_completed} Ώρες")
         m3.metric("Υπολειπόμενες Ώρες", f"{remaining_hours} Ώρες", delta=f"-{remaining_hours}h" if remaining_hours > 0 else "Έτοιμο!")
 
 elif option == "Ημερήσιο Πλάνο Παραγωγής":
@@ -613,6 +614,68 @@ elif option == "Ημερήσιο Πρόγραμμα (Ανά Τεχνίτη)":
                 col_proc.warning(wt['status_proc'])
     else:
         st.success(f"🎉 Δεν έχουν ανατεθεί εργασίες στον/στην {selected_member} για τις {target_date.strftime('%d/%m/%Y')}.")
+
+elif option == "Εβδομαδιαίο Projection":
+    st.header("📆 Εβδομαδιαία Πρόβλεψη Φόρτου Εργασίας (Projection)")
+    
+    start_monday = date.today() - timedelta(days=date.today().weekday())
+    sel_start = st.date_input("Επιλέξτε Δευτέρα Εναρξης:", value=start_monday, format="DD/MM/YYYY")
+    
+    # 5 Εργάσιμες Ημέρες
+    week_days = [sel_start + timedelta(days=i) for i in range(5)]
+    
+    st.divider()
+    
+    # Συλλογή όλων των tasks της εβδομάδας
+    weekly_matrix = {m: {d.strftime("%a %d/%m"): 0.0 for d in week_days} for m in team_database}
+    
+    # 1. Project Level Tasks
+    for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
+        if isinstance(p_tasks_dict, dict):
+            proj_name = p_key.replace("proj_", "")
+            proj_qty = 1
+            if not procurement_df.empty:
+                p_items = procurement_df[procurement_df["Project"] == proj_name]
+                for _, r in p_items.iterrows():
+                    if str(r["Ποσότητα"]).isdigit():
+                        proj_qty = max(proj_qty, int(r["Ποσότητα"]))
+
+            for task_name, p_data in p_tasks_dict.items():
+                if isinstance(p_data, dict) and p_data.get("active", False):
+                    t_date = p_data.get("date")
+                    t_user = p_data.get("user")
+                    if t_user in weekly_matrix and t_date in week_days:
+                        auto_time = tasks_database.get(task_name, 0.0)
+                        hrs = (auto_time * proj_qty) / 60
+                        day_str = t_date.strftime("%a %d/%m")
+                        weekly_matrix[t_user][day_str] += hrs
+
+    # 2. Item Level Tasks
+    if not procurement_df.empty:
+        for idx, row in procurement_df.iterrows():
+            item_id = str(row["ID"])
+            unique_item_key = f"{item_id}_{idx}"
+            qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+            
+            item_tasks = st.session_state["tasks_store"].get(unique_item_key, [])
+            for t_data in item_tasks:
+                t_task = t_data.get("task")
+                t_user = t_data.get("user")
+                t_date = t_data.get("date")
+                
+                if t_task != "- Επιλογή Εργασίας -" and t_user in weekly_matrix and t_date in week_days:
+                    auto_time = tasks_database.get(t_task, 0.0)
+                    hrs = (auto_time * qty) / 60
+                    day_str = t_date.strftime("%a %d/%m")
+                    weekly_matrix[t_user][day_str] += hrs
+
+    # Μετατροπή σε DataFrame
+    proj_df = pd.DataFrame(weekly_matrix).T
+    proj_df = proj_df.round(1)
+    proj_df["Σύνολο Εβδομάδας (h)"] = proj_df.sum(axis=1)
+
+    st.subheader("📊 Πίνακας Ωρών ανά Εργαζόμενο & Ημέρα")
+    st.dataframe(proj_df, use_container_width=True)
 
 elif option == "Πρότυπα Χρόνων & Ομάδα":
     st.header("📊 Βάση Δεδομένων Χρόνων & Ομάδας")
