@@ -70,6 +70,15 @@ if "tasks_store" not in st.session_state:
 if "project_tasks_store" not in st.session_state:
     st.session_state["project_tasks_store"] = {}
 
+# Οι 5 Σταθερές Γενικές Εργασίες Project
+FIXED_PROJECT_TASKS = [
+    "Σύνθεση (κουτί)",
+    "Σύνθεση (πουγκί / τσάντα)",
+    "Σύνθεση (χειροποίητο)",
+    "Φωτογράφιση",
+    "Τοποθέτηση σε χαρτοκιβώτια"
+]
+
 option = st.sidebar.selectbox("Επιλογή Οθόνης", ["Καρτέλα Project", "Ημερήσιο Πλάνο Παραγωγής", "Πρότυπα Χρόνων & Ομάδα"])
 
 if option == "Καρτέλα Project":
@@ -80,7 +89,7 @@ if option == "Καρτέλα Project":
     
     filtered_df = procurement_df[procurement_df["Project"] == selected_project].copy()
     
-    # Υπολογισμός συνολικής ποσότητας δώρων project (λαμβάνεται από το 1ο υλικό ή max qty)
+    # Ποσότητα Project
     project_main_qty = 1
     for _, r in filtered_df.iterrows():
         if str(r["Ποσότητα"]).isdigit():
@@ -94,85 +103,7 @@ if option == "Καρτέλα Project":
     task_options = ["- Επιλογή Εργασίας -"] + sorted(list(tasks_database.keys()))
     team_options = ["- Χωρίς Ανάθεση -"] + team_database
 
-    # --- 1. ΓΕΝΙΚΕΣ ΕΡΓΑΣΙΕΣ PROJECT (PROJECT LEVEL TASKS) ---
-    st.markdown("### 🛠️ Γενικές Εργασίες Project (Σύνθεση, Συσκευασία & Box)")
-    
-    proj_key = f"proj_{selected_project}"
-    if proj_key not in st.session_state["project_tasks_store"]:
-        st.session_state["project_tasks_store"][proj_key] = [
-            {"done": False, "task": "- Επιλογή Εργασίας -", "user": "- Χωρίς Ανάθεση -", "date": date.today()}
-        ]
-    
-    proj_tasks = st.session_state["project_tasks_store"][proj_key]
-    
-    with st.expander(f"📦 Γενικά Tasks για όλο το Project: {selected_project}", expanded=True):
-        if len(proj_tasks) == 0:
-            st.info("Δεν έχουν οριστεί γενικές εργασίες για το project.")
-            
-        for p_idx, p_data in enumerate(list(proj_tasks)):
-            c_check, c_task, c_user, c_date, c_time, c_del = st.columns([0.08, 0.32, 0.23, 0.18, 0.11, 0.08])
-            
-            is_done = c_check.checkbox("", value=p_data["done"], key=f"pchk_{proj_key}_{p_idx}")
-            
-            task_idx = task_options.index(p_data["task"]) if p_data["task"] in task_options else 0
-            selected_task = c_task.selectbox(
-                "Εργασία Project", task_options, index=task_idx, 
-                key=f"ptask_{proj_key}_{p_idx}", label_visibility="collapsed"
-            )
-            
-            user_idx = team_options.index(p_data["user"]) if p_data["user"] in team_options else 0
-            assigned_user = c_user.selectbox(
-                "Ανάθεση", team_options, index=user_idx, 
-                key=f"puser_{proj_key}_{p_idx}", label_visibility="collapsed"
-            )
-            
-            assign_date = c_date.date_input(
-                "Ημερομηνία", value=p_data["date"], format="DD/MM/YYYY", 
-                key=f"pdate_{proj_key}_{p_idx}", label_visibility="collapsed"
-            )
-
-            st.session_state["project_tasks_store"][proj_key][p_idx] = {
-                "done": is_done,
-                "task": selected_task,
-                "user": assigned_user,
-                "date": assign_date
-            }
-            
-            auto_time = tasks_database.get(selected_task, 0.0)
-            
-            if selected_task != "- Επιλογή Εργασίας -":
-                task_hours = (auto_time * project_main_qty) / 60
-                total_project_hours += task_hours
-                total_tasks_count += 1
-                
-                if is_done:
-                    completed_project_hours += task_hours
-                    completed_tasks_count += 1
-                    c_time.markdown("✅ **Done**")
-                else:
-                    c_time.metric("λ/σετ", f"{auto_time}λ")
-            else:
-                c_time.caption("0.0λ")
-            
-            if c_del.button("🗑️", key=f"pdel_{proj_key}_{p_idx}"):
-                st.session_state["project_tasks_store"][proj_key].pop(p_idx)
-                st.rerun()
-
-        col_pbtn1, col_pbtn2, _ = st.columns([0.35, 0.35, 0.3])
-        if col_pbtn1.button("➕ Προσθήκη Γενικής Εργασίας Project", key=f"padd_{proj_key}"):
-            st.session_state["project_tasks_store"][proj_key].append(
-                {"done": False, "task": "- Επιλογή Εργασίας -", "user": "- Χωρίς Ανάθεση -", "date": date.today()}
-            )
-            st.rerun()
-        
-        if len(proj_tasks) > 0:
-            if col_pbtn2.button("➖ Αφαίρεση Γενικής Εργασίας", key=f"prem_{proj_key}"):
-                st.session_state["project_tasks_store"][proj_key].pop()
-                st.rerun()
-
-    st.divider()
-
-    # --- 2. ΕΡΓΑΣΙΕΣ ΑΝΑ ΥΛΙΚΟ (ITEM LEVEL TASKS) ---
+    # --- 1. ΕΡΓΑΣΙΕΣ ΑΝΑ ΥΛΙΚΟ (ITEM LEVEL TASKS) ---
     st.subheader(f"📦 Εργασίες ανά Υλικό ({len(filtered_df)} Υλικά)")
 
     for idx, row in filtered_df.iterrows():
@@ -267,6 +198,78 @@ if option == "Καρτέλα Project":
                         st.session_state["tasks_store"][item_id].pop()
                         st.rerun()
 
+    st.divider()
+
+    # --- 2. ΓΕΝΙΚΕΣ ΕΡΓΑΣΙΕΣ PROJECT (ΣΤΟ ΚΑΤΩ ΜΕΡΟΣ) ---
+    st.markdown("### 🛠️ Γενικές Εργασίες Project (Σύνθεση, Συσκευασία & Box)")
+    
+    proj_key = f"proj_{selected_project}"
+    if proj_key not in st.session_state["project_tasks_store"]:
+        # Αρχικοποίηση των 5 σταθερών εργασιών (όλες disabled/active=False αρχικά)
+        st.session_state["project_tasks_store"][proj_key] = {
+            t_name: {"active": False, "done": False, "user": "- Χωρίς Ανάθεση -", "date": date.today()}
+            for t_name in FIXED_PROJECT_TASKS
+        }
+    
+    proj_tasks_dict = st.session_state["project_tasks_store"][proj_key]
+    
+    with st.expander(f"📦 5 Σταθερές Γενικές Εργασίες για το Project: {selected_project}", expanded=True):
+        st.caption("Ενεργοποιήστε [✓] τις εργασίες που απαιτούνται για το συγκεκριμένο project, αναθέστε σε άτομο και ορίστε ημερομηνία.")
+        
+        for task_name in FIXED_PROJECT_TASKS:
+            t_data = proj_tasks_dict.get(task_name, {"active": False, "done": False, "user": "- Χωρίς Ανάθεση -", "date": date.today()})
+            
+            c_active, c_name, c_done, c_user, c_date, c_time = st.columns([0.06, 0.30, 0.10, 0.22, 0.18, 0.14])
+            
+            # 1. Ενεργοποίηση της εργασίας για το project
+            is_active = c_active.checkbox("", value=t_data["active"], key=f"pact_{proj_key}_{task_name}")
+            c_name.markdown(f"**{task_name}**" if is_active else f"<span style='color:gray;'>{task_name}</span>", unsafe_allow_html=True)
+            
+            # 2. Checkbox Ολοκλήρωσης (εμφανίζεται μόνο αν είναι ενεργή)
+            is_done = False
+            if is_active:
+                is_done = c_done.checkbox("Done", value=t_data["done"], key=f"pdone_{proj_key}_{task_name}")
+            else:
+                c_done.caption("—")
+                
+            # 3. Επιλογή Ατόμου
+            user_idx = team_options.index(t_data["user"]) if t_data["user"] in team_options else 0
+            assigned_user = c_user.selectbox(
+                "Ανάθεση", team_options, index=user_idx, 
+                key=f"puser_{proj_key}_{task_name}", label_visibility="collapsed", disabled=not is_active
+            )
+            
+            # 4. Ημερομηνία
+            assign_date = c_date.date_input(
+                "Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", 
+                key=f"pdate_{proj_key}_{task_name}", label_visibility="collapsed", disabled=not is_active
+            )
+
+            # Αποθήκευση στο State
+            st.session_state["project_tasks_store"][proj_key][task_name] = {
+                "active": is_active,
+                "done": is_done,
+                "user": assigned_user,
+                "date": assign_date
+            }
+            
+            auto_time = tasks_database.get(task_name, 0.0)
+            
+            # Υπολογισμός Ωρών αν η εργασία είναι ΕΝΕΡΓΗ
+            if is_active:
+                task_hours = (auto_time * project_main_qty) / 60
+                total_project_hours += task_hours
+                total_tasks_count += 1
+                
+                if is_done:
+                    completed_project_hours += task_hours
+                    completed_tasks_count += 1
+                    c_time.markdown("✅ **Done**")
+                else:
+                    c_time.metric("λ/σετ", f"{auto_time}λ")
+            else:
+                c_time.caption("Ανενεργό")
+
     # --- 3. ΠΡΟΟΔΟΣ PROJECT & ΣΥΝΟΛΙΚΟΙ ΥΠΟΛΟΓΙΣΜΟΙ ---
     st.divider()
     progress_pct = int((completed_tasks_count / total_tasks_count) * 100) if total_tasks_count > 0 else 0
@@ -288,25 +291,21 @@ elif option == "Ημερήσιο Πλάνο Παραγωγής":
 
     daily_tasks = []
     
-    # 1. Συλλογή Γενικών Tasks Projects
-    for p_key, p_tasks in st.session_state["project_tasks_store"].items():
+    # 1. Συλλογή Γενικών Tasks Projects (μόνο όσων είναι ΕΝΕΡΓΑ)
+    for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
         proj_name = p_key.replace("proj_", "")
         
-        # Εύρεση ποσότητας project
         proj_qty = 1
         p_items = procurement_df[procurement_df["Project"] == proj_name]
         for _, r in p_items.iterrows():
             if str(r["Ποσότητα"]).isdigit():
                 proj_qty = max(proj_qty, int(r["Ποσότητα"]))
 
-        for p_data in p_tasks:
-            t_task = p_data["task"]
-            t_user = p_data["user"]
-            t_date = p_data["date"]
-            t_done = p_data["done"]
-            
-            if t_task != "- Επιλογή Εργασίας -" and t_date == target_date:
-                auto_time = tasks_database.get(t_task, 0.0)
+        for task_name, p_data in p_tasks_dict.items():
+            if p_data.get("active", False) and p_data.get("date") == target_date:
+                t_user = p_data.get("user", "- Χωρίς Ανάθεση -")
+                t_done = p_data.get("done", False)
+                auto_time = tasks_database.get(task_name, 0.0)
                 hours = (auto_time * proj_qty) / 60
                 
                 daily_tasks.append({
@@ -314,7 +313,7 @@ elif option == "Ημερήσιο Πλάνο Παραγωγής":
                     "Project": proj_name,
                     "Υλικό": "Γενική Σύνθεση / Box",
                     "Ποσότητα": proj_qty,
-                    "Εργασία": t_task,
+                    "Εργασία": task_name,
                     "Υπεύθυνος": t_user,
                     "Ώρες": round(hours, 2),
                     "Κατάσταση": "✅ Ολοκληρώθηκε" if t_done else "⏳ Σε Εκκρεμότητα"
