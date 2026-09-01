@@ -754,7 +754,12 @@ elif option == "Εβδομαδιαίο Projection":
 
     st.divider()
 
-    # Προβολή Πινάκων με Γραμμή Αθροίσματος ανά Στήλη
+    # Συνάρτηση Μορφοποίησης Τελευταίας Γραμμής (Bold & Highlight)
+    def highlight_total_row(row):
+        if row.name == "Σύνολο Ημέρας (h)":
+            return ["background-color: #2b303a; font-weight: bold; color: #00e676; border-top: 2px solid #00e676;"] * len(row)
+        return [""] * len(row)
+
     for w_num, w_monday, w_days, w_matrix in weeks_matrices:
         w_sunday = w_days[-1]
         st.subheader(f"📅 Εβδομάδα {w_num}: {w_monday.strftime('%d/%m/%Y')} έως {w_sunday.strftime('%d/%m/%Y')}")
@@ -763,12 +768,14 @@ elif option == "Εβδομαδιαίο Projection":
         proj_df = proj_df.round(1)
         proj_df["Σύνολο (h)"] = proj_df.sum(axis=1)
 
-        # Προσθήκη Γραμμής Αθροίσματος Στηλών
         total_row = proj_df.sum(axis=0).round(1)
         total_row.name = "Σύνολο Ημέρας (h)"
         proj_df = pd.concat([proj_df, pd.DataFrame(total_row).T])
 
-        st.dataframe(proj_df, use_container_width=True)
+        # Εφαρμογή Styling
+        styled_df = proj_df.style.apply(highlight_total_row, axis=1)
+
+        st.dataframe(styled_df, use_container_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
 elif option == "Πρότυπα Χρόνων & Ομάδα":
