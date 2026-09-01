@@ -610,19 +610,34 @@ elif option == "Ημερήσιο Πρόγραμμα (Ανά Τεχνίτη)":
         st.success(f"🎉 Δεν έχουν ανατεθεί εργασίες στον/στην {selected_member} για τις {target_date.strftime('%d/%m/%Y')}.")
 
 elif option == "Εβδομαδιαίο Projection":
-    st.header("📆 Εβδομαδιαία Πρόβλεψη Φόρτου Εργασίας (Projection)")
+    st.header("📆 Πρόβλεψη Φόρτου Εργασίας (Projection)")
     
-    # 1. ΦΙΛΤΡΟ ΕΒΔΟΜΑΔΩΝ
     start_monday = date.today() - timedelta(days=date.today().weekday())
     
-    col_w_sel, col_d_sel = st.columns([1, 1])
-    week_choice = col_w_sel.selectbox("Επιλογή Εβδομάδας:", [
+    col_w_choice, col_range_choice, col_weekend = st.columns([1, 1, 1])
+    
+    week_choice = col_w_choice.selectbox("ΕΝΑΡΞΗ ΠΡΟΒΟΛΗΣ:", [
         "Τρέχουσα Εβδομάδα",
         "Επόμενη Εβδομάδα (+1)",
         "Μεθεπόμενη Εβδομάδα (+2)",
         "Προσαρμοσμένη Ημερομηνία"
     ])
     
+    range_weeks = col_range_choice.selectbox("ΕΥΡΟΣ ΠΡΟΒΟΛΗΣ:", [
+        "1 Εβδομάδα",
+        "2 Εβδομάδες",
+        "4 Εβδομάδες / Μήνας"
+    ])
+    
+    # Checkbox για Συμπερίληψη Σαββατοκύριακων
+    include_weekends = col_weekend.checkbox("📅 Συμπερίληψη Σαββατοκύριακων (ΣΚ)", value=False)
+    
+    num_weeks = 1
+    if "2 Εβδομάδες" in range_weeks:
+        num_weeks = 2
+    elif "4 Εβδομάδες" in range_weeks:
+        num_weeks = 4
+
     if week_choice == "Τρέχουσα Εβδομάδα":
         sel_start = start_monday
     elif week_choice == "Επόμενη Εβδομάδα (+1)":
@@ -630,14 +645,19 @@ elif option == "Εβδομαδιαίο Projection":
     elif week_choice == "Μεθεπόμενη Εβδομάδα (+2)":
         sel_start = start_monday + timedelta(days=14)
     else:
-        sel_start = col_d_sel.date_input("Επιλέξτε Δευτέρα Εναρξης:", value=start_monday, format="DD/MM/YYYY")
+        sel_start = st.date_input("Επιλέξτε Δευτέρα Εναρξης:", value=start_monday, format="DD/MM/YYYY")
     
-    # 5 Εργάσιμες Ημέρες
-    week_days = [sel_start + timedelta(days=i) for i in range(5)]
+    # Υπολογισμός Ημερών (5 εργάσιμες ή 7 πλήρεις ημέρες ανά εβδομάδα)
+    days_per_week = 7 if include_weekends else 5
     
-    # Συλλογή ωρών εβδομάδας
-    weekly_matrix = {m: {d.strftime("%a %d/%m"): 0.0 for d in week_days} for m in team_database}
-    daily_totals = {d.strftime("%a %d/%m"): 0.0 for d in week_days}
+    week_days = []
+    for w in range(num_weeks):
+        w_monday = sel_start + timedelta(days=w*7)
+        for i in range(days_per_week):
+            week_days.append(w_monday + timedelta(days=i))
+    
+    weekly_matrix = {m: {d.strftime("%d/%m"): 0.0 for d in week_days} for m in team_database}
+    daily_totals = {d.strftime("%d/%m"): 0.0 for d in week_days}
     
     # 1. Project Level Tasks
     for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
@@ -657,7 +677,7 @@ elif option == "Εβδομαδιαίο Projection":
                     if t_user in weekly_matrix and t_date in week_days:
                         auto_time = tasks_database.get(task_name, 0.0)
                         hrs = (auto_time * proj_qty) / 60
-                        day_str = t_date.strftime("%a %d/%m")
+                        day_str = t_date.strftime("%d/%m")
                         weekly_matrix[t_user][day_str] += hrs
                         daily_totals[day_str] += hrs
 
@@ -677,48 +697,45 @@ elif option == "Εβδομαδιαίο Projection":
                 if t_task != "- Επιλογή Εργασίας -" and t_user in weekly_matrix and t_date in week_days:
                     auto_time = tasks_database.get(t_task, 0.0)
                     hrs = (auto_time * qty) / 60
-                    day_str = t_date.strftime("%a %d/%m")
+                    day_str = t_date.strftime("%d/%m")
                     weekly_matrix[t_user][day_str] += hrs
                     daily_totals[day_str] += hrs
 
-    # Υπολογισμός Διαθεσιμότητας Εβδομάδας
-    total_assigned_week = sum(daily_totals.values())
-    total_available_week = 0.0
+    total_assigned_range = sum(daily_totals.values())
+    total_available_range = 0.0
     overbooked_days_count = 0
 
     for d in week_days:
         g_day = WEEKDAYS_GREEK.get(d.weekday(), "Δευτέρα")
         day_avail = availability_database.get(g_day, {})
         day_max = sum(day_avail.get(m, 6.0) for m in team_database)
-        total_available_week += day_max
+        total_available_range += day_max
         
-        day_str = d.strftime("%a %d/%m")
+        day_str = d.strftime("%d/%m")
         if daily_totals[day_str] > day_max:
             overbooked_days_count += 1
 
-    load_ratio = int((total_assigned_week / total_available_week) * 100) if total_available_week > 0 else 0
+    load_ratio = int((total_assigned_range / total_available_range) * 100) if total_available_range > 0 else 0
 
-    # 2. ΔΕΙΠΑΤΕΣ ΧΩΡΗΤΙΚΟΤΗΤΑΣ & OVERBOOKING (KPI CARDS)
     st.divider()
     kc1, kc2, kc3, kc4 = st.columns(4)
-    kc1.metric("Προγραμματισμένες Ώρες", f"{round(total_assigned_week, 1)}h")
-    kc2.metric("Διαθέσιμες Ώρες Ομάδας", f"{round(total_available_week, 1)}h")
+    kc1.metric("Προγραμματισμένες Ώρες", f"{round(total_assigned_range, 1)}h")
+    kc2.metric(f"Διαθέσιμες Ώρες ({num_weeks} εβδ.)", f"{round(total_available_range, 1)}h")
     
     if overbooked_days_count > 0:
-        kc3.metric("Overbooked Ημέρες", f"⚠️ {overbooked_days_count} / 5", delta_color="inverse")
+        kc3.metric("Overbooked Ημέρες", f"⚠️ {overbooked_days_count} / {len(week_days)}", delta_color="inverse")
     else:
-        kc3.metric("Overbooked Ημέρες", "🟢 0 / 5")
+        kc3.metric("Overbooked Ημέρες", f"🟢 0 / {len(week_days)}")
         
-    kc4.metric("Πληρότητα Εβδομάδας", f"{load_ratio}%", delta=f"{load_ratio - 100}%" if load_ratio > 100 else "Εντός Ορίων")
+    kc4.metric("Πληρότητα Περιόδου", f"{load_ratio}%", delta=f"{load_ratio - 100}%" if load_ratio > 100 else "Εντός Ορίων")
 
     st.divider()
 
-    # 3. ΠΙΝΑΚΑΣ ΩΡΩΝ
     proj_df = pd.DataFrame(weekly_matrix).T
     proj_df = proj_df.round(1)
-    proj_df["Σύνολο Εβδομάδας (h)"] = proj_df.sum(axis=1)
+    proj_df["Σύνολο Περιόδου (h)"] = proj_df.sum(axis=1)
 
-    st.subheader("📊 Πίνακας Ωρών ανά Εργαζόμενο & Ημέρα")
+    st.subheader(f"📊 Πίνακας Ωρών ανά Εργαζόμενο ({num_weeks} Εβδομάδες — {len(week_days)} Ημέρες)")
     st.dataframe(proj_df, use_container_width=True)
 
 elif option == "Πρότυπα Χρόνων & Ομάδα":
