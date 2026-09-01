@@ -109,6 +109,9 @@ if option == "Καρτέλα Project":
             with col_tasks:
                 st.markdown("**⚙️ Λίστα Εργασιών Παραγωγής**")
                 
+                if st.session_state[state_key] == 0:
+                    st.info("Δεν έχουν οριστεί εργασίες παραγωγής για αυτό το υλικό.")
+
                 for t_idx in range(st.session_state[state_key]):
                     c_check, c_task, c_user, c_date, c_time, c_del = st.columns([0.08, 0.32, 0.23, 0.18, 0.11, 0.08])
                     
@@ -139,23 +142,25 @@ if option == "Καρτέλα Project":
                         label_visibility="collapsed"
                     )
                     
-                    # Υπολογισμοί Ωρών
-                    task_hours = (auto_time * qty) / 60
-                    total_project_hours += task_hours
-                    total_tasks_count += 1
-                    
-                    if is_done:
-                        completed_project_hours += task_hours
-                        completed_tasks_count += 1
-                        c_time.markdown("✅ **Done**")
+                    # Υπολογισμοί Ωρών ΜΟΝΟ αν έχει επιλεγεί πραγματική εργασία
+                    if selected_task != "- Επιλογή Εργασίας -":
+                        task_hours = (auto_time * qty) / 60
+                        total_project_hours += task_hours
+                        total_tasks_count += 1
+                        
+                        if is_done:
+                            completed_project_hours += task_hours
+                            completed_tasks_count += 1
+                            c_time.markdown("✅ **Done**")
+                        else:
+                            c_time.metric("λ/τμχ", f"{auto_time}λ")
                     else:
-                        c_time.metric("λ/τμχ", f"{auto_time}λ")
+                        c_time.caption("0.0λ")
                     
-                    # Κουμπί Διαγραφής
+                    # Κουμπί Διαγραφής (Επιτρέπεται διαγραφή μέχρι και το 0)
                     if c_del.button("🗑️", key=f"del_{item_id}_{t_idx}"):
-                        if st.session_state[state_key] > 1:
-                            st.session_state[state_key] -= 1
-                            st.rerun()
+                        st.session_state[state_key] -= 1
+                        st.rerun()
 
                 # Κουμπιά Προσθήκης / Αφαίρεσης Εργασίας
                 col_btn1, col_btn2, col_empty = st.columns([0.35, 0.35, 0.3])
@@ -163,7 +168,7 @@ if option == "Καρτέλα Project":
                     st.session_state[state_key] += 1
                     st.rerun()
                 
-                if st.session_state[state_key] > 1:
+                if st.session_state[state_key] > 0:
                     if col_btn2.button("➖ Αφαίρεση Εργασίας", key=f"rem_btn_{item_id}"):
                         st.session_state[state_key] -= 1
                         st.rerun()
