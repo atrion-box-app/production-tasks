@@ -121,6 +121,13 @@ FIXED_PROJECT_TASKS = [
     "Τοποθέτηση σε χαρτοκιβώτια"
 ]
 
+# --- CALLBACK FUNCTIONS ΓΙΑ ΑΜΕΣΗ ΕΝΗΜΕΡΩΣΗ ---
+def toggle_project_task(p_key, task_name, chk_key):
+    st.session_state["project_tasks_store"][p_key][task_name]["done"] = st.session_state[chk_key]
+
+def toggle_item_task(u_key, t_idx, chk_key):
+    st.session_state["tasks_store"][u_key][t_idx]["done"] = st.session_state[chk_key]
+
 # --- 📌 TABS ΣΤΟ ΠΑΝΩ ΜΕΡΟΣ ΤΗΣ ΣΕΛΙΔΑΣ ---
 tab_dash, tab_proj, col_plan, tab_tech, tab_projec, tab_rep, tab_data = st.tabs([
     "📈 Dashboard", 
@@ -279,7 +286,11 @@ with tab_proj:
                     for t_idx, t_data in enumerate(list(item_tasks)):
                         c_check, c_task, c_user, c_date, c_time, c_del = st.columns([0.08, 0.32, 0.23, 0.18, 0.11, 0.08])
                         
-                        is_done = c_check.checkbox("", value=t_data["done"], key=f"chk_{unique_item_key}_{t_idx}")
+                        chk_k = f"chk_{unique_item_key}_{t_idx}"
+                        is_done = c_check.checkbox(
+                            "", value=t_data["done"], key=chk_k,
+                            on_change=toggle_item_task, args=(unique_item_key, t_idx, chk_k)
+                        )
                         
                         task_idx = task_options.index(t_data["task"]) if t_data["task"] in task_options else 0
                         selected_task = c_task.selectbox(
@@ -298,12 +309,9 @@ with tab_proj:
                             key=f"date_{unique_item_key}_{t_idx}", label_visibility="collapsed"
                         )
 
-                        st.session_state["tasks_store"][unique_item_key][t_idx] = {
-                            "done": is_done,
-                            "task": selected_task,
-                            "user": assigned_user,
-                            "date": assign_date
-                        }
+                        st.session_state["tasks_store"][unique_item_key][t_idx]["task"] = selected_task
+                        st.session_state["tasks_store"][unique_item_key][t_idx]["user"] = assigned_user
+                        st.session_state["tasks_store"][unique_item_key][t_idx]["date"] = assign_date
                         
                         auto_time = tasks_database.get(selected_task, 0.0)
                         
@@ -364,7 +372,11 @@ with tab_proj:
                 
                 is_done = False
                 if is_active:
-                    is_done = c_done.checkbox("Done", value=t_data["done"], key=f"pdone_{proj_key}_{task_name}")
+                    pdone_k = f"pdone_{proj_key}_{task_name}"
+                    is_done = c_done.checkbox(
+                        "Done", value=t_data["done"], key=pdone_k,
+                        on_change=toggle_project_task, args=(proj_key, task_name, pdone_k)
+                    )
                 else:
                     c_done.caption("—")
                     
@@ -379,12 +391,9 @@ with tab_proj:
                     key=f"pdate_{proj_key}_{task_name}", label_visibility="collapsed", disabled=not is_active
                 )
 
-                st.session_state["project_tasks_store"][proj_key][task_name] = {
-                    "active": is_active,
-                    "done": is_done,
-                    "user": assigned_user,
-                    "date": assign_date
-                }
+                st.session_state["project_tasks_store"][proj_key][task_name]["active"] = is_active
+                st.session_state["project_tasks_store"][proj_key][task_name]["user"] = assigned_user
+                st.session_state["project_tasks_store"][proj_key][task_name]["date"] = assign_date
                 
                 auto_time = tasks_database.get(task_name, 0.0)
                 
@@ -498,7 +507,6 @@ with col_plan:
         
         day_availability = availability_database.get(greek_day_name, {})
         
-        # Υπολογισμός Φόρτου
         user_hours = {}
         for d in daily_tasks:
             u = d["Υπεύθυνος"]
@@ -530,15 +538,18 @@ with col_plan:
         for d_idx, dt in enumerate(daily_tasks):
             col_chk, col_p, col_mat, col_tsk, col_user, col_hrs = st.columns([0.08, 0.22, 0.30, 0.22, 0.18, 0.10])
             
-            # Interactive Checkbox
             if dt["type"] == "project":
-                state_chk_key = f"plan_pdone_{dt['p_key']}_{dt['task_name']}"
-                is_done = col_chk.checkbox("Done", value=dt["done"], key=state_chk_key)
-                st.session_state["project_tasks_store"][dt['p_key']][dt['task_name']]["done"] = is_done
+                chk_k = f"plan_pdone_{dt['p_key']}_{dt['task_name']}_{d_idx}"
+                is_done = col_chk.checkbox(
+                    "Done", value=dt["done"], key=chk_k,
+                    on_change=toggle_project_task, args=(dt['p_key'], dt['task_name'], chk_k)
+                )
             else:
-                state_chk_key = f"plan_idone_{dt['u_key']}_{dt['t_idx']}"
-                is_done = col_chk.checkbox("Done", value=dt["done"], key=state_chk_key)
-                st.session_state["tasks_store"][dt['u_key']][dt['t_idx']]["done"] = is_done
+                chk_k = f"plan_idone_{dt['u_key']}_{dt['t_idx']}_{d_idx}"
+                is_done = col_chk.checkbox(
+                    "Done", value=dt["done"], key=chk_k,
+                    on_change=toggle_item_task, args=(dt['u_key'], dt['t_idx'], chk_k)
+                )
 
             col_p.markdown(f"**{dt['Project']}**")
             col_mat.caption(f"{dt['Υλικό']} ({dt['Ποσότητα']} τμχ)")
@@ -636,15 +647,18 @@ with tab_tech:
         for w_idx, wt in enumerate(worker_tasks):
             col_c, col_proj, col_mat, col_task, col_qty, col_h, col_proc = st.columns([0.10, 0.20, 0.26, 0.20, 0.08, 0.08, 0.12])
             
-            # Interactive Checkbox για Τεχνίτη
             if wt["type"] == "project":
-                state_chk_key = f"tech_pdone_{wt['p_key']}_{wt['task_name']}"
-                is_done = col_c.checkbox("Done", value=wt["done"], key=state_chk_key)
-                st.session_state["project_tasks_store"][wt['p_key']][wt['task_name']]["done"] = is_done
+                chk_k = f"tech_pdone_{wt['p_key']}_{wt['task_name']}_{w_idx}"
+                is_done = col_c.checkbox(
+                    "Done", value=wt["done"], key=chk_k,
+                    on_change=toggle_project_task, args=(wt['p_key'], wt['task_name'], chk_k)
+                )
             else:
-                state_chk_key = f"tech_idone_{wt['u_key']}_{wt['t_idx']}"
-                is_done = col_c.checkbox("Done", value=wt["done"], key=state_chk_key)
-                st.session_state["tasks_store"][wt['u_key']][wt['t_idx']]["done"] = is_done
+                chk_k = f"tech_idone_{wt['u_key']}_{wt['t_idx']}_{w_idx}"
+                is_done = col_c.checkbox(
+                    "Done", value=wt["done"], key=chk_k,
+                    on_change=toggle_item_task, args=(wt['u_key'], wt['t_idx'], chk_k)
+                )
 
             col_proj.markdown(f"**{wt['project']}**")
             col_mat.write(wt['item'])
