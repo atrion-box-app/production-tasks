@@ -145,7 +145,6 @@ if option == "Dashboard Παραγωγής":
             p_tasks_cnt = 0
             p_done_cnt = 0
             
-            # 1. Item Tasks
             for idx, r in filtered_p.iterrows():
                 item_id = str(r["ID"])
                 u_key = f"{item_id}_{idx}"
@@ -162,7 +161,6 @@ if option == "Dashboard Παραγωγής":
                             p_done_hrs += hrs
                             p_done_cnt += 1
 
-            # 2. Project Tasks
             p_key = f"proj_{p_name}"
             p_tasks_dict = st.session_state["project_tasks_store"].get(p_key, {})
             if isinstance(p_tasks_dict, dict):
@@ -230,7 +228,6 @@ elif option == "Καρτέλα Project":
         task_options = ["- Επιλογή Εργασίας -"] + sorted(list(tasks_database.keys()))
         team_options = ["- Χωρίς Ανάθεση -"] + team_database
 
-        # --- 1. ΕΡΓΑΣΙΕΣ ΑΝΑ ΥΛΙΚΟ (ITEM LEVEL TASKS) ---
         st.subheader(f"📦 Εργασίες ανά Υλικό ({len(filtered_df)} Υλικά)")
 
         for idx, row in filtered_df.iterrows():
@@ -328,7 +325,6 @@ elif option == "Καρτέλα Project":
 
         st.divider()
 
-        # --- 2. ΓΕΝΙΚΕΣ ΕΡΓΑΣΙΕΣ PROJECT (ΣΤΟ ΚΑΤΩ ΜΕΡΟΣ) ---
         st.markdown("### 🛠️ Γενικές Εργασίες Project (Σύνθεση, Συσκευασία & Box)")
         
         proj_key = f"proj_{selected_project}"
@@ -392,7 +388,6 @@ elif option == "Καρτέλα Project":
                 else:
                     c_time.caption("Ανενεργό")
 
-        # --- 3. ΠΡΟΟΔΟΣ PROJECT & ΣΥΝΟΛΙΚΟΙ ΥΠΟΛΟΓΙΣΜΟΙ ---
         st.divider()
         progress_pct = int((completed_tasks_count / total_tasks_count) * 100) if total_tasks_count > 0 else 0
         remaining_hours = round(total_project_hours - completed_project_hours, 1)
@@ -402,8 +397,7 @@ elif option == "Καρτέλα Project":
 
         m1, m2, m3 = st.columns(3)
         m1.metric("Συνολικές Ώρες (Γενικές + Υλικών)", f"{round(total_project_hours, 1)} Ώρες")
-        m1_completed = round(completed_project_hours, 1)
-        m2.metric("Ώρες που Ολοκληρώθηκαν", f"{m1_completed} Ώρες")
+        m2.metric("Ώρες που Ολοκληρώθηκαν", f"{round(completed_project_hours, 1)} Ώρες")
         m3.metric("Υπολειπόμενες Ώρες", f"{remaining_hours} Ώρες", delta=f"-{remaining_hours}h" if remaining_hours > 0 else "Έτοιμο!")
 
 elif option == "Ημερήσιο Πλάνο Παραγωγής":
@@ -618,16 +612,32 @@ elif option == "Ημερήσιο Πρόγραμμα (Ανά Τεχνίτη)":
 elif option == "Εβδομαδιαίο Projection":
     st.header("📆 Εβδομαδιαία Πρόβλεψη Φόρτου Εργασίας (Projection)")
     
+    # 1. ΦΙΛΤΡΟ ΕΒΔΟΜΑΔΩΝ
     start_monday = date.today() - timedelta(days=date.today().weekday())
-    sel_start = st.date_input("Επιλέξτε Δευτέρα Εναρξης:", value=start_monday, format="DD/MM/YYYY")
+    
+    col_w_sel, col_d_sel = st.columns([1, 1])
+    week_choice = col_w_sel.selectbox("Επιλογή Εβδομάδας:", [
+        "Τρέχουσα Εβδομάδα",
+        "Επόμενη Εβδομάδα (+1)",
+        "Μεθεπόμενη Εβδομάδα (+2)",
+        "Προσαρμοσμένη Ημερομηνία"
+    ])
+    
+    if week_choice == "Τρέχουσα Εβδομάδα":
+        sel_start = start_monday
+    elif week_choice == "Επόμενη Εβδομάδα (+1)":
+        sel_start = start_monday + timedelta(days=7)
+    elif week_choice == "Μεθεπόμενη Εβδομάδα (+2)":
+        sel_start = start_monday + timedelta(days=14)
+    else:
+        sel_start = col_d_sel.date_input("Επιλέξτε Δευτέρα Εναρξης:", value=start_monday, format="DD/MM/YYYY")
     
     # 5 Εργάσιμες Ημέρες
     week_days = [sel_start + timedelta(days=i) for i in range(5)]
     
-    st.divider()
-    
-    # Συλλογή όλων των tasks της εβδομάδας
+    # Συλλογή ωρών εβδομάδας
     weekly_matrix = {m: {d.strftime("%a %d/%m"): 0.0 for d in week_days} for m in team_database}
+    daily_totals = {d.strftime("%a %d/%m"): 0.0 for d in week_days}
     
     # 1. Project Level Tasks
     for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
@@ -649,6 +659,7 @@ elif option == "Εβδομαδιαίο Projection":
                         hrs = (auto_time * proj_qty) / 60
                         day_str = t_date.strftime("%a %d/%m")
                         weekly_matrix[t_user][day_str] += hrs
+                        daily_totals[day_str] += hrs
 
     # 2. Item Level Tasks
     if not procurement_df.empty:
@@ -668,8 +679,41 @@ elif option == "Εβδομαδιαίο Projection":
                     hrs = (auto_time * qty) / 60
                     day_str = t_date.strftime("%a %d/%m")
                     weekly_matrix[t_user][day_str] += hrs
+                    daily_totals[day_str] += hrs
 
-    # Μετατροπή σε DataFrame
+    # Υπολογισμός Διαθεσιμότητας Εβδομάδας
+    total_assigned_week = sum(daily_totals.values())
+    total_available_week = 0.0
+    overbooked_days_count = 0
+
+    for d in week_days:
+        g_day = WEEKDAYS_GREEK.get(d.weekday(), "Δευτέρα")
+        day_avail = availability_database.get(g_day, {})
+        day_max = sum(day_avail.get(m, 6.0) for m in team_database)
+        total_available_week += day_max
+        
+        day_str = d.strftime("%a %d/%m")
+        if daily_totals[day_str] > day_max:
+            overbooked_days_count += 1
+
+    load_ratio = int((total_assigned_week / total_available_week) * 100) if total_available_week > 0 else 0
+
+    # 2. ΔΕΙΠΑΤΕΣ ΧΩΡΗΤΙΚΟΤΗΤΑΣ & OVERBOOKING (KPI CARDS)
+    st.divider()
+    kc1, kc2, kc3, kc4 = st.columns(4)
+    kc1.metric("Προγραμματισμένες Ώρες", f"{round(total_assigned_week, 1)}h")
+    kc2.metric("Διαθέσιμες Ώρες Ομάδας", f"{round(total_available_week, 1)}h")
+    
+    if overbooked_days_count > 0:
+        kc3.metric("Overbooked Ημέρες", f"⚠️ {overbooked_days_count} / 5", delta_color="inverse")
+    else:
+        kc3.metric("Overbooked Ημέρες", "🟢 0 / 5")
+        
+    kc4.metric("Πληρότητα Εβδομάδας", f"{load_ratio}%", delta=f"{load_ratio - 100}%" if load_ratio > 100 else "Εντός Ορίων")
+
+    st.divider()
+
+    # 3. ΠΙΝΑΚΑΣ ΩΡΩΝ
     proj_df = pd.DataFrame(weekly_matrix).T
     proj_df = proj_df.round(1)
     proj_df["Σύνολο Εβδομάδας (h)"] = proj_df.sum(axis=1)
