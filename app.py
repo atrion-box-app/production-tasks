@@ -1,12 +1,14 @@
 import streamlit as st
 import pandas as pd
-from datetime import date, timedelta
+import gspread
+from google.oauth2.service_account import Credentials
+from datetime import date, datetime, timedelta
 
 st.set_page_config(page_title="Production Tasks App", layout="wide")
 
 st.title("🏭 Σύστημα Διαχείρισης Παραγωγής & Tasks")
 
-# Google Sheet URLs
+# Google Sheet URLs & IDs
 PROC_SHEET_ID = "1QhTd58vuulaC_73sgbjuwG5MVxT6c1c_-MbhypGx0fA"
 PROC_GID = "1639392743"
 PROC_CSV_URL = f"https://docs.google.com/spreadsheets/d/{PROC_SHEET_ID}/export?format=csv&gid={PROC_GID}"
@@ -19,28 +21,105 @@ TIMES_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?fo
 TEAM_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TEAM_GID}"
 
 WEEKDAYS_GREEK = {
-    0: "Δευτέρα",
-    1: "Τρίτη",
-    2: "Τετάρτη",
-    3: "Πέμπτη",
-    4: "Παρασκευή",
-    5: "Σάββατο",
-    6: "Κυριακή"
+    0: "Δευτέρα", 1: "Τρίτη", 2: "Τετάρτη", 3: "Πέμπτη", 4: "Παρασκευή", 5: "Σάββατο", 6: "Κυριακή"
+}
+WEEKDAYS_SHORT_GREEK = {
+    0: "Δευ", 1: "Τρι", 2: "Τετ", 3: "Πεμ", 4: "Παρ", 5: "Σαβ", 6: "Κυρ"
 }
 
-WEEKDAYS_SHORT_GREEK = {
-    0: "Δευ",
-    1: "Τρι",
-    2: "Τετ",
-    3: "Πεμ",
-    4: "Παρ",
-    5: "Σαβ",
-    6: "Κυρ"
-}
+# --- Google Sheets API Connection ---
+@st.cache_resource
+def get_gspread_client():
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        credentials = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"], scopes=scope
+        )
+        client = gspread.authorize(credentials)
+        return client
+    except Exception as e:
+        return None
+
+gc = get_gspread_client()
+
+# --- Φόρτωση / Αποθήκευση Αναθέσεων από το Google Sheet (Assignments) ---
+def load_assignments_from_sheet():
+    assignments_item = {}
+    assignments_proj = {}
+    if gc:
+        try:
+            sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
+            records = sheet.get_all_records()
+            for r in records:
+                p_name = str(r.get("Project", ""))
+                item_id = str(r.get("Item_ID", ""))
+                task_name = str(r.get("Task_Name", ""))
+                user = str(r.get("Assigned_User", "- Χωρίς Ανάθεση -"))
+                assign_date_str = str(r.get("Assigned_Date", ""))
+                done = True if str(r.get("Status_Done", "")).upper() in ["TRUE", "1", "YES"] else False
+                task_type = str(r.get("Task_Type", ""))
+
+                try:
+                    assign_date = datetime.strptime(assign_date_str, "%Y-%m-%d").date()
+                except Exception:
+                    assign_date = date.today()
+
+                if task_type == "PROJECT":
+                    p_key = f"proj_{p_name}"
+                    if p_key not in assignments_proj:
+                        assignments_proj[p_key] = {}
+                    assignments_proj[p_key][task_name] = {
+                        "active": True,
+                        "done": done,
+                        "user": user,
+                        "date": assign_date
+                    }
+                else:
+                    if item_id not in assignments_item:
+                        assignments_item[item_id] = []
+                    assignments_item[item_id].append({
+                        "done": done,
+                        "task": task_name,
+                        "user": user,
+                        "date": assign_date
+                    })
+        except Exception:
+            pass
+    return assignments_item, assignments_proj
+
+def save_all_assignments_to_sheet():
+    if not gc:
+        return
+    try:
+        sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
+        rows = [["Project", "Item_ID", "Task_Name", "Assigned_User", "Assigned_Date", "Status_Done", "Task_Type"]]
+
+        # 1. Item Level Tasks
+        for u_key, t_list in st.session_state["tasks_store"].items():
+            item_id = u_key.split("_")[0]
+            for t in t_list:
+                if t.get("task") and t.get("task") != "- Επιλογή Εργασίας -":
+                    rows.append([
+                        "-", item_id, t.get("task"), t.get("user"), str(t.get("date")), str(t.get("done")), "ITEM"
+                    ])
+
+        # 2. Project Level Tasks
+        for p_key, p_dict in st.session_state["project_tasks_store"].items():
+            proj_name = p_key.replace("proj_", "")
+            if isinstance(p_dict, dict):
+                for t_name, p_data in p_dict.items():
+                    if isinstance(p_data, dict) and p_data.get("active", False):
+                        rows.append([
+                            proj_name, "-", t_name, p_data.get("user"), str(p_data.get("date")), str(p_data.get("done")), "PROJECT"
+                        ])
+
+        sheet.clear()
+        sheet.update("A1", rows)
+    except Exception as e:
+        st.error(f"Σφάλμα κατά την αποθήκευση στο Google Sheet: {e}")
 
 @st.cache_data(ttl=10)
 def load_all_data():
-    # 1. Φόρτωση Procurement
     try:
         df_proc_raw = pd.read_csv(PROC_CSV_URL, header=None)
         indices = [18, 3, 17, 1, 2, 5, 6, 4, 10, 12]
@@ -54,7 +133,6 @@ def load_all_data():
     except Exception:
         df_proc = pd.DataFrame()
 
-    # 2. Φόρτωση Πρότυπων Χρόνων
     tasks_dict = {}
     try:
         df_times_raw = pd.read_csv(TIMES_CSV_URL, header=None)
@@ -73,17 +151,14 @@ def load_all_data():
     except Exception:
         tasks_dict = {"Έλεγχος (εύκολο)": 1.0, "Συναρμολόγηση": 2.0, "Συσκευασία": 1.5}
 
-    # 3. Φόρτωση Ομάδας & Διαθεσιμότητας
     team_members = ["Βαγγέλης Μ.", "Βαγγέλης JR.", "Εποχικός 1", "Εποχικός 2", "Ana", "Alex"]
     availability_dict = {day: {m: 6.0 for m in team_members} for day in WEEKDAYS_GREEK.values()}
 
     try:
         df_team_raw = pd.read_csv(TEAM_CSV_URL)
         df_team_raw.columns = [str(c).strip() for c in df_team_raw.columns]
-        
         ignore_cols = ["Ημέρα", "Σύνολο διαθέσιμων ωρών", "Unnamed: 0"]
         found_members = [c for c in df_team_raw.columns if c and c not in ignore_cols and "Unnamed" not in c]
-        
         if found_members:
             team_members = found_members
             
@@ -106,12 +181,20 @@ def load_all_data():
 
 procurement_df, tasks_database, team_database, availability_database = load_all_data()
 
-# Κεντρική Αποθήκη Δεδομένων στη Μνήμη (Session State)
+# Αρχικοποίηση Session State από το Google Sheet
+sheet_item_assignments, sheet_proj_assignments = load_assignments_from_sheet()
+
 if "tasks_store" not in st.session_state:
     st.session_state["tasks_store"] = {}
+    if procurement_df is not None and not procurement_df.empty:
+        for idx, row in procurement_df.iterrows():
+            item_id = str(row["ID"])
+            u_key = f"{item_id}_{idx}"
+            if item_id in sheet_item_assignments:
+                st.session_state["tasks_store"][u_key] = sheet_item_assignments[item_id]
 
 if "project_tasks_store" not in st.session_state:
-    st.session_state["project_tasks_store"] = {}
+    st.session_state["project_tasks_store"] = sheet_proj_assignments
 
 FIXED_PROJECT_TASKS = [
     "Σύνθεση (κουτί)",
@@ -121,12 +204,14 @@ FIXED_PROJECT_TASKS = [
     "Τοποθέτηση σε χαρτοκιβώτια"
 ]
 
-# --- CALLBACK FUNCTIONS ΓΙΑ ΑΜΕΣΗ ΕΝΗΜΕΡΩΣΗ ---
+# --- CALLBACK FUNCTIONS ΓΙΑ ΑΜΕΣΗ ΕΝΗΜΕΡΩΣΗ & ΑΠΟΘΗΚΕΥΣΗ ---
 def toggle_project_task(p_key, task_name, chk_key):
     st.session_state["project_tasks_store"][p_key][task_name]["done"] = st.session_state[chk_key]
+    save_all_assignments_to_sheet()
 
 def toggle_item_task(u_key, t_idx, chk_key):
     st.session_state["tasks_store"][u_key][t_idx]["done"] = st.session_state[chk_key]
+    save_all_assignments_to_sheet()
 
 # --- 📌 TABS ΣΤΟ ΠΑΝΩ ΜΕΡΟΣ ΤΗΣ ΣΕΛΙΔΑΣ ---
 tab_dash, tab_proj, col_plan, tab_tech, tab_projec, tab_rep, tab_data = st.tabs([
@@ -331,6 +416,7 @@ with tab_proj:
                         
                         if c_del.button("🗑️", key=f"del_{unique_item_key}_{t_idx}"):
                             st.session_state["tasks_store"][unique_item_key].pop(t_idx)
+                            save_all_assignments_to_sheet()
                             st.rerun()
 
                     col_btn1, col_btn2, _ = st.columns([0.35, 0.35, 0.3])
@@ -338,11 +424,13 @@ with tab_proj:
                         st.session_state["tasks_store"][unique_item_key].append(
                             {"done": False, "task": "- Επιλογή Εργασίας -", "user": "- Χωρίς Ανάθεση -", "date": date.today()}
                         )
+                        save_all_assignments_to_sheet()
                         st.rerun()
                     
                     if len(item_tasks) > 0:
                         if col_btn2.button("➖ Αφαίρεση Εργασίας", key=f"rem_btn_{unique_item_key}"):
                             st.session_state["tasks_store"][unique_item_key].pop()
+                            save_all_assignments_to_sheet()
                             st.rerun()
 
         st.divider()
@@ -422,6 +510,10 @@ with tab_proj:
         m1.metric("Συνολικές Ώρες (Γενικές + Υλικών)", f"{round(total_project_hours, 1)} Ώρες")
         m2.metric("Ώρες που Ολοκληρώθηκαν", f"{round(completed_project_hours, 1)} Ώρες")
         m3.metric("Υπολειπόμενες Ώρες", f"{remaining_hours} Ώρες", delta=f"-{remaining_hours}h" if remaining_hours > 0 else "Έτοιμο!")
+
+        if st.button("💾 Αποθήκευση Αλλαγών στο Google Sheet", use_container_width=True):
+            save_all_assignments_to_sheet()
+            st.success("✅ Όλες οι αναθέσεις αποθηκεύτηκαν επιτυχώς στο Google Sheet!")
 
 # --- 3. ΗΜΕΡΗΣΙΟ ΠΛΑΝΟ (INTERACTIVE) ---
 with col_plan:
