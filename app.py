@@ -63,6 +63,10 @@ def load_all_data():
 
 procurement_df, tasks_database, team_database = load_all_data()
 
+# Κεντρική Αποθήκη Δεδομένων στη Μνήμη (Session State)
+if "tasks_store" not in st.session_state:
+    st.session_state["tasks_store"] = {}
+
 option = st.sidebar.selectbox("Επιλογή Οθόνης", ["Καρτέλα Project", "Ημερήσιο Πλάνο Παραγωγής", "Πρότυπα Χρόνων & Ομάδα"])
 
 if option == "Καρτέλα Project":
@@ -84,17 +88,21 @@ if option == "Καρτέλα Project":
     team_options = ["- Χωρίς Ανάθεση -"] + team_database
 
     for idx, row in filtered_df.iterrows():
-        item_id = row["ID"]
+        item_id = str(row["ID"])
         material = row["Υλικό / Προϊόν"]
         qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
         status = row["Status Procurement"]
         
+        # Αρχικοποίηση λίστας tasks για το υλικό αν δεν υπάρχει
+        if item_id not in st.session_state["tasks_store"]:
+            st.session_state["tasks_store"][item_id] = [
+                {"done": False, "task": "- Επιλογή Εργασίας -", "user": "- Χωρίς Ανάθεση -", "date": date.today()}
+            ]
+        
+        item_tasks = st.session_state["tasks_store"][item_id]
+
         card_title = f"🆔 {item_id} | {material} — (Ποσότητα: {qty} τμχ) | Status: {status}"
         
-        state_key = f"num_tasks_{item_id}"
-        if state_key not in st.session_state:
-            st.session_state[state_key] = 1
-
         with st.expander(card_title):
             col_info, col_tasks = st.columns([1, 2.5])
             
@@ -109,49 +117,41 @@ if option == "Καρτέλα Project":
             with col_tasks:
                 st.markdown("**⚙️ Λίστα Εργασιών Παραγωγής**")
                 
-                if st.session_state[state_key] == 0:
+                if len(item_tasks) == 0:
                     st.info("Δεν έχουν οριστεί εργασίες παραγωγής για αυτό το υλικό.")
 
-                for t_idx in range(st.session_state[state_key]):
+                for t_idx, t_data in enumerate(list(item_tasks)):
                     c_check, c_task, c_user, c_date, c_time, c_del = st.columns([0.08, 0.32, 0.23, 0.18, 0.11, 0.08])
                     
-                    # Keys για το Session State
-                    key_chk = f"chk_{item_id}_{t_idx}"
-                    key_task = f"task_{item_id}_{t_idx}"
-                    key_user = f"user_{item_id}_{t_idx}"
-                    key_date = f"date_{item_id}_{t_idx}"
-
-                    # Αρχικοποίηση αν δεν υπάρχουν
-                    if key_chk not in st.session_state: st.session_state[key_chk] = False
-                    if key_task not in st.session_state: st.session_state[key_task] = "- Επιλογή Εργασίας -"
-                    if key_user not in st.session_state: st.session_state[key_user] = "- Χωρίς Ανάθεση -"
-                    if key_date not in st.session_state: st.session_state[key_date] = date.today()
-
-                    # Widgets συνδεδεμένα ρητά με το state
-                    is_done = c_check.checkbox("", value=st.session_state[key_chk], key=key_chk)
+                    # Update state callbacks / direct value assignments
+                    is_done = c_check.checkbox("", value=t_data["done"], key=f"chk_{item_id}_{t_idx}")
                     
+                    task_idx = task_options.index(t_data["task"]) if t_data["task"] in task_options else 0
                     selected_task = c_task.selectbox(
-                        "Εργασία", task_options, 
-                        index=task_options.index(st.session_state[key_task]) if st.session_state[key_task] in task_options else 0,
-                        key=key_task, 
-                        label_visibility="collapsed"
+                        "Εργασία", task_options, index=task_idx, 
+                        key=f"task_{item_id}_{t_idx}", label_visibility="collapsed"
                     )
                     
-                    auto_time = tasks_database.get(selected_task, 0.0)
-                    
+                    user_idx = team_options.index(t_data["user"]) if t_data["user"] in team_options else 0
                     assigned_user = c_user.selectbox(
-                        "Ανάθεση", team_options, 
-                        index=team_options.index(st.session_state[key_user]) if st.session_state[key_user] in team_options else 0,
-                        key=key_user, 
-                        label_visibility="collapsed"
+                        "Ανάθεση", team_options, index=user_idx, 
+                        key=f"user_{item_id}_{t_idx}", label_visibility="collapsed"
                     )
                     
                     assign_date = c_date.date_input(
-                        "Ημερομηνία", value=st.session_state[key_date], 
-                        format="DD/MM/YYYY",
-                        key=key_date, 
-                        label_visibility="collapsed"
+                        "Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", 
+                        key=f"date_{item_id}_{t_idx}", label_visibility="collapsed"
                     )
+
+                    # Ενημέρωση της κεντρικής αποθήκης
+                    st.session_state["tasks_store"][item_id][t_idx] = {
+                        "done": is_done,
+                        "task": selected_task,
+                        "user": assigned_user,
+                        "date": assign_date
+                    }
+                    
+                    auto_time = tasks_database.get(selected_task, 0.0)
                     
                     if selected_task != "- Επιλογή Εργασίας -":
                         task_hours = (auto_time * qty) / 60
@@ -167,18 +167,22 @@ if option == "Καρτέλα Project":
                     else:
                         c_time.caption("0.0λ")
                     
+                    # Διαγραφή
                     if c_del.button("🗑️", key=f"del_{item_id}_{t_idx}"):
-                        st.session_state[state_key] -= 1
+                        st.session_state["tasks_store"][item_id].pop(t_idx)
                         st.rerun()
 
+                # Κουμπιά Προσθήκης / Αφαίρεσης Εργασίας
                 col_btn1, col_btn2, col_empty = st.columns([0.35, 0.35, 0.3])
                 if col_btn1.button("➕ Προσθήκη Εργασίας", key=f"add_btn_{item_id}"):
-                    st.session_state[state_key] += 1
+                    st.session_state["tasks_store"][item_id].append(
+                        {"done": False, "task": "- Επιλογή Εργασίας -", "user": "- Χωρίς Ανάθεση -", "date": date.today()}
+                    )
                     st.rerun()
                 
-                if st.session_state[state_key] > 0:
+                if len(item_tasks) > 0:
                     if col_btn2.button("➖ Αφαίρεση Εργασίας", key=f"rem_btn_{item_id}"):
-                        st.session_state[state_key] -= 1
+                        st.session_state["tasks_store"][item_id].pop()
                         st.rerun()
 
     st.divider()
@@ -202,19 +206,18 @@ elif option == "Ημερήσιο Πλάνο Παραγωγής":
     daily_tasks = []
     
     for idx, row in procurement_df.iterrows():
-        item_id = row["ID"]
+        item_id = str(row["ID"])
         project_name = row["Project"]
         material = row["Υλικό / Προϊόν"]
         qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
         
-        state_key = f"num_tasks_{item_id}"
-        num_tasks = st.session_state.get(state_key, 1)
+        item_tasks = st.session_state["tasks_store"].get(item_id, [])
         
-        for t_idx in range(num_tasks):
-            t_task = st.session_state.get(f"task_{item_id}_{t_idx}", "- Επιλογή Εργασίας -")
-            t_user = st.session_state.get(f"user_{item_id}_{t_idx}", "- Χωρίς Ανάθεση -")
-            t_date = st.session_state.get(f"date_{item_id}_{t_idx}", date.today())
-            t_done = st.session_state.get(f"chk_{item_id}_{t_idx}", False)
+        for t_data in item_tasks:
+            t_task = t_data["task"]
+            t_user = t_data["user"]
+            t_date = t_data["date"]
+            t_done = t_data["done"]
             
             if t_task != "- Επιλογή Εργασίας -" and t_date == target_date:
                 auto_time = tasks_database.get(t_task, 0.0)
