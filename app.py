@@ -63,7 +63,6 @@ def load_all_data():
 
 procurement_df, tasks_database, team_database = load_all_data()
 
-# Επιλογή Οθόνης στο Sidebar
 option = st.sidebar.selectbox("Επιλογή Οθόνης", ["Καρτέλα Project", "Ημερήσιο Πλάνο Παραγωγής", "Πρότυπα Χρόνων & Ομάδα"])
 
 if option == "Καρτέλα Project":
@@ -116,11 +115,25 @@ if option == "Καρτέλα Project":
                 for t_idx in range(st.session_state[state_key]):
                     c_check, c_task, c_user, c_date, c_time, c_del = st.columns([0.08, 0.32, 0.23, 0.18, 0.11, 0.08])
                     
-                    is_done = c_check.checkbox("", key=f"chk_{item_id}_{t_idx}")
+                    # Keys για το Session State
+                    key_chk = f"chk_{item_id}_{t_idx}"
+                    key_task = f"task_{item_id}_{t_idx}"
+                    key_user = f"user_{item_id}_{t_idx}"
+                    key_date = f"date_{item_id}_{t_idx}"
+
+                    # Αρχικοποίηση αν δεν υπάρχουν
+                    if key_chk not in st.session_state: st.session_state[key_chk] = False
+                    if key_task not in st.session_state: st.session_state[key_task] = "- Επιλογή Εργασίας -"
+                    if key_user not in st.session_state: st.session_state[key_user] = "- Χωρίς Ανάθεση -"
+                    if key_date not in st.session_state: st.session_state[key_date] = date.today()
+
+                    # Widgets συνδεδεμένα ρητά με το state
+                    is_done = c_check.checkbox("", value=st.session_state[key_chk], key=key_chk)
                     
                     selected_task = c_task.selectbox(
                         "Εργασία", task_options, 
-                        key=f"task_{item_id}_{t_idx}", 
+                        index=task_options.index(st.session_state[key_task]) if st.session_state[key_task] in task_options else 0,
+                        key=key_task, 
                         label_visibility="collapsed"
                     )
                     
@@ -128,14 +141,15 @@ if option == "Καρτέλα Project":
                     
                     assigned_user = c_user.selectbox(
                         "Ανάθεση", team_options, 
-                        key=f"user_{item_id}_{t_idx}", 
+                        index=team_options.index(st.session_state[key_user]) if st.session_state[key_user] in team_options else 0,
+                        key=key_user, 
                         label_visibility="collapsed"
                     )
                     
                     assign_date = c_date.date_input(
-                        "Ημερομηνία", value=date.today(), 
+                        "Ημερομηνία", value=st.session_state[key_date], 
                         format="DD/MM/YYYY",
-                        key=f"date_{item_id}_{t_idx}", 
+                        key=key_date, 
                         label_visibility="collapsed"
                     )
                     
@@ -185,7 +199,6 @@ elif option == "Ημερήσιο Πλάνο Παραγωγής":
     target_date = st.date_input("Επιλέξτε Ημερομηνία Πλάνου:", value=date.today(), format="DD/MM/YYYY")
     st.divider()
 
-    # Συλλογή όλων των tasks από όλα τα projects για τη συγκεκριμένη ημερομηνία
     daily_tasks = []
     
     for idx, row in procurement_df.iterrows():
@@ -223,7 +236,6 @@ elif option == "Ημερήσιο Πλάνο Παραγωγής":
         
         st.subheader(f"📌 Εργασίες για τις {target_date.strftime('%d/%m/%Y')} ({len(daily_df)} Tasks)")
         
-        # Προβολή ανά Τεχνίτη
         st.markdown("#### 👥 Φόρτος Εργασίας ανά Τεχνίτη")
         team_summary = daily_df.groupby("Υπεύθυνος")["Ώρες"].sum().reset_index()
         
