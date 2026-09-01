@@ -658,7 +658,6 @@ elif option == "Εβδομαδιαίο Projection":
     
     days_per_week = 7 if include_weekends else 5
     
-    # Δημιουργία δομής ημερών ανά εβδομάδα
     weeks_days_list = []
     all_flat_days = []
     
@@ -668,7 +667,6 @@ elif option == "Εβδομαδιαίο Projection":
         weeks_days_list.append((w+1, w_monday, w_days))
         all_flat_days.extend(w_days)
 
-    # Υπολογισμοί για τα KPI Metrics συνολικά
     total_assigned_range = 0.0
     total_available_range = 0.0
     overbooked_days_count = 0
@@ -679,8 +677,6 @@ elif option == "Εβδομαδιαίο Projection":
         day_max = sum(day_avail.get(m, 6.0) for m in team_database)
         total_available_range += day_max
 
-    # Υπολογισμός ωρών ανά εργαζόμενο και ανά ημέρα
-    # Matrix: {w_idx: {m: {day_col_title: hours}}}
     weeks_matrices = []
     
     for w_num, w_monday, w_days in weeks_days_list:
@@ -758,14 +754,19 @@ elif option == "Εβδομαδιαίο Projection":
 
     st.divider()
 
-    # Προβολή Πινάκων — Ο ένας κάτω από τον άλλο
+    # Προβολή Πινάκων με Γραμμή Αθροίσματος ανά Στήλη
     for w_num, w_monday, w_days, w_matrix in weeks_matrices:
         w_sunday = w_days[-1]
         st.subheader(f"📅 Εβδομάδα {w_num}: {w_monday.strftime('%d/%m/%Y')} έως {w_sunday.strftime('%d/%m/%Y')}")
         
         proj_df = pd.DataFrame(w_matrix).T
         proj_df = proj_df.round(1)
-        proj_df["Σύνολο Εβδομάδας (h)"] = proj_df.sum(axis=1)
+        proj_df["Σύνολο (h)"] = proj_df.sum(axis=1)
+
+        # Προσθήκη Γραμμής Αθροίσματος Στηλών
+        total_row = proj_df.sum(axis=0).round(1)
+        total_row.name = "Σύνολο Ημέρας (h)"
+        proj_df = pd.concat([proj_df, pd.DataFrame(total_row).T])
 
         st.dataframe(proj_df, use_container_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
