@@ -28,6 +28,16 @@ WEEKDAYS_GREEK = {
     6: "Κυριακή"
 }
 
+WEEKDAYS_SHORT_GREEK = {
+    0: "Δευ",
+    1: "Τρι",
+    2: "Τετ",
+    3: "Πεμ",
+    4: "Παρ",
+    5: "Σαβ",
+    6: "Κυρ"
+}
+
 @st.cache_data(ttl=10)
 def load_all_data():
     # 1. Φόρτωση Procurement
@@ -629,7 +639,6 @@ elif option == "Εβδομαδιαίο Projection":
         "4 Εβδομάδες / Μήνας"
     ])
     
-    # Checkbox για Συμπερίληψη Σαββατοκύριακων
     include_weekends = col_weekend.checkbox("📅 Συμπερίληψη Σαββατοκύριακων (ΣΚ)", value=False)
     
     num_weeks = 1
@@ -647,73 +656,91 @@ elif option == "Εβδομαδιαίο Projection":
     else:
         sel_start = st.date_input("Επιλέξτε Δευτέρα Εναρξης:", value=start_monday, format="DD/MM/YYYY")
     
-    # Υπολογισμός Ημερών (5 εργάσιμες ή 7 πλήρεις ημέρες ανά εβδομάδα)
     days_per_week = 7 if include_weekends else 5
     
-    week_days = []
+    # Δημιουργία δομής ημερών ανά εβδομάδα
+    weeks_days_list = []
+    all_flat_days = []
+    
     for w in range(num_weeks):
         w_monday = sel_start + timedelta(days=w*7)
-        for i in range(days_per_week):
-            week_days.append(w_monday + timedelta(days=i))
-    
-    weekly_matrix = {m: {d.strftime("%d/%m"): 0.0 for d in week_days} for m in team_database}
-    daily_totals = {d.strftime("%d/%m"): 0.0 for d in week_days}
-    
-    # 1. Project Level Tasks
-    for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
-        if isinstance(p_tasks_dict, dict):
-            proj_name = p_key.replace("proj_", "")
-            proj_qty = 1
-            if not procurement_df.empty:
-                p_items = procurement_df[procurement_df["Project"] == proj_name]
-                for _, r in p_items.iterrows():
-                    if str(r["Ποσότητα"]).isdigit():
-                        proj_qty = max(proj_qty, int(r["Ποσότητα"]))
+        w_days = [w_monday + timedelta(days=i) for i in range(days_per_week)]
+        weeks_days_list.append((w+1, w_monday, w_days))
+        all_flat_days.extend(w_days)
 
-            for task_name, p_data in p_tasks_dict.items():
-                if isinstance(p_data, dict) and p_data.get("active", False):
-                    t_date = p_data.get("date")
-                    t_user = p_data.get("user")
-                    if t_user in weekly_matrix and t_date in week_days:
-                        auto_time = tasks_database.get(task_name, 0.0)
-                        hrs = (auto_time * proj_qty) / 60
-                        day_str = t_date.strftime("%d/%m")
-                        weekly_matrix[t_user][day_str] += hrs
-                        daily_totals[day_str] += hrs
-
-    # 2. Item Level Tasks
-    if not procurement_df.empty:
-        for idx, row in procurement_df.iterrows():
-            item_id = str(row["ID"])
-            unique_item_key = f"{item_id}_{idx}"
-            qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
-            
-            item_tasks = st.session_state["tasks_store"].get(unique_item_key, [])
-            for t_data in item_tasks:
-                t_task = t_data.get("task")
-                t_user = t_data.get("user")
-                t_date = t_data.get("date")
-                
-                if t_task != "- Επιλογή Εργασίας -" and t_user in weekly_matrix and t_date in week_days:
-                    auto_time = tasks_database.get(t_task, 0.0)
-                    hrs = (auto_time * qty) / 60
-                    day_str = t_date.strftime("%d/%m")
-                    weekly_matrix[t_user][day_str] += hrs
-                    daily_totals[day_str] += hrs
-
-    total_assigned_range = sum(daily_totals.values())
+    # Υπολογισμοί για τα KPI Metrics συνολικά
+    total_assigned_range = 0.0
     total_available_range = 0.0
     overbooked_days_count = 0
 
-    for d in week_days:
+    for d in all_flat_days:
         g_day = WEEKDAYS_GREEK.get(d.weekday(), "Δευτέρα")
         day_avail = availability_database.get(g_day, {})
         day_max = sum(day_avail.get(m, 6.0) for m in team_database)
         total_available_range += day_max
+
+    # Υπολογισμός ωρών ανά εργαζόμενο και ανά ημέρα
+    # Matrix: {w_idx: {m: {day_col_title: hours}}}
+    weeks_matrices = []
+    
+    for w_num, w_monday, w_days in weeks_days_list:
+        w_matrix = {m: {f"{WEEKDAYS_SHORT_GREEK[d.weekday()]} {d.strftime('%d/%m')}": 0.0 for d in w_days} for m in team_database}
+        d_totals = {f"{WEEKDAYS_SHORT_GREEK[d.weekday()]} {d.strftime('%d/%m')}": 0.0 for d in w_days}
         
-        day_str = d.strftime("%d/%m")
-        if daily_totals[day_str] > day_max:
-            overbooked_days_count += 1
+        # 1. Project Level Tasks
+        for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
+            if isinstance(p_tasks_dict, dict):
+                proj_name = p_key.replace("proj_", "")
+                proj_qty = 1
+                if not procurement_df.empty:
+                    p_items = procurement_df[procurement_df["Project"] == proj_name]
+                    for _, r in p_items.iterrows():
+                        if str(r["Ποσότητα"]).isdigit():
+                            proj_qty = max(proj_qty, int(r["Ποσότητα"]))
+
+                for task_name, p_data in p_tasks_dict.items():
+                    if isinstance(p_data, dict) and p_data.get("active", False):
+                        t_date = p_data.get("date")
+                        t_user = p_data.get("user")
+                        if t_user in w_matrix and t_date in w_days:
+                            auto_time = tasks_database.get(task_name, 0.0)
+                            hrs = (auto_time * proj_qty) / 60
+                            col_str = f"{WEEKDAYS_SHORT_GREEK[t_date.weekday()]} {t_date.strftime('%d/%m')}"
+                            w_matrix[t_user][col_str] += hrs
+                            d_totals[col_str] += hrs
+
+        # 2. Item Level Tasks
+        if not procurement_df.empty:
+            for idx, row in procurement_df.iterrows():
+                item_id = str(row["ID"])
+                unique_item_key = f"{item_id}_{idx}"
+                qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+                
+                item_tasks = st.session_state["tasks_store"].get(unique_item_key, [])
+                for t_data in item_tasks:
+                    t_task = t_data.get("task")
+                    t_user = t_data.get("user")
+                    t_date = t_data.get("date")
+                    
+                    if t_task != "- Επιλογή Εργασίας -" and t_user in w_matrix and t_date in w_days:
+                        auto_time = tasks_database.get(t_task, 0.0)
+                        hrs = (auto_time * qty) / 60
+                        col_str = f"{WEEKDAYS_SHORT_GREEK[t_date.weekday()]} {t_date.strftime('%d/%m')}"
+                        w_matrix[t_user][col_str] += hrs
+                        d_totals[col_str] += hrs
+
+        w_assigned_tot = sum(d_totals.values())
+        total_assigned_range += w_assigned_tot
+        
+        for d in w_days:
+            col_str = f"{WEEKDAYS_SHORT_GREEK[d.weekday()]} {d.strftime('%d/%m')}"
+            g_day = WEEKDAYS_GREEK.get(d.weekday(), "Δευτέρα")
+            day_avail = availability_database.get(g_day, {})
+            day_max = sum(day_avail.get(m, 6.0) for m in team_database)
+            if d_totals[col_str] > day_max:
+                overbooked_days_count += 1
+                
+        weeks_matrices.append((w_num, w_monday, w_days, w_matrix))
 
     load_ratio = int((total_assigned_range / total_available_range) * 100) if total_available_range > 0 else 0
 
@@ -723,20 +750,25 @@ elif option == "Εβδομαδιαίο Projection":
     kc2.metric(f"Διαθέσιμες Ώρες ({num_weeks} εβδ.)", f"{round(total_available_range, 1)}h")
     
     if overbooked_days_count > 0:
-        kc3.metric("Overbooked Ημέρες", f"⚠️ {overbooked_days_count} / {len(week_days)}", delta_color="inverse")
+        kc3.metric("Overbooked Ημέρες", f"⚠️ {overbooked_days_count} / {len(all_flat_days)}", delta_color="inverse")
     else:
-        kc3.metric("Overbooked Ημέρες", f"🟢 0 / {len(week_days)}")
+        kc3.metric("Overbooked Ημέρες", f"🟢 0 / {len(all_flat_days)}")
         
     kc4.metric("Πληρότητα Περιόδου", f"{load_ratio}%", delta=f"{load_ratio - 100}%" if load_ratio > 100 else "Εντός Ορίων")
 
     st.divider()
 
-    proj_df = pd.DataFrame(weekly_matrix).T
-    proj_df = proj_df.round(1)
-    proj_df["Σύνολο Περιόδου (h)"] = proj_df.sum(axis=1)
+    # Προβολή Πινάκων — Ο ένας κάτω από τον άλλο
+    for w_num, w_monday, w_days, w_matrix in weeks_matrices:
+        w_sunday = w_days[-1]
+        st.subheader(f"📅 Εβδομάδα {w_num}: {w_monday.strftime('%d/%m/%Y')} έως {w_sunday.strftime('%d/%m/%Y')}")
+        
+        proj_df = pd.DataFrame(w_matrix).T
+        proj_df = proj_df.round(1)
+        proj_df["Σύνολο Εβδομάδας (h)"] = proj_df.sum(axis=1)
 
-    st.subheader(f"📊 Πίνακας Ωρών ανά Εργαζόμενο ({num_weeks} Εβδομάδες — {len(week_days)} Ημέρες)")
-    st.dataframe(proj_df, use_container_width=True)
+        st.dataframe(proj_df, use_container_width=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
 elif option == "Πρότυπα Χρόνων & Ομάδα":
     st.header("📊 Βάση Δεδομένων Χρόνων & Ομάδας")
