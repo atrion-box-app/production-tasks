@@ -111,7 +111,12 @@ FIXED_PROJECT_TASKS = [
     "Τοποθέτηση σε χαρτοκιβώτια"
 ]
 
-option = st.sidebar.selectbox("Επιλογή Οθόνης", ["Καρτέλα Project", "Ημερήσιο Πλάνο Παραγωγής", "Πρότυπα Χρόνων & Ομάδα"])
+option = st.sidebar.selectbox("Επιλογή Οθόνης", [
+    "Καρτέλα Project", 
+    "Ημερήσιο Πλάνο Παραγωγής", 
+    "Ημερήσιο Πρόγραμμα (Ανά Τεχνίτη)", 
+    "Πρότυπα Χρόνων & Ομάδα"
+])
 
 if option == "Καρτέλα Project":
     st.header("📋 Διαχείριση Παραγωγής & Αναθέσεις ανά Project")
@@ -423,6 +428,101 @@ elif option == "Ημερήσιο Πλάνο Παραγωγής":
         st.dataframe(daily_df, use_container_width=True, hide_index=True, column_config=column_config)
     else:
         st.info(f"Δεν έχουν προγραμματιστεί εργασίες για τις {target_date.strftime('%d/%m/%Y')}.")
+
+elif option == "Ημερήσιο Πρόγραμμα (Ανά Τεχνίτη)":
+    st.header("👤 Ημερήσιο Πρόγραμμα Εργασιών ανά Τεχνίτη")
+    
+    c_date, c_user = st.columns([1, 1])
+    target_date = c_date.date_input("Ημερομηνία:", value=date.today(), format="DD/MM/YYYY")
+    selected_member = c_user.selectbox("Επιλέξτε Τεχνίτη / Εργαζόμενο:", team_database)
+    
+    st.divider()
+
+    worker_tasks = []
+
+    # 1. Γενικά Project Tasks
+    for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
+        if isinstance(p_tasks_dict, dict):
+            proj_name = p_key.replace("proj_", "")
+            
+            proj_qty = 1
+            if not procurement_df.empty:
+                p_items = procurement_df[procurement_df["Project"] == proj_name]
+                for _, r in p_items.iterrows():
+                    if str(r["Ποσότητα"]).isdigit():
+                        proj_qty = max(proj_qty, int(r["Ποσότητα"]))
+
+            for task_name, p_data in p_tasks_dict.items():
+                if isinstance(p_data, dict) and p_data.get("active", False):
+                    if p_data.get("user") == selected_member and p_data.get("date") == target_date:
+                        auto_time = tasks_database.get(task_name, 0.0)
+                        hours = (auto_time * proj_qty) / 60
+                        worker_tasks.append({
+                            "type": "project",
+                            "key": f"p_{p_key}_{task_name}",
+                            "project": proj_name,
+                            "item": "Γενική Σύνθεση / Box",
+                            "qty": proj_qty,
+                            "task": task_name,
+                            "hours": round(hours, 2),
+                            "done": p_data.get("done", False),
+                            "status_proc": "READY"
+                        })
+
+    # 2. Item Level Tasks
+    if not procurement_df.empty:
+        for idx, row in procurement_df.iterrows():
+            item_id = str(row["ID"])
+            project_name = row["Project"]
+            material = row["Υλικό / Προϊόν"]
+            qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+            proc_status = row["Status Procurement"]
+            
+            item_tasks = st.session_state["tasks_store"].get(item_id, [])
+            
+            for t_data in item_tasks:
+                if t_data.get("user") == selected_member and t_data.get("date") == target_date:
+                    t_task = t_data.get("task")
+                    if t_task != "- Επιλογή Εργασίας -":
+                        auto_time = tasks_database.get(t_task, 0.0)
+                        hours = (auto_time * qty) / 60
+                        worker_tasks.append({
+                            "type": "item",
+                            "key": f"i_{item_id}_{t_task}",
+                            "project": project_name,
+                            "item": f"[{item_id}] {material}",
+                            "qty": qty,
+                            "task": t_task,
+                            "hours": round(hours, 2),
+                            "done": t_data.get("done", False),
+                            "status_proc": proc_status
+                        })
+
+    st.subheader(f"📋 Πρόγραμμα για τον/την {selected_member} — {target_date.strftime('%d/%m/%Y')}")
+
+    if worker_tasks:
+        total_w_hours = sum(t["hours"] for t in worker_tasks)
+        st.info(f"💡 Συνολικός εκτιμώμενος χρόνος εργασίας: **{round(total_w_hours, 1)} Ώρες** ({len(worker_tasks)} Tasks)")
+        
+        st.divider()
+
+        for w_idx, wt in enumerate(worker_tasks):
+            col_c, col_proj, col_mat, col_task, col_qty, col_h, col_proc = st.columns([0.08, 0.20, 0.28, 0.22, 0.08, 0.10, 0.14])
+            
+            col_c.write(f"#{w_idx+1}")
+            col_proj.markdown(f"**{wt['project']}**")
+            col_mat.write(wt['item'])
+            col_task.markdown(f"`{wt['task']}`")
+            col_qty.write(f"{wt['qty']} τμχ")
+            col_h.caption(f"{wt['hours']}h")
+            
+            # Status Procurement
+            if wt['status_proc'] in ["OK STOCK", "RECEIVED", "READY"]:
+                col_proc.success(wt['status_proc'])
+            else:
+                col_proc.warning(wt['status_proc'])
+    else:
+        st.success(f"🎉 Δεν έχουν ανατεθεί εργασίες στον/στην {selected_member} για τις {target_date.strftime('%d/%m/%Y')}.")
 
 elif option == "Πρότυπα Χρόνων & Ομάδα":
     st.header("📊 Βάση Δεδομένων Χρόνων & Ομάδας")
