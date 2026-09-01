@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import gspread
+import json
+import base64
 from google.oauth2.service_account import Credentials
 from datetime import date, datetime, timedelta
 
@@ -27,18 +29,23 @@ WEEKDAYS_SHORT_GREEK = {
     0: "Δευ", 1: "Τρι", 2: "Τετ", 3: "Πεμ", 4: "Παρ", 5: "Σαβ", 6: "Κυρ"
 }
 
-# --- Google Sheets API Connection ---
+# --- Google Sheets API Connection via Base64 ---
 @st.cache_resource
 def get_gspread_client():
     if "gcp_service_account" not in st.secrets:
         return None, "Το [gcp_service_account] δεν βρέθηκε στα Secrets του Streamlit."
     
     try:
-        creds_dict = dict(st.secrets["gcp_service_account"])
-        if "private_key" in creds_dict:
-            # Διόρθωση των αλλαγών γραμμής
-            pk = str(creds_dict["private_key"]).replace("\\n", "\n").replace("\n", "\n").strip()
-            creds_dict["private_key"] = pk
+        sec = st.secrets["gcp_service_account"]
+        if "b64_json" in sec:
+            decoded_bytes = base64.b64decode(sec["b64_json"])
+            creds_dict = json.loads(decoded_bytes.decode("utf-8"))
+        elif "json_str" in sec:
+            creds_dict = json.loads(sec["json_str"])
+        else:
+            creds_dict = dict(sec)
+            if "private_key" in creds_dict:
+                creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n").strip()
             
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
