@@ -89,6 +89,7 @@ def load_assignments_from_sheet():
 
 def save_all_assignments_to_sheet():
     if not gc:
+        st.warning("Δεν υπάρχει σύνδεση με το Google Sheets API (get_gspread_client failed).")
         return
     try:
         sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
@@ -114,7 +115,7 @@ def save_all_assignments_to_sheet():
                         ])
 
         sheet.clear()
-        sheet.update("A1", rows)
+        sheet.update(range_name="A1", values=rows)
     except Exception as e:
         st.error(f"Σφάλμα κατά την αποθήκευση στο Google Sheet: {e}")
 
@@ -186,12 +187,16 @@ sheet_item_assignments, sheet_proj_assignments = load_assignments_from_sheet()
 
 if "tasks_store" not in st.session_state:
     st.session_state["tasks_store"] = {}
-    if procurement_df is not None and not procurement_df.empty:
-        for idx, row in procurement_df.iterrows():
-            item_id = str(row["ID"])
-            u_key = f"{item_id}_{idx}"
+
+if procurement_df is not None and not procurement_df.empty:
+    for idx, row in procurement_df.iterrows():
+        item_id = str(row["ID"])
+        u_key = f"{item_id}_{idx}"
+        if u_key not in st.session_state["tasks_store"]:
             if item_id in sheet_item_assignments:
                 st.session_state["tasks_store"][u_key] = sheet_item_assignments[item_id]
+            else:
+                st.session_state["tasks_store"][u_key] = []
 
 if "project_tasks_store" not in st.session_state:
     st.session_state["project_tasks_store"] = sheet_proj_assignments
@@ -524,6 +529,10 @@ with tab_proj:
         m1.metric("Συνολικές Ώρες (Γενικές + Υλικών)", f"{round(total_project_hours, 1)} Ώρες")
         m2.metric("Ώρες που Ολοκληρώθηκαν", f"{round(completed_project_hours, 1)} Ώρες")
         m3.metric("Υπολειπόμενες Ώρες", f"{remaining_hours} Ώρες", delta=f"-{remaining_hours}h" if remaining_hours > 0 else "Έτοιμο!")
+
+        if st.button("💾 Αποθήκευση Αλλαγών στο Google Sheet", use_container_width=True):
+            save_all_assignments_to_sheet()
+            st.success("✅ Όλες οι αναθέσεις αποθηκεύτηκαν επιτυχώς στο Google Sheet!")
 
 # --- 3. ΗΜΕΡΗΣΙΟ ΠΛΑΝΟ (INTERACTIVE) ---
 with col_plan:
