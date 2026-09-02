@@ -205,6 +205,62 @@ def save_all_assignments_to_sheet():
     except Exception as e:
         st.error(f"Σφάλμα κατά την αποθήκευση στο Google Sheet: {e}")
 
+# Συνάρτηση δημιουργίας Printable HTML/PDF Document
+def generate_printable_html(title, date_str, df_data):
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>{title}</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 20px; color: #333; }}
+            h2 {{ color: #1e88e5; border-bottom: 2px solid #1e88e5; padding-bottom: 5px; }}
+            .date {{ font-size: 14px; color: #666; margin-bottom: 20px; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
+            th, td {{ border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 13px; }}
+            th {{ background-color: #f2f2f2; font-weight: bold; color: #111; }}
+            tr:nth-child(even) {{ background-color: #f9f9f9; }}
+            .done {{ color: green; font-weight: bold; }}
+            .pending {{ color: #d32f2f; font-weight: bold; }}
+            @media print {{
+                button {{ display: none; }}
+            }}
+        </style>
+    </head>
+    <body>
+        <h2>🏭 {title}</h2>
+        <div class="date">📅 Ημερομηνία: <b>{date_str}</b></div>
+        <table>
+            <thead>
+                <tr>
+                    {"".join([f"<th>{col}</th>" for col in df_data.columns])}
+                </tr>
+            </thead>
+            <tbody>
+    """
+    for _, row in df_data.iterrows():
+        html += "<tr>"
+        for col in df_data.columns:
+            val = str(row[col])
+            if val == "ΝΑΙ":
+                val_str = '<span class="done">✅ Ολοκληρώθηκε</span>'
+            elif val == "ΟΧΙ":
+                val_str = '<span class="pending">⏳ Εκκρεμεί</span>'
+            else:
+                val_str = val
+            html += f"<td>{val_str}</td>"
+        html += "</tr>"
+    html += """
+            </tbody>
+        </table>
+        <br><br>
+        <button onclick="window.print()" style="padding:10px 20px; background:#1e88e5; color:white; border:none; border-radius:5px; cursor:pointer;">🖨️ Εκτύπωση / Αποθήκευση σε PDF</button>
+    </body>
+    </html>
+    """
+    return html
+
 sheet_item_assignments, sheet_proj_assignments = load_assignments_from_sheet()
 
 if "tasks_store" not in st.session_state:
@@ -554,7 +610,7 @@ with tab_proj:
             save_all_assignments_to_sheet()
             st.success("✅ Όλες οι αναθέσεις αποθηκεύτηκαν επιτυχώς στο Google Sheet!")
 
-# --- 3. ΗΜΕΡΗΣΙΟ ΠΛΑΝΟ (INTERACTIVE ΜΕ ΦΙΛΤΡΑ & EXPORT) ---
+# --- 3. ΗΜΕΡΗΣΙΟ ΠΛΑΝΟ (INTERACTIVE ΜΕ ΦΙΛΤΡΑ & PRINTABLE PDF) ---
 with col_plan:
     st.header("🗓️ Συγκεντρωτικό Πλάνο Παραγωγής & Διαδραστική Αλλαγή Status")
     
@@ -655,7 +711,6 @@ with col_plan:
     st.divider()
 
     if daily_tasks:
-        # Δημιουργία DataFrame για Export
         export_list = []
         for dt in daily_tasks:
             export_list.append({
@@ -671,13 +726,23 @@ with col_plan:
         export_df = pd.DataFrame(export_list)
         csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
 
-        col_head, col_exp = st.columns([0.7, 0.3])
+        col_head, col_exp_csv, col_exp_pdf = st.columns([0.5, 0.25, 0.25])
         col_head.subheader(f"📌 Εργασίες για τις {target_date.strftime('%d/%m/%Y')} ({len(daily_tasks)} Tasks)")
-        col_exp.download_button(
-            label="📥 Εξαγωγή Πλάνου (CSV/Excel)",
+        
+        col_exp_csv.download_button(
+            label="📊 Εξαγωγή CSV",
             data=csv_data,
             file_name=f"Daily_Plan_{target_date.strftime('%Y-%m-%d')}.csv",
             mime="text/csv",
+            use_container_width=True
+        )
+
+        printable_html = generate_printable_html("Ημερήσιο Πλάνο Παραγωγής", target_date.strftime('%d/%m/%Y'), export_df)
+        col_exp_pdf.download_button(
+            label="📄 Εξαγωγή PDF / Εκτύπωση",
+            data=printable_html,
+            file_name=f"Daily_Plan_{target_date.strftime('%Y-%m-%d')}.html",
+            mime="text/html",
             use_container_width=True
         )
 
@@ -748,7 +813,7 @@ with col_plan:
     else:
         st.info(f"Δεν βρέθηκαν εργασίες για τις {target_date.strftime('%d/%m/%Y')} με τα συγκεκριμένα φίλτρα.")
 
-# --- 4. ΠΡΟΓΡΑΜΜΑ ΤΕΧΝΙΤΗ (INTERACTIVE ΜΕ EXPORT) ---
+# --- 4. ΠΡΟΓΡΑΜΜΑ ΤΕΧΝΙΤΗ (INTERACTIVE ΜΕ PRINTABLE PDF) ---
 with tab_tech:
     st.header("👤 Ημερήσιο Πρόγραμμα Εργασιών ανά Τεχνίτη (Interactive)")
     
@@ -834,13 +899,24 @@ with tab_tech:
         w_export_df = pd.DataFrame(w_export_list)
         w_csv_data = w_export_df.to_csv(index=False).encode('utf-8-sig')
 
-        col_w_head, col_w_exp = st.columns([0.7, 0.3])
+        w_printable_html = generate_printable_html(f"Πρόγραμμα Τεχνίτη: {selected_member}", target_date.strftime('%d/%m/%Y'), w_export_df)
+
+        col_w_head, col_w_csv, col_w_pdf = st.columns([0.5, 0.25, 0.25])
         col_w_head.subheader(f"📋 Πρόγραμμα για τον/την {selected_member} — {target_date.strftime('%d/%m/%Y')}")
-        col_w_exp.download_button(
-            label="📥 Εξαγωγή Προγράμματος (CSV)",
+        
+        col_w_csv.download_button(
+            label="📊 Εξαγωγή CSV",
             data=w_csv_data,
             file_name=f"Schedule_{selected_member.replace(' ', '_')}_{target_date.strftime('%Y-%m-%d')}.csv",
             mime="text/csv",
+            use_container_width=True
+        )
+
+        col_w_pdf.download_button(
+            label="📄 Εξαγωγή PDF / Εκτύπωση",
+            data=w_printable_html,
+            file_name=f"Schedule_{selected_member.replace(' ', '_')}_{target_date.strftime('%Y-%m-%d')}.html",
+            mime="text/html",
             use_container_width=True
         )
 
