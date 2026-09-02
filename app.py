@@ -199,16 +199,16 @@ def load_all_data():
 
 procurement_df, tasks_database, team_database, availability_database = load_all_data()
 
+# 1. Φόρτωση από το Google Sheet ΠΡΩΤΑ
 sheet_item_assignments, sheet_proj_assignments = load_assignments_from_sheet()
 
+# 2. Σωστή Αρχικοποίηση Session State με βάση τα δεδομένα του Google Sheet
 if "tasks_store" not in st.session_state:
     st.session_state["tasks_store"] = {}
-
-if procurement_df is not None and not procurement_df.empty:
-    for idx, row in procurement_df.iterrows():
-        item_id = str(row["ID"])
-        u_key = f"{item_id}_{idx}"
-        if u_key not in st.session_state["tasks_store"]:
+    if procurement_df is not None and not procurement_df.empty:
+        for idx, row in procurement_df.iterrows():
+            item_id = str(row["ID"])
+            u_key = f"{item_id}_{idx}"
             if item_id in sheet_item_assignments:
                 st.session_state["tasks_store"][u_key] = sheet_item_assignments[item_id]
             else:
