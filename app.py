@@ -554,7 +554,7 @@ with tab_proj:
             save_all_assignments_to_sheet()
             st.success("✅ Όλες οι αναθέσεις αποθηκεύτηκαν επιτυχώς στο Google Sheet!")
 
-# --- 3. ΗΜΕΡΗΣΙΟ ΠΛΑΝΟ (INTERACTIVE ΜΕ ΦΙΛΤΡΑ) ---
+# --- 3. ΗΜΕΡΗΣΙΟ ΠΛΑΝΟ (INTERACTIVE ΜΕ ΦΙΛΤΡΑ & EXPORT) ---
 with col_plan:
     st.header("🗓️ Συγκεντρωτικό Πλάνο Παραγωγής & Διαδραστική Αλλαγή Status")
     
@@ -635,7 +635,6 @@ with col_plan:
                         "status_proc": proc_status
                     })
 
-    # Δημιουργία επιλογών φίλτρων
     available_projects = ["Όλα τα Projects"] + sorted(list(set(d["Project"] for d in daily_tasks_raw))) if daily_tasks_raw else ["Όλα τα Projects"]
     available_users = ["Όλοι οι Τεχνίτες"] + sorted(list(set(d["Υπεύθυνος"] for d in daily_tasks_raw))) if daily_tasks_raw else ["Όλοι οι Τεχνίτες"]
     available_statuses = ["Όλα τα Status"] + sorted(list(set(d["status_proc"] for d in daily_tasks_raw))) if daily_tasks_raw else ["Όλα τα Status"]
@@ -644,7 +643,6 @@ with col_plan:
     selected_filter_user = col_fu.selectbox("👤 Φίλτρο Τεχνίτη:", available_users)
     selected_filter_status = col_fs.selectbox("📦 Φίλτρο Procurement:", available_statuses)
 
-    # Φιλτράρισμα των εργασιών
     daily_tasks = []
     for d in daily_tasks_raw:
         match_proj = (selected_filter_proj == "Όλα τα Projects") or (d["Project"] == selected_filter_proj)
@@ -657,8 +655,32 @@ with col_plan:
     st.divider()
 
     if daily_tasks:
-        st.subheader(f"📌 Εργασίες για τις {target_date.strftime('%d/%m/%Y')} ({len(daily_tasks)} Tasks)")
-        
+        # Δημιουργία DataFrame για Export
+        export_list = []
+        for dt in daily_tasks:
+            export_list.append({
+                "Project": dt["Project"],
+                "Υλικό / Είδος": dt["Υλικό"],
+                "Ποσότητα": dt["Ποσότητα"],
+                "Εργασία": dt["Εργασία"],
+                "Υπεύθυνος": dt["Υπεύθυνος"],
+                "Ώρες": dt["Ώρες"],
+                "Status Procurement": dt["status_proc"],
+                "Ολοκληρώθηκε": "ΝΑΙ" if dt["done"] else "ΟΧΙ"
+            })
+        export_df = pd.DataFrame(export_list)
+        csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
+
+        col_head, col_exp = st.columns([0.7, 0.3])
+        col_head.subheader(f"📌 Εργασίες για τις {target_date.strftime('%d/%m/%Y')} ({len(daily_tasks)} Tasks)")
+        col_exp.download_button(
+            label="📥 Εξαγωγή Πλάνου (CSV/Excel)",
+            data=csv_data,
+            file_name=f"Daily_Plan_{target_date.strftime('%Y-%m-%d')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
         st.markdown("#### 👥 Φόρτος Εργασίας & Διαθεσιμότητα Ομάδας")
         
         day_availability = availability_database.get(greek_day_name, {})
@@ -726,7 +748,7 @@ with col_plan:
     else:
         st.info(f"Δεν βρέθηκαν εργασίες για τις {target_date.strftime('%d/%m/%Y')} με τα συγκεκριμένα φίλτρα.")
 
-# --- 4. ΠΡΟΓΡΑΜΜΑ ΤΕΧΝΙΤΗ (INTERACTIVE) ---
+# --- 4. ΠΡΟΓΡΑΜΜΑ ΤΕΧΝΙΤΗ (INTERACTIVE ΜΕ EXPORT) ---
 with tab_tech:
     st.header("👤 Ημερήσιο Πρόγραμμα Εργασιών ανά Τεχνίτη (Interactive)")
     
@@ -797,9 +819,31 @@ with tab_tech:
                             "status_proc": proc_status
                         })
 
-    st.subheader(f"📋 Πρόγραμμα για τον/την {selected_member} — {target_date.strftime('%d/%m/%Y')}")
-
     if worker_tasks:
+        w_export_list = []
+        for wt in worker_tasks:
+            w_export_list.append({
+                "Project": wt["project"],
+                "Υλικό / Είδος": wt["item"],
+                "Ποσότητα": wt["qty"],
+                "Εργασία": wt["task"],
+                "Ώρες": wt["hours"],
+                "Status Procurement": wt["status_proc"],
+                "Ολοκληρώθηκε": "ΝΑΙ" if wt["done"] else "ΟΧΙ"
+            })
+        w_export_df = pd.DataFrame(w_export_list)
+        w_csv_data = w_export_df.to_csv(index=False).encode('utf-8-sig')
+
+        col_w_head, col_w_exp = st.columns([0.7, 0.3])
+        col_w_head.subheader(f"📋 Πρόγραμμα για τον/την {selected_member} — {target_date.strftime('%d/%m/%Y')}")
+        col_w_exp.download_button(
+            label="📥 Εξαγωγή Προγράμματος (CSV)",
+            data=w_csv_data,
+            file_name=f"Schedule_{selected_member.replace(' ', '_')}_{target_date.strftime('%Y-%m-%d')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
         total_w_hours = sum(t["hours"] for t in worker_tasks)
         st.info(f"💡 Συνολικός εκτιμώμενος χρόνος εργασίας: **{round(total_w_hours, 1)} Ώρες** ({len(worker_tasks)} Tasks)")
         
@@ -837,6 +881,7 @@ with tab_tech:
             else:
                 col_proc.warning(wt['status_proc'])
     else:
+        st.subheader(f"📋 Πρόγραμμα για τον/την {selected_member} — {target_date.strftime('%d/%m/%Y')}")
         st.success(f"🎉 Δεν έχουν ανατεθεί εργασίες στον/στην {selected_member} για τις {target_date.strftime('%d/%m/%Y')}.")
 
 # --- 5. ΕΒΔΟΜΑΔΙΑΙΟ PROJECTION ---
@@ -1096,4 +1141,3 @@ with tab_data:
     with col_b:
         st.subheader("👥 Ομάδα Παραγωγής & Ημερήσια Όρια Ώρων")
         st.write(availability_database)
-        
