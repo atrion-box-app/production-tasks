@@ -49,7 +49,8 @@ def verify_user(username, password):
     valid_users = {
         "admin": hash_password("admin123"),
         "manager": hash_password("manager123"),
-        "operator": hash_password("operator123")
+        "operator": hash_password("operator123"),
+        "maria@atrionartgifts.com": hash_password("atrionmaria")
     }
     
     if st.session_state.login_attempts >= 5:
@@ -782,7 +783,12 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
             col_tsk.markdown(f"~~{dt['Εργασία']}~~ ✅" if is_done else f"**{dt['Εργασία']}**")
             col_user.write(dt['Υπεύθυνος'])
             col_hrs.write(f"{dt['Ώρες']}h")
-            col_st.success(f"✅ {dt['status_proc']}") if dt['status_proc'] in ["OK STOCK", "RECEIVED", "READY"] else col_st.error(f"⚠️ {dt['status_proc']}")
+            
+            # Corrected status display
+            if dt['status_proc'] in ["OK STOCK", "RECEIVED", "READY"]:
+                col_st.success(f"✅ {dt['status_proc']}")
+            else:
+                col_st.error(f"⚠️ {dt['status_proc']}")
     else:
         st.info(f"Δεν βρέθηκαν εργασίες για τις {target_date.strftime('%d/%m/%Y')} με τα συγκεκριμένα φίλτρα.")
 
@@ -843,6 +849,27 @@ def render_technician(procurement_df, tasks_database, team_database, availabilit
         pending_w_proc = [wt for wt in worker_tasks if wt["status_proc"] not in ["OK STOCK", "RECEIVED", "READY"]]
         if pending_w_proc:
             st.warning(f"⚠️ Ο/Η {selected_member} έχει **{len(pending_w_proc)} tasks** με υλικά σε εκκρεμότητα.")
+
+        st.divider()
+        for w_idx, wt in enumerate(worker_tasks):
+            col_c, col_proj, col_mat, col_task, col_qty, col_h, col_proc = st.columns([0.10, 0.20, 0.26, 0.20, 0.08, 0.08, 0.12])
+            if wt["type"] == "project":
+                chk_k = f"tech_pdone_{wt['p_key']}_{wt['task_name']}_{w_idx}"
+                is_done = col_c.checkbox("Done", value=wt["done"], key=chk_k, on_change=toggle_project_task, args=(wt['p_key'], wt['task_name'], chk_k))
+            else:
+                chk_k = f"tech_idone_{wt['u_key']}_{wt['t_idx']}_{w_idx}"
+                is_done = col_c.checkbox("Done", value=wt["done"], key=chk_k, on_change=toggle_item_task, args=(wt['u_key'], wt['t_idx'], chk_k))
+            col_proj.markdown(f"**{wt['project']}**")
+            col_mat.write(wt['item'])
+            col_task.markdown(f"~~{wt['task']}~~ ✅" if is_done else f"`{wt['task']}`")
+            col_qty.write(f"{wt['qty']} τμχ")
+            col_h.caption(f"{wt['hours']}h")
+            
+            # Corrected status display
+            if wt['status_proc'] in ["OK STOCK", "RECEIVED", "READY"]:
+                col_proc.success(f"✅ {wt['status_proc']}")
+            else:
+                col_proc.error(f"⚠️ {wt['status_proc']}")
     else:
         st.success(f"🎉 Δεν έχουν ανατεθεί εργασίες στον/στην {selected_member} για τις {target_date.strftime('%d/%m/%Y')}.")
 
@@ -1041,7 +1068,7 @@ def render_settings():
     st.header("⚙️ Ρυθμίσεις")
     st.subheader("🔐 Ασφάλεια")
     st.info("🔒 Οι ρυθμίσεις ασφαλείας διαχειρίζονται μέσω των Streamlit Secrets")
-    st.markdown("**Users:** admin/admin123, manager/manager123, operator/operator123")
+    st.markdown("**Users:** admin/admin123, manager/manager123, operator/operator123, maria@atrionartgifts.com/atrionmaria")
     
     st.subheader("💾 Αποθήκευση")
     col1, col2 = st.columns(2)
