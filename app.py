@@ -554,16 +554,17 @@ with tab_proj:
             save_all_assignments_to_sheet()
             st.success("✅ Όλες οι αναθέσεις αποθηκεύτηκαν επιτυχώς στο Google Sheet!")
 
-# --- 3. ΗΜΕΡΗΣΙΟ ΠΛΑΝΟ (INTERACTIVE) ---
+# --- 3. ΗΜΕΡΗΣΙΟ ΠΛΑΝΟ (INTERACTIVE ΜΕ ΦΙΛΤΡΑ) ---
 with col_plan:
     st.header("🗓️ Συγκεντρωτικό Πλάνο Παραγωγής & Διαδραστική Αλλαγή Status")
     
-    target_date = st.date_input("Επιλέξτε Ημερομηνία Πλάνου:", value=date.today(), format="DD/MM/YYYY")
+    col_d, col_fp, col_fu, col_fs = st.columns([1, 1, 1, 1])
+    
+    target_date = col_d.date_input("Ημερομηνία Πλάνου:", value=date.today(), format="DD/MM/YYYY")
     greek_day_name = WEEKDAYS_GREEK.get(target_date.weekday(), "Δευτέρα")
     st.caption(f"Ημέρα εβδομάδας: **{greek_day_name}**")
-    st.divider()
 
-    daily_tasks = []
+    daily_tasks_raw = []
     
     for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
         if isinstance(p_tasks_dict, dict):
@@ -583,7 +584,7 @@ with col_plan:
                     auto_time = tasks_database.get(task_name, 0.0)
                     hours = (auto_time * proj_qty) / 60
                     
-                    daily_tasks.append({
+                    daily_tasks_raw.append({
                         "type": "project",
                         "p_key": p_key,
                         "task_name": task_name,
@@ -594,7 +595,8 @@ with col_plan:
                         "Εργασία": task_name,
                         "Υπεύθυνος": t_user,
                         "Ώρες": round(hours, 2),
-                        "done": t_done
+                        "done": t_done,
+                        "status_proc": "READY"
                     })
 
     if not procurement_df.empty:
@@ -604,6 +606,7 @@ with col_plan:
             project_name = row["Project"]
             material = row["Υλικό / Προϊόν"]
             qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+            proc_status = row["Status Procurement"]
             
             item_tasks = st.session_state["tasks_store"].get(unique_item_key, [])
             
@@ -617,7 +620,7 @@ with col_plan:
                     auto_time = tasks_database.get(t_task, 0.0)
                     hours = (auto_time * qty) / 60
                     
-                    daily_tasks.append({
+                    daily_tasks_raw.append({
                         "type": "item",
                         "u_key": unique_item_key,
                         "t_idx": t_idx,
@@ -628,8 +631,30 @@ with col_plan:
                         "Εργασία": t_task,
                         "Υπεύθυνος": t_user,
                         "Ώρες": round(hours, 2),
-                        "done": t_done
+                        "done": t_done,
+                        "status_proc": proc_status
                     })
+
+    # Δημιουργία επιλογών φίλτρων
+    available_projects = ["Όλα τα Projects"] + sorted(list(set(d["Project"] for d in daily_tasks_raw))) if daily_tasks_raw else ["Όλα τα Projects"]
+    available_users = ["Όλοι οι Τεχνίτες"] + sorted(list(set(d["Υπεύθυνος"] for d in daily_tasks_raw))) if daily_tasks_raw else ["Όλοι οι Τεχνίτες"]
+    available_statuses = ["Όλα τα Status"] + sorted(list(set(d["status_proc"] for d in daily_tasks_raw))) if daily_tasks_raw else ["Όλα τα Status"]
+
+    selected_filter_proj = col_fp.selectbox("🔍 Φίλτρο Project:", available_projects)
+    selected_filter_user = col_fu.selectbox("👤 Φίλτρο Τεχνίτη:", available_users)
+    selected_filter_status = col_fs.selectbox("📦 Φίλτρο Procurement:", available_statuses)
+
+    # Φιλτράρισμα των εργασιών
+    daily_tasks = []
+    for d in daily_tasks_raw:
+        match_proj = (selected_filter_proj == "Όλα τα Projects") or (d["Project"] == selected_filter_proj)
+        match_user = (selected_filter_user == "Όλοι οι Τεχνίτες") or (d["Υπεύθυνος"] == selected_filter_user)
+        match_status = (selected_filter_status == "Όλα τα Status") or (d["status_proc"] == selected_filter_status)
+        
+        if match_proj and match_user and match_status:
+            daily_tasks.append(d)
+
+    st.divider()
 
     if daily_tasks:
         st.subheader(f"📌 Εργασίες για τις {target_date.strftime('%d/%m/%Y')} ({len(daily_tasks)} Tasks)")
@@ -667,7 +692,7 @@ with col_plan:
         st.markdown("#### 📋 Διαδραστική Λίστα Εργασιών (Τσεκάρετε [✓] για Ολοκλήρωση)")
         
         for d_idx, dt in enumerate(daily_tasks):
-            col_chk, col_p, col_mat, col_tsk, col_user, col_hrs = st.columns([0.08, 0.22, 0.30, 0.22, 0.18, 0.10])
+            col_chk, col_p, col_mat, col_tsk, col_user, col_hrs, col_st = st.columns([0.08, 0.20, 0.26, 0.20, 0.14, 0.07, 0.10])
             
             if dt["type"] == "project":
                 chk_k = f"plan_pdone_{dt['p_key']}_{dt['task_name']}_{d_idx}"
@@ -692,9 +717,14 @@ with col_plan:
                 
             col_user.write(dt['Υπεύθυνος'])
             col_hrs.write(f"{dt['Ώρες']}h")
+            
+            if dt['status_proc'] in ["OK STOCK", "RECEIVED", "READY"]:
+                col_st.success(dt['status_proc'])
+            else:
+                col_st.warning(dt['status_proc'])
 
     else:
-        st.info(f"Δεν έχουν προγραμματιστεί εργασίες για τις {target_date.strftime('%d/%m/%Y')}.")
+        st.info(f"Δεν βρέθηκαν εργασίες για τις {target_date.strftime('%d/%m/%Y')} με τα συγκεκριμένα φίλτρα.")
 
 # --- 4. ΠΡΟΓΡΑΜΜΑ ΤΕΧΝΙΤΗ (INTERACTIVE) ---
 with tab_tech:
@@ -946,7 +976,7 @@ with tab_projec:
     def highlight_total_row(row):
         if row.name == "Σύνολο Ημέρας (h)":
             return ["background-color: #2b303a; font-weight: bold; color: #00e676; border-top: 2px solid #00e676;"] * len(row)
-        return [""] * row_len if 'row_len' in locals() else [""] * len(row)
+        return [""] * len(row)
 
     for w_num, w_monday, w_days, w_matrix in weeks_matrices:
         w_sunday = w_days[-1]
@@ -1066,3 +1096,4 @@ with tab_data:
     with col_b:
         st.subheader("👥 Ομάδα Παραγωγής & Ημερήσια Όρια Ώρων")
         st.write(availability_database)
+        
