@@ -7,8 +7,6 @@ import hashlib
 import time
 from google.oauth2.service_account import Credentials
 from datetime import date, datetime, timedelta
-import plotly.express as px
-import plotly.graph_objects as go
 from streamlit_option_menu import option_menu
 import xlsxwriter
 from io import BytesIO
@@ -725,43 +723,26 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
 
     st.divider()
     
-    # Charts row
+    # Charts row using Streamlit native charts
     col1, col2 = st.columns(2)
     
     with col1:
         st.subheader("📊 Ώρες ανά Project")
         if project_hours:
-            fig = px.bar(
-                x=list(project_hours.keys()),
-                y=list(project_hours.values()),
-                title="Συνολικές Ώρες ανά Project",
-                labels={"x": "Project", "y": "Ώρες"}
-            )
-            fig.update_layout(
-                xaxis_tickangle=-45,
-                height=400,
-                showlegend=False
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            chart_data = pd.DataFrame({
+                "Project": list(project_hours.keys()),
+                "Ώρες": list(project_hours.values())
+            })
+            st.bar_chart(chart_data, x="Project", y="Ώρες", use_container_width=True)
     
     with col2:
         st.subheader("📈 Πρόοδος ανά Project")
         if project_progress:
-            fig = px.bar(
-                x=list(project_progress.keys()),
-                y=list(project_progress.values()),
-                title="Ποσοστό Ολοκλήρωσης ανά Project",
-                labels={"x": "Project", "y": "Πρόοδος (%)"},
-                color=list(project_progress.values()),
-                color_continuous_scale="RdYlGn",
-                range_color=[0, 100]
-            )
-            fig.update_layout(
-                xaxis_tickangle=-45,
-                height=400,
-                showlegend=False
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            chart_data = pd.DataFrame({
+                "Project": list(project_progress.keys()),
+                "Πρόοδος (%)": list(project_progress.values())
+            })
+            st.bar_chart(chart_data, x="Project", y="Πρόοδος (%)", use_container_width=True)
 
     st.divider()
     
