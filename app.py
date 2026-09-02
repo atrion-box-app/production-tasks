@@ -71,6 +71,14 @@ st.markdown("""
     .progress-animated {
         transition: width 0.5s ease-in-out;
     }
+    /* Better cards */
+    .metric-card {
+        background: white;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin: 5px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -346,9 +354,6 @@ def save_all_assignments_to_sheet():
         return False
     
     try:
-        # Create backup
-        backup_key = f"assignments_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        
         sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
         rows = [["Project", "Item_ID", "Task_Name", "Assigned_User", "Assigned_Date", "Status_Done", "Task_Type"]]
 
@@ -604,135 +609,26 @@ def check_notifications():
     
     return notifications
 
-# --- MAIN APPLICATION ---
-def main():
-    """Main application"""
-    # Initialize auth
-    init_auth()
-    
-    # Check authentication
-    if not st.session_state.authenticated:
-        login_form()
-        return
-    
-    # Load data with versioning
-    version = st.session_state.get("data_version", 0)
-    procurement_df, tasks_database, team_database, availability_database = load_all_data(version)
-    
-    # Store in session state for other functions
-    st.session_state.procurement_df = procurement_df
-    st.session_state.availability_database = availability_database
-    
-    # Load assignments
-    sheet_item_assignments, sheet_proj_assignments = load_assignments_from_sheet()
-    
-    # Initialize session state
-    if "tasks_store" not in st.session_state:
-        st.session_state["tasks_store"] = {}
-    
-    if procurement_df is not None and not procurement_df.empty:
-        for idx, row in procurement_df.iterrows():
-            item_id = str(row["ID"])
-            u_key = f"{item_id}_{idx}"
-            if u_key not in st.session_state["tasks_store"]:
-                if item_id in sheet_item_assignments:
-                    st.session_state["tasks_store"][u_key] = sheet_item_assignments[item_id]
-                else:
-                    st.session_state["tasks_store"][u_key] = []
-    
-    if "project_tasks_store" not in st.session_state:
-        st.session_state["project_tasks_store"] = sheet_proj_assignments
-    
-    if "audit_log" not in st.session_state:
-        st.session_state.audit_log = []
-    
-    if "last_save" not in st.session_state:
-        st.session_state.last_save = datetime.now()
-    
-    if "notifications_shown" not in st.session_state:
-        st.session_state.notifications_shown = False
+# --- TOGGLE FUNCTIONS ---
+def toggle_project_task(p_key, task_name, chk_key):
+    st.session_state["project_tasks_store"][p_key][task_name]["done"] = st.session_state[chk_key]
+    save_all_assignments_to_sheet()
+    add_to_audit_log("toggle_project_task", f"{p_key} - {task_name} - {st.session_state[chk_key]}")
 
-    # --- SIDEBAR ---
-    with st.sidebar:
-        st.image("https://img.icons8.com/color/96/000000/factory.png", width=80)
-        st.markdown(f"### 🏭 Production Tasks")
-        st.markdown(f"👋 Welcome, **{st.session_state.username}**!")
-        
-        # Notifications
-        notifications = check_notifications()
-        if notifications:
-            with st.expander(f"🔔 Notifications ({len(notifications)})", expanded=True):
-                for notif in notifications:
-                    st.warning(notif)
-        
-        st.divider()
-        
-        # Navigation
-        selected = option_menu(
-            menu_title="Navigation",
-            options=[
-                "📈 Dashboard", 
-                "📋 Project", 
-                "🗓️ Daily Plan", 
-                "👤 Technician",
-                "📆 Projection",
-                "📝 Daily Report",
-                "📊 Database",
-                "⚙️ Settings"
-            ],
-            icons=[
-                "bar-chart", "list-task", "calendar", "person", 
-                "graph-up", "clipboard", "database", "gear"
-            ],
-            menu_icon="menu-button",
-            default_index=0,
-            styles={
-                "container": {"padding": "0!important"},
-                "icon": {"font-size": "20px"},
-                "nav-link": {"font-size": "15px", "text-align": "left", "margin": "0px"},
-                "nav-link-selected": {"background-color": "#1e88e5"},
-            }
-        )
-        
-        st.divider()
-        
-        # Quick stats
-        st.markdown("### 📊 Quick Stats")
-        total_tasks = sum(len(tasks) for tasks in st.session_state.get("tasks_store", {}).values())
-        total_projects = len(procurement_df["Project"].unique()) if not procurement_df.empty else 0
-        st.metric("Total Tasks", total_tasks)
-        st.metric("Active Projects", total_projects)
-        
-        st.divider()
-        
-        # Logout button
-        if st.button("🚪 Logout", use_container_width=True):
-            logout()
+def toggle_item_task(u_key, t_idx, chk_key):
+    st.session_state["tasks_store"][u_key][t_idx]["done"] = st.session_state[chk_key]
+    save_all_assignments_to_sheet()
+    add_to_audit_log("toggle_item_task", f"{u_key} - {t_idx} - {st.session_state[chk_key]}")
 
-    # --- AUTO-SAVE ---
-    # Auto-save every 5 minutes
-    if (datetime.now() - st.session_state.last_save).seconds > 300:
-        if save_all_assignments_to_sheet():
-            st.session_state.last_save = datetime.now()
-            add_to_audit_log("auto_save", "Auto-save performed")
+def update_item_field(u_key, t_idx, field, widget_key):
+    st.session_state["tasks_store"][u_key][t_idx][field] = st.session_state[widget_key]
+    save_all_assignments_to_sheet()
+    add_to_audit_log("update_item_field", f"{u_key} - {field}: {st.session_state[widget_key]}")
 
-    # --- TAB RENDERING ---
-    if selected == "📈 Dashboard":
-        render_dashboard(procurement_df, tasks_database, team_database, availability_database)
-    elif selected == "📋 Project":
-        render_project(procurement_df, tasks_database, team_database, availability_database)
-    elif selected == "🗓️ Daily Plan":
-        render_daily_plan(procurement_df, tasks_database, team_database, availability_database)
-    elif selected == "👤 Technician":
-        render_technician(procurement_df, tasks_database, team_database, availability_database)
-    elif selected == "📆 Projection":
-        render_projection(procurement_df, tasks_database, team_database, availability_database)
-    elif selected == "📝 Daily Report":
-        render_daily_report(procurement_df, tasks_database, team_database, availability_database)
-    elif selected == "📊 Database":
-        render_database(tasks_database, team_database, availability_database)
-    elif selected == "⚙️ Settings":
-        render_settings()
+def update_proj_field(p_key, task_name, field, widget_key):
+    st.session_state["project_tasks_store"][p_key][task_name][field] = st.session_state[widget_key]
+    save_all_assignments_to_sheet()
+    add_to_audit_log("update_proj_field", f"{p_key} - {task_name} - {field}: {st.session_state[widget_key]}")
 
 # --- RENDER FUNCTIONS ---
 def render_dashboard(procurement_df, tasks_database, team_database, availability_database):
@@ -839,4 +735,93 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
                 x=list(project_hours.keys()),
                 y=list(project_hours.values()),
                 title="Συνολικές Ώρες ανά Project",
-                labels={"x": "Project",
+                labels={"x": "Project", "y": "Ώρες"}
+            )
+            fig.update_layout(
+                xaxis_tickangle=-45,
+                height=400,
+                showlegend=False
+            )
+            st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        st.subheader("📈 Πρόοδος ανά Project")
+        if project_progress:
+            fig = px.bar(
+                x=list(project_progress.keys()),
+                y=list(project_progress.values()),
+                title="Ποσοστό Ολοκλήρωσης ανά Project",
+                labels={"x": "Project", "y": "Πρόοδος (%)"},
+                color=list(project_progress.values()),
+                color_continuous_scale="RdYlGn",
+                range_color=[0, 100]
+            )
+            fig.update_layout(
+                xaxis_tickangle=-45,
+                height=400,
+                showlegend=False
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+    
+    # Data table
+    st.subheader("📋 Λεπτομερής Κατάσταση Projects")
+    if dashboard_data:
+        dash_df = pd.DataFrame(dashboard_data)
+        st.dataframe(dash_df, use_container_width=True, hide_index=True)
+    
+    # Add export buttons
+    col_exp1, col_exp2 = st.columns(2)
+    with col_exp1:
+        if dashboard_data:
+            dash_df = pd.DataFrame(dashboard_data)
+            csv = dash_df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📊 Εξαγωγή CSV",
+                data=csv,
+                file_name=f"Dashboard_{date.today().strftime('%Y-%m-%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+    with col_exp2:
+        if dashboard_data:
+            dash_df = pd.DataFrame(dashboard_data)
+            excel_data = export_to_excel(dash_df, "Dashboard")
+            st.download_button(
+                label="📄 Εξαγωγή Excel",
+                data=excel_data,
+                file_name=f"Dashboard_{date.today().strftime('%Y-%m-%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+def render_project(procurement_df, tasks_database, team_database, availability_database):
+    """Render Project tab"""
+    st.header("📋 Διαχείριση Παραγωγής & Αναθέσεις ανά Project")
+    
+    if procurement_df.empty:
+        st.warning("⚠️ No procurement data available.")
+        return
+    
+    projects_list = sorted([p for p in procurement_df["Project"].unique().tolist() if p != "-"])
+    selected_project = st.selectbox("Επιλέξτε Project:", projects_list)
+    
+    filtered_df = procurement_df[procurement_df["Project"] == selected_project].copy()
+    
+    project_main_qty = 1
+    for _, r in filtered_df.iterrows():
+        if str(r["Ποσότητα"]).isdigit():
+            project_main_qty = max(project_main_qty, int(r["Ποσότητα"]))
+            
+    total_project_hours = 0.0
+    completed_project_hours = 0.0
+    total_tasks_count = 0
+    completed_tasks_count = 0
+
+    task_options = ["- Επιλογή Εργασίας -"] + sorted(list(tasks_database.keys()))
+    team_options = ["- Χωρίς Ανάθεση -"] + team_database
+
+    st.subheader(f"📦 Εργασίες ανά Υλικό ({len(filtered_df)} Υλικά)")
+
+    for
