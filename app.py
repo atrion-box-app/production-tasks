@@ -199,16 +199,16 @@ def load_all_data():
 
 procurement_df, tasks_database, team_database, availability_database = load_all_data()
 
-# 1. Φόρτωση από το Google Sheet ΠΡΩΤΑ
 sheet_item_assignments, sheet_proj_assignments = load_assignments_from_sheet()
 
-# 2. Σωστή Αρχικοποίηση Session State με βάση τα δεδομένα του Google Sheet
 if "tasks_store" not in st.session_state:
     st.session_state["tasks_store"] = {}
-    if procurement_df is not None and not procurement_df.empty:
-        for idx, row in procurement_df.iterrows():
-            item_id = str(row["ID"])
-            u_key = f"{item_id}_{idx}"
+
+if procurement_df is not None and not procurement_df.empty:
+    for idx, row in procurement_df.iterrows():
+        item_id = str(row["ID"])
+        u_key = f"{item_id}_{idx}"
+        if u_key not in st.session_state["tasks_store"]:
             if item_id in sheet_item_assignments:
                 st.session_state["tasks_store"][u_key] = sheet_item_assignments[item_id]
             else:
@@ -225,6 +225,7 @@ FIXED_PROJECT_TASKS = [
     "Τοποθέτηση σε χαρτοκιβώτια"
 ]
 
+# --- ΚΟΙΝΕΣ CALLBACKS ΓΙΑ ΑΜΕΣΟ ΣΥΓΧΡΟΝΙΣΜΟ ΣΕ ΟΛΑ ΤΑ TABS ---
 def toggle_project_task(p_key, task_name, chk_key):
     st.session_state["project_tasks_store"][p_key][task_name]["done"] = st.session_state[chk_key]
     save_all_assignments_to_sheet()
@@ -398,14 +399,14 @@ with tab_proj:
                     for t_idx, t_data in enumerate(list(item_tasks)):
                         c_check, c_task, c_user, c_date, c_time, c_del = st.columns([0.08, 0.32, 0.23, 0.18, 0.11, 0.08])
                         
-                        chk_k = f"chk_{unique_item_key}_{t_idx}"
+                        chk_k = f"proj_chk_{unique_item_key}_{t_idx}"
                         is_done = c_check.checkbox(
                             "", value=t_data["done"], key=chk_k,
                             on_change=toggle_item_task, args=(unique_item_key, t_idx, chk_k)
                         )
                         
                         task_idx = task_options.index(t_data["task"]) if t_data["task"] in task_options else 0
-                        task_k = f"task_{unique_item_key}_{t_idx}"
+                        task_k = f"proj_task_{unique_item_key}_{t_idx}"
                         selected_task = c_task.selectbox(
                             "Εργασία", task_options, index=task_idx, 
                             key=task_k, label_visibility="collapsed",
@@ -413,14 +414,14 @@ with tab_proj:
                         )
                         
                         user_idx = team_options.index(t_data["user"]) if t_data["user"] in team_options else 0
-                        user_k = f"user_{unique_item_key}_{t_idx}"
+                        user_k = f"proj_user_{unique_item_key}_{t_idx}"
                         assigned_user = c_user.selectbox(
                             "Ανάθεση", team_options, index=user_idx, 
                             key=user_k, label_visibility="collapsed",
                             on_change=update_item_field, args=(unique_item_key, t_idx, "user", user_k)
                         )
                         
-                        date_k = f"date_{unique_item_key}_{t_idx}"
+                        date_k = f"proj_date_{unique_item_key}_{t_idx}"
                         assign_date = c_date.date_input(
                             "Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", 
                             key=date_k, label_visibility="collapsed",
@@ -493,7 +494,7 @@ with tab_proj:
                 
                 is_done = False
                 if is_active:
-                    pdone_k = f"pdone_{proj_key}_{task_name}"
+                    pdone_k = f"proj_pdone_{proj_key}_{task_name}"
                     is_done = c_done.checkbox(
                         "Done", value=t_data["done"], key=pdone_k,
                         on_change=toggle_project_task, args=(proj_key, task_name, pdone_k)
