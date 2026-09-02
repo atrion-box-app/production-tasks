@@ -449,6 +449,12 @@ with tab_proj:
                     st.write(f"• **Προμηθευτής:** {row['Προμηθευτής']}")
                     st.write(f"• **Ημ. Παράδοσης:** {row['Ημερομηνία Παράδοσης']}")
                     st.write(f"• **Αναμ. Παραλαβή:** {row['Αναμενόμενη Ημ. Παραλαβής']}")
+                    
+                    if status not in ["OK STOCK", "RECEIVED", "READY"]:
+                        st.warning(f"⚠️ Εκκρεμότητα Procurement: {status}")
+                    else:
+                        st.success(f"✅ Υλικό Διαθέσιμο: {status}")
+                        
                     st.divider()
 
                 with col_tasks:
@@ -610,7 +616,7 @@ with tab_proj:
             save_all_assignments_to_sheet()
             st.success("✅ Όλες οι αναθέσεις αποθηκεύτηκαν επιτυχώς στο Google Sheet!")
 
-# --- 3. ΗΜΕΡΗΣΙΟ ΠΛΑΝΟ (INTERACTIVE ΜΕ ΦΙΛΤΡΑ & PRINTABLE PDF) ---
+# --- 3. ΗΜΕΡΗΣΙΟ ΠΛΑΝΟ (INTERACTIVE ΜΕ ALERTS & EXPORT) ---
 with col_plan:
     st.header("🗓️ Συγκεντρωτικό Πλάνο Παραγωγής & Διαδραστική Αλλαγή Status")
     
@@ -746,6 +752,11 @@ with col_plan:
             use_container_width=True
         )
 
+        # Εμφάνιση προειδοποίησης αν υπάρχουν εκκρεμότητες υλικών
+        pending_proc = [dt for dt in daily_tasks if dt["status_proc"] not in ["OK STOCK", "RECEIVED", "READY"]]
+        if pending_proc:
+            st.warning(f"⚠️ **Προσοχή:** Υπάρχουν **{len(pending_proc)} tasks** των οποίων τα υλικά βρίσκονται σε εκκρεμότητα στο Procurement!")
+
         st.markdown("#### 👥 Φόρτος Εργασίας & Διαθεσιμότητα Ομάδας")
         
         day_availability = availability_database.get(greek_day_name, {})
@@ -779,7 +790,7 @@ with col_plan:
         st.markdown("#### 📋 Διαδραστική Λίστα Εργασιών (Τσεκάρετε [✓] για Ολοκλήρωση)")
         
         for d_idx, dt in enumerate(daily_tasks):
-            col_chk, col_p, col_mat, col_tsk, col_user, col_hrs, col_st = st.columns([0.08, 0.20, 0.26, 0.20, 0.14, 0.07, 0.10])
+            col_chk, col_p, col_mat, col_tsk, col_user, col_hrs, col_st = st.columns([0.08, 0.20, 0.26, 0.20, 0.14, 0.07, 0.12])
             
             if dt["type"] == "project":
                 chk_k = f"plan_pdone_{dt['p_key']}_{dt['task_name']}_{d_idx}"
@@ -806,14 +817,14 @@ with col_plan:
             col_hrs.write(f"{dt['Ώρες']}h")
             
             if dt['status_proc'] in ["OK STOCK", "RECEIVED", "READY"]:
-                col_st.success(dt['status_proc'])
+                col_st.success(f"✅ {dt['status_proc']}")
             else:
-                col_st.warning(dt['status_proc'])
+                col_st.error(f"⚠️ {dt['status_proc']}")
 
     else:
         st.info(f"Δεν βρέθηκαν εργασίες για τις {target_date.strftime('%d/%m/%Y')} με τα συγκεκριμένα φίλτρα.")
 
-# --- 4. ΠΡΟΓΡΑΜΜΑ ΤΕΧΝΙΤΗ (INTERACTIVE ΜΕ PRINTABLE PDF) ---
+# --- 4. ΠΡΟΓΡΑΜΜΑ ΤΕΧΝΙΤΗ (INTERACTIVE ΜΕ ALERTS & EXPORT) ---
 with tab_tech:
     st.header("👤 Ημερήσιο Πρόγραμμα Εργασιών ανά Τεχνίτη (Interactive)")
     
@@ -923,6 +934,11 @@ with tab_tech:
         total_w_hours = sum(t["hours"] for t in worker_tasks)
         st.info(f"💡 Συνολικός εκτιμώμενος χρόνος εργασίας: **{round(total_w_hours, 1)} Ώρες** ({len(worker_tasks)} Tasks)")
         
+        # Εδοποίηση για υλικά σε εκκρεμότητα
+        pending_w_proc = [wt for wt in worker_tasks if wt["status_proc"] not in ["OK STOCK", "RECEIVED", "READY"]]
+        if pending_w_proc:
+            st.warning(f"⚠️ Ο/Η {selected_member} έχει **{len(pending_w_proc)} tasks** με υλικά που βρίσκονται ακόμη σε εκκρεμότητα (ORDERED / PENDING).")
+
         st.divider()
 
         for w_idx, wt in enumerate(worker_tasks):
@@ -953,9 +969,9 @@ with tab_tech:
             col_h.caption(f"{wt['hours']}h")
             
             if wt['status_proc'] in ["OK STOCK", "RECEIVED", "READY"]:
-                col_proc.success(wt['status_proc'])
+                col_proc.success(f"✅ {wt['status_proc']}")
             else:
-                col_proc.warning(wt['status_proc'])
+                col_proc.error(f"⚠️ {wt['status_proc']}")
     else:
         st.subheader(f"📋 Πρόγραμμα για τον/την {selected_member} — {target_date.strftime('%d/%m/%Y')}")
         st.success(f"🎉 Δεν έχουν ανατεθεί εργασίες στον/στην {selected_member} για τις {target_date.strftime('%d/%m/%Y')}.")
