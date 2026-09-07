@@ -29,15 +29,12 @@ st.markdown("""
         .stSelectbox, .stDateInput { margin-bottom: 10px; }
     }
     
-    /* Project Cards Styles */
     .project-card {
         background: white;
         border-radius: 12px;
         padding: 20px;
         margin: 10px 0;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        cursor: pointer;
-        transition: all 0.3s ease;
         border-left: 5px solid #1e88e5;
         position: relative;
         height: 100%;
@@ -94,114 +91,6 @@ st.markdown("""
         background: #fce4ec;
         color: #c62828;
     }
-    .project-card .card-button {
-        position: absolute;
-        bottom: 15px;
-        right: 15px;
-        background: #1e88e5;
-        color: white;
-        border: none;
-        padding: 6px 15px;
-        border-radius: 20px;
-        font-size: 12px;
-        cursor: pointer;
-    }
-    .project-card .card-button:hover {
-        background: #1565c0;
-    }
-    
-    /* Modal styles */
-    .modal-overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.5);
-        z-index: 1000;
-        justify-content: center;
-        align-items: center;
-    }
-    .modal-overlay.active {
-        display: flex !important;
-    }
-    .modal-content {
-        background: white;
-        border-radius: 16px;
-        max-width: 900px;
-        width: 95%;
-        max-height: 90vh;
-        overflow-y: auto;
-        padding: 30px;
-        position: relative;
-        animation: slideIn 0.3s ease;
-    }
-    @keyframes slideIn {
-        from { transform: translateY(-50px); opacity: 0; }
-        to { transform: translateY(0); opacity: 1; }
-    }
-    .modal-close {
-        position: sticky;
-        top: 0;
-        float: right;
-        background: #f5f5f5;
-        border: none;
-        font-size: 24px;
-        cursor: pointer;
-        padding: 8px 16px;
-        border-radius: 50%;
-        transition: background 0.3s;
-        z-index: 10;
-    }
-    .modal-close:hover {
-        background: #e0e0e0;
-    }
-    .modal-title {
-        font-size: 24px;
-        color: #1e88e5;
-        border-bottom: 2px solid #1e88e5;
-        padding-bottom: 10px;
-        margin-bottom: 20px;
-    }
-    .modal-section {
-        margin: 20px 0;
-        padding: 15px;
-        background: #f8f9fa;
-        border-radius: 8px;
-    }
-    .modal-section h4 {
-        color: #1e88e5;
-        margin-bottom: 10px;
-    }
-    .modal-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-    }
-    .modal-item {
-        padding: 8px 12px;
-        background: white;
-        border-radius: 6px;
-        border-left: 3px solid #1e88e5;
-    }
-    .modal-item .label {
-        font-size: 11px;
-        color: #999;
-        text-transform: uppercase;
-    }
-    .modal-item .value {
-        font-size: 14px;
-        font-weight: 500;
-    }
-    @media (max-width: 768px) {
-        .modal-grid {
-            grid-template-columns: 1fr;
-        }
-        .modal-content {
-            padding: 15px;
-        }
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -217,8 +106,6 @@ def init_auth():
         st.session_state.last_login_attempt = None
     if "selected_project" not in st.session_state:
         st.session_state.selected_project = None
-    if "modal_open" not in st.session_state:
-        st.session_state.modal_open = False
     if "show_modal" not in st.session_state:
         st.session_state.show_modal = False
 
@@ -594,7 +481,7 @@ def update_proj_field(p_key, task_name, field, widget_key):
     st.session_state["project_tasks_store"][p_key][task_name][field] = st.session_state[widget_key]
     save_all_assignments_to_sheet()
 
-# --- NEW: PROJECT CARDS FUNCTIONS ---
+# --- PROJECT CARDS FUNCTIONS ---
 def get_project_details(project_name, procurement_df, tasks_database):
     """Get all details for a specific project"""
     items = procurement_df[procurement_df["Project"] == project_name].copy() if not procurement_df.empty else pd.DataFrame()
@@ -726,6 +613,114 @@ def show_project_modal(project_data, tasks_database, team_database):
         else:
             st.info("Δεν έχουν οριστεί γενικές εργασίες")
 
+def render_dashboard(procurement_df, tasks_database, team_database, availability_database):
+    st.header("📈 Dashboard & Επισκόπηση Παραγωγής")
+    
+    if procurement_df.empty:
+        st.warning("⚠️ No procurement data available.")
+        return
+    
+    projects_list = sorted([p for p in procurement_df["Project"].unique().tolist() if p != "-"])
+    dashboard_data = []
+    tot_all_hours = 0.0
+    tot_done_hours = 0.0
+    tot_tasks_count = 0
+    tot_done_tasks = 0
+    project_hours = {}
+    project_progress = {}
+    
+    for p_name in projects_list:
+        filtered_p = procurement_df[procurement_df["Project"] == p_name]
+        p_main_qty = 1
+        for _, r in filtered_p.iterrows():
+            if str(r["Ποσότητα"]).isdigit():
+                p_main_qty = max(p_main_qty, int(r["Ποσότητα"]))
+
+        p_total_hrs = 0.0
+        p_done_hrs = 0.0
+        p_tasks_cnt = 0
+        p_done_cnt = 0
+        
+        for idx, r in filtered_p.iterrows():
+            item_id = str(r["ID"])
+            u_key = f"{item_id}_{idx}"
+            qty = int(r["Ποσότητα"]) if str(r["Ποσότητα"]).isdigit() else 1
+            item_tasks = st.session_state["tasks_store"].get(u_key, [])
+            for t in item_tasks:
+                if t["task"] != "- Επιλογή Εργασίας -":
+                    auto_t = tasks_database.get(t["task"], 0.0)
+                    hrs = (auto_t * qty) / 60
+                    p_total_hrs += hrs
+                    p_tasks_cnt += 1
+                    if t["done"]:
+                        p_done_hrs += hrs
+                        p_done_cnt += 1
+
+        p_key = f"proj_{p_name}"
+        p_tasks_dict = st.session_state["project_tasks_store"].get(p_key, {})
+        if isinstance(p_tasks_dict, dict):
+            for t_name, p_data in p_tasks_dict.items():
+                if isinstance(p_data, dict) and p_data.get("active", False):
+                    auto_t = tasks_database.get(t_name, 0.0)
+                    hrs = (auto_t * p_main_qty) / 60
+                    p_total_hrs += hrs
+                    p_tasks_cnt += 1
+                    if p_data.get("done", False):
+                        p_done_hrs += hrs
+                        p_done_cnt += 1
+
+        tot_all_hours += p_total_hrs
+        tot_done_hours += p_done_hrs
+        tot_tasks_count += p_tasks_cnt
+        tot_done_tasks += p_done_cnt
+        p_progress = int((p_done_cnt / p_tasks_cnt) * 100) if p_tasks_cnt > 0 else 0
+        project_hours[p_name] = p_total_hrs
+        project_progress[p_name] = p_progress
+        dashboard_data.append({
+            "Project": p_name,
+            "Υλικά": len(filtered_p),
+            "Σύνολο Tasks": p_tasks_cnt,
+            "Ολοκληρωμένα": p_done_cnt,
+            "Συνολικές Ώρες": round(p_total_hrs, 1),
+            "Υπολειπόμενες": round(p_total_hrs - p_done_hrs, 1),
+            "Πρόοδος": f"{p_progress}%"
+        })
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Ενεργά Projects", len(projects_list))
+    c2.metric("Συνολικές Ώρες", f"{round(tot_all_hours, 1)}h")
+    overall_pct = int((tot_done_tasks / tot_tasks_count) * 100) if tot_tasks_count > 0 else 0
+    c3.metric("Συνολική Πρόοδος", f"{overall_pct}%")
+    c4.metric("Εκκρεμή Tasks", tot_tasks_count - tot_done_tasks)
+
+    st.divider()
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("📊 Ώρες ανά Project")
+        if project_hours:
+            chart_data = pd.DataFrame({"Project": list(project_hours.keys()), "Ώρες": list(project_hours.values())})
+            st.bar_chart(chart_data, x="Project", y="Ώρες", use_container_width=True)
+    
+    with col2:
+        st.subheader("📈 Πρόοδος ανά Project")
+        if project_progress:
+            chart_data = pd.DataFrame({"Project": list(project_progress.keys()), "Πρόοδος (%)": list(project_progress.values())})
+            st.bar_chart(chart_data, x="Project", y="Πρόοδος (%)", use_container_width=True)
+
+    st.divider()
+    if dashboard_data:
+        dash_df = pd.DataFrame(dashboard_data)
+        st.dataframe(dash_df, use_container_width=True, hide_index=True)
+        
+        col_exp1, col_exp2 = st.columns(2)
+        with col_exp1:
+            csv = dash_df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(label="📊 Εξαγωγή CSV", data=csv, file_name=f"Dashboard_{date.today().strftime('%Y-%m-%d')}.csv", mime="text/csv", use_container_width=True)
+        with col_exp2:
+            excel_data = export_to_excel(dash_df, "Dashboard")
+            st.download_button(label="📄 Εξαγωγή Excel", data=excel_data, file_name=f"Dashboard_{date.today().strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+
 def render_project_cards(procurement_df, tasks_database, team_database, availability_database):
     """Render projects as cards"""
     st.header("📇 Project Cards")
@@ -768,7 +763,7 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
         col_idx = i % 3
         
         with cols[col_idx]:
-            # Card with button
+            # Card with HTML
             card_html = f"""
             <div class="project-card">
                 <div class="project-status {proj_data['status_class']}">{proj_data['status']}</div>
@@ -797,7 +792,6 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
     
     # Show modal if a project is selected
     if st.session_state.show_modal and st.session_state.selected_project:
-        # Find the selected project data
         selected_data = None
         for p in all_projects:
             if p['name'] == st.session_state.selected_project:
@@ -806,7 +800,6 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
         
         if selected_data:
             st.divider()
-            st.markdown(f"### 📦 Λεπτομέρειες Project: {selected_data['name']}")
             show_project_modal(selected_data, tasks_database, team_database)
             
             if st.button("✕ Κλείσιμο Λεπτομερειών", use_container_width=True):
