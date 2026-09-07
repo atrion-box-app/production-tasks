@@ -40,6 +40,11 @@ st.markdown("""
         transition: all 0.3s ease;
         border-left: 5px solid #1e88e5;
         position: relative;
+        height: 100%;
+        min-height: 180px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
     }
     .project-card:hover {
         transform: translateY(-3px);
@@ -57,12 +62,13 @@ st.markdown("""
         color: #666;
         display: flex;
         flex-wrap: wrap;
-        gap: 15px;
+        gap: 8px;
     }
     .project-card .project-meta span {
         background: #f5f5f5;
-        padding: 3px 10px;
+        padding: 2px 10px;
         border-radius: 12px;
+        font-size: 12px;
     }
     .project-card .project-progress {
         margin-top: 12px;
@@ -73,7 +79,7 @@ st.markdown("""
         right: 15px;
         padding: 4px 12px;
         border-radius: 20px;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: bold;
     }
     .project-card .project-status.completed {
@@ -88,8 +94,23 @@ st.markdown("""
         background: #fce4ec;
         color: #c62828;
     }
+    .project-card .card-button {
+        position: absolute;
+        bottom: 15px;
+        right: 15px;
+        background: #1e88e5;
+        color: white;
+        border: none;
+        padding: 6px 15px;
+        border-radius: 20px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+    .project-card .card-button:hover {
+        background: #1565c0;
+    }
     
-    /* Modal overlay */
+    /* Modal styles */
     .modal-overlay {
         display: none;
         position: fixed;
@@ -103,7 +124,7 @@ st.markdown("""
         align-items: center;
     }
     .modal-overlay.active {
-        display: flex;
+        display: flex !important;
     }
     .modal-content {
         background: white;
@@ -198,6 +219,8 @@ def init_auth():
         st.session_state.selected_project = None
     if "modal_open" not in st.session_state:
         st.session_state.modal_open = False
+    if "show_modal" not in st.session_state:
+        st.session_state.show_modal = False
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -574,17 +597,14 @@ def update_proj_field(p_key, task_name, field, widget_key):
 # --- NEW: PROJECT CARDS FUNCTIONS ---
 def get_project_details(project_name, procurement_df, tasks_database):
     """Get all details for a specific project"""
-    # Get procurement items
     items = procurement_df[procurement_df["Project"] == project_name].copy() if not procurement_df.empty else pd.DataFrame()
     
-    # Calculate project stats
     total_hours = 0
     completed_hours = 0
     total_tasks = 0
     completed_tasks = 0
     materials_count = len(items)
     
-    # Get project tasks
     p_key = f"proj_{project_name}"
     project_tasks = st.session_state.get("project_tasks_store", {}).get(p_key, {})
     
@@ -606,15 +626,15 @@ def get_project_details(project_name, procurement_df, tasks_database):
                     completed_tasks += 1
     
     # Calculate stats from project tasks
+    main_qty = 1
+    if not items.empty:
+        for _, r in items.iterrows():
+            if str(r["Ποσότητα"]).isdigit():
+                main_qty = max(main_qty, int(r["Ποσότητα"]))
+    
     if isinstance(project_tasks, dict):
         for task_name, p_data in project_tasks.items():
             if isinstance(p_data, dict) and p_data.get("active", False):
-                # Get project main quantity
-                main_qty = 1
-                if not items.empty:
-                    for _, r in items.iterrows():
-                        if str(r["Ποσότητα"]).isdigit():
-                            main_qty = max(main_qty, int(r["Ποσότητα"]))
                 auto_t = tasks_database.get(task_name, 0.0)
                 hrs = (auto_t * main_qty) / 60
                 total_hours += hrs
@@ -623,10 +643,8 @@ def get_project_details(project_name, procurement_df, tasks_database):
                     completed_hours += hrs
                     completed_tasks += 1
     
-    # Calculate progress
     progress = int((completed_tasks / total_tasks) * 100) if total_tasks > 0 else 0
     
-    # Determine status
     if progress == 100 and total_tasks > 0:
         status = "Ολοκληρώθηκε"
         status_class = "completed"
@@ -637,9 +655,20 @@ def get_project_details(project_name, procurement_df, tasks_database):
         status = "Αναμονή"
         status_class = "pending"
     
+    # Get materials list
+    materials_list = []
+    for _, item in items.iterrows():
+        materials_list.append({
+            "id": item['ID'],
+            "name": item['Υλικό / Προϊόν'],
+            "qty": item['Ποσότητα'],
+            "status": item['Status Procurement']
+        })
+    
     return {
         "name": project_name,
         "items": items,
+        "materials_list": materials_list,
         "total_hours": round(total_hours, 1),
         "completed_hours": round(completed_hours, 1),
         "remaining_hours": round(total_hours - completed_hours, 1),
@@ -652,234 +681,59 @@ def get_project_details(project_name, procurement_df, tasks_database):
         "project_tasks": project_tasks
     }
 
-def render_project_card(project_data):
-    """Render a single project card"""
-    html = f"""
-    <div class="project-card" onclick="document.getElementById('modal-{project_data['name']}').style.display='flex'">
-        <div class="project-status {project_data['status_class']}">{project_data['status']}</div>
-        <div class="project-title">📦 {project_data['name']}</div>
-        <div class="project-meta">
-            <span>📋 {project_data['materials_count']} Υλικά</span>
-            <span>⚙️ {project_data['total_tasks']} Tasks</span>
-            <span>⏱️ {project_data['total_hours']}h</span>
-            <span>✅ {project_data['completed_tasks']}/{project_data['total_tasks']}</span>
-        </div>
-        <div class="project-progress">
-            <div style="background:#e0e0e0;border-radius:8px;height:8px;overflow:hidden;">
-                <div style="background:#1e88e5;height:100%;width:{project_data['progress']}%;border-radius:8px;transition:width 0.5s ease;"></div>
-            </div>
-            <div style="font-size:12px;color:#666;margin-top:3px;">{project_data['progress']}% Πρόοδος</div>
-        </div>
-    </div>
-    """
-    return html
-
-def render_project_modal(project_data, tasks_database, team_database):
-    """Render the modal for a project"""
-    html = f"""
-    <div id="modal-{project_data['name']}" class="modal-overlay" style="display:none;" onclick="if(event.target===this)document.getElementById('modal-{project_data['name']}').style.display='none'">
-        <div class="modal-content">
-            <button class="modal-close" onclick="document.getElementById('modal-{project_data['name']}').style.display='none'">✕</button>
-            <div class="modal-title">📦 {project_data['name']}</div>
-            
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:20px;">
-                <div style="background:#e3f2fd;padding:12px;border-radius:8px;text-align:center;">
-                    <div style="font-size:20px;font-weight:bold;color:#1e88e5;">{project_data['total_hours']}h</div>
-                    <div style="font-size:12px;color:#666;">Συνολικές Ώρες</div>
-                </div>
-                <div style="background:#e8f5e9;padding:12px;border-radius:8px;text-align:center;">
-                    <div style="font-size:20px;font-weight:bold;color:#2e7d32;">{project_data['completed_hours']}h</div>
-                    <div style="font-size:12px;color:#666;">Ολοκληρωμένες</div>
-                </div>
-                <div style="background:#fff3e0;padding:12px;border-radius:8px;text-align:center;">
-                    <div style="font-size:20px;font-weight:bold;color:#e65100;">{project_data['remaining_hours']}h</div>
-                    <div style="font-size:12px;color:#666;">Υπολειπόμενες</div>
-                </div>
-                <div style="background:#f3e5f5;padding:12px;border-radius:8px;text-align:center;">
-                    <div style="font-size:20px;font-weight:bold;color:#6a1b9a;">{project_data['progress']}%</div>
-                    <div style="font-size:12px;color:#666;">Πρόοδος</div>
-                </div>
-            </div>
-            
-            <div class="modal-section">
-                <h4>📋 Υλικά & Είδη ({project_data['materials_count']})</h4>
-                <div class="modal-grid">
-    """
-    
-    if not project_data['items'].empty:
-        for _, item in project_data['items'].iterrows():
-            html += f"""
-                <div class="modal-item">
-                    <div class="label">🆔 {item['ID']}</div>
-                    <div class="value">{item['Υλικό / Προϊόν']}</div>
-                    <div style="font-size:12px;color:#888;">
-                        Ποσότητα: {item['Ποσότητα']} | {item['Status Procurement']}
-                    </div>
-                </div>
-            """
-    else:
-        html += "<div style='grid-column:1/-1;color:#888;'>Δεν βρέθηκαν υλικά</div>"
-    
-    html += """
-                </div>
-            </div>
-            
-            <div class="modal-section">
-                <h4>⚙️ Γενικές Εργασίες Project</h4>
-                <div class="modal-grid">
-    """
-    
-    if isinstance(project_data['project_tasks'], dict):
-        for task_name, p_data in project_data['project_tasks'].items():
-            if isinstance(p_data, dict):
-                status_icon = "✅" if p_data.get("done", False) else "⏳"
-                assigned_to = p_data.get("user", "-")
-                is_active = p_data.get("active", False)
-                html += f"""
-                    <div class="modal-item" style="{'opacity:0.5;' if not is_active else ''}">
-                        <div class="label">{status_icon} {task_name}</div>
-                        <div class="value">{assigned_to}</div>
-                        <div style="font-size:12px;color:#888;">
-                            {p_data.get('date', '')} | {'Ενεργό' if is_active else 'Ανενεργό'}
-                        </div>
-                    </div>
-                """
-    else:
-        html += "<div style='grid-column:1/-1;color:#888;'>Δεν έχουν οριστεί γενικές εργασίες</div>"
-    
-    html += f"""
-                </div>
-            </div>
-            
-            <div style="text-align:center;margin-top:20px;">
-                <button onclick="document.getElementById('modal-{project_data['name']}').style.display='none'" 
-                        style="padding:10px 30px;background:#1e88e5;color:white;border:none;border-radius:5px;cursor:pointer;">
-                    ✕ Κλείσιμο
-                </button>
-            </div>
-        </div>
-    </div>
-    """
-    return html
-
-# --- RENDER FUNCTIONS ---
-def render_dashboard(procurement_df, tasks_database, team_database, availability_database):
-    st.header("📈 Dashboard & Επισκόπηση Παραγωγής")
-    
-    if procurement_df.empty:
-        st.warning("⚠️ No procurement data available.")
-        return
-    
-    projects_list = sorted([p for p in procurement_df["Project"].unique().tolist() if p != "-"])
-    dashboard_data = []
-    tot_all_hours = 0.0
-    tot_done_hours = 0.0
-    tot_tasks_count = 0
-    tot_done_tasks = 0
-    project_hours = {}
-    project_progress = {}
-    
-    for p_name in projects_list:
-        filtered_p = procurement_df[procurement_df["Project"] == p_name]
-        p_main_qty = 1
-        for _, r in filtered_p.iterrows():
-            if str(r["Ποσότητα"]).isdigit():
-                p_main_qty = max(p_main_qty, int(r["Ποσότητα"]))
-
-        p_total_hrs = 0.0
-        p_done_hrs = 0.0
-        p_tasks_cnt = 0
-        p_done_cnt = 0
+def show_project_modal(project_data, tasks_database, team_database):
+    """Show modal dialog with project details"""
+    with st.expander(f"📦 {project_data['name']} - Λεπτομέρειες", expanded=True):
+        # Summary metrics
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Συνολικές Ώρες", f"{project_data['total_hours']}h")
+        col2.metric("Ολοκληρωμένες", f"{project_data['completed_hours']}h")
+        col3.metric("Υπολειπόμενες", f"{project_data['remaining_hours']}h")
+        col4.metric("Πρόοδος", f"{project_data['progress']}%")
         
-        for idx, r in filtered_p.iterrows():
-            item_id = str(r["ID"])
-            u_key = f"{item_id}_{idx}"
-            qty = int(r["Ποσότητα"]) if str(r["Ποσότητα"]).isdigit() else 1
-            item_tasks = st.session_state["tasks_store"].get(u_key, [])
-            for t in item_tasks:
-                if t["task"] != "- Επιλογή Εργασίας -":
-                    auto_t = tasks_database.get(t["task"], 0.0)
-                    hrs = (auto_t * qty) / 60
-                    p_total_hrs += hrs
-                    p_tasks_cnt += 1
-                    if t["done"]:
-                        p_done_hrs += hrs
-                        p_done_cnt += 1
-
-        p_key = f"proj_{p_name}"
-        p_tasks_dict = st.session_state["project_tasks_store"].get(p_key, {})
-        if isinstance(p_tasks_dict, dict):
-            for t_name, p_data in p_tasks_dict.items():
-                if isinstance(p_data, dict) and p_data.get("active", False):
-                    auto_t = tasks_database.get(t_name, 0.0)
-                    hrs = (auto_t * p_main_qty) / 60
-                    p_total_hrs += hrs
-                    p_tasks_cnt += 1
-                    if p_data.get("done", False):
-                        p_done_hrs += hrs
-                        p_done_cnt += 1
-
-        tot_all_hours += p_total_hrs
-        tot_done_hours += p_done_hrs
-        tot_tasks_count += p_tasks_cnt
-        tot_done_tasks += p_done_cnt
-        p_progress = int((p_done_cnt / p_tasks_cnt) * 100) if p_tasks_cnt > 0 else 0
-        project_hours[p_name] = p_total_hrs
-        project_progress[p_name] = p_progress
-        dashboard_data.append({
-            "Project": p_name,
-            "Υλικά": len(filtered_p),
-            "Σύνολο Tasks": p_tasks_cnt,
-            "Ολοκληρωμένα": p_done_cnt,
-            "Συνολικές Ώρες": round(p_total_hrs, 1),
-            "Υπολειπόμενες": round(p_total_hrs - p_done_hrs, 1),
-            "Πρόοδος": f"{p_progress}%"
-        })
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Ενεργά Projects", len(projects_list))
-    c2.metric("Συνολικές Ώρες", f"{round(tot_all_hours, 1)}h")
-    overall_pct = int((tot_done_tasks / tot_tasks_count) * 100) if tot_tasks_count > 0 else 0
-    c3.metric("Συνολική Πρόοδος", f"{overall_pct}%")
-    c4.metric("Εκκρεμή Tasks", tot_tasks_count - tot_done_tasks)
-
-    st.divider()
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("📊 Ώρες ανά Project")
-        if project_hours:
-            chart_data = pd.DataFrame({"Project": list(project_hours.keys()), "Ώρες": list(project_hours.values())})
-            st.bar_chart(chart_data, x="Project", y="Ώρες", use_container_width=True)
-    
-    with col2:
-        st.subheader("📈 Πρόοδος ανά Project")
-        if project_progress:
-            chart_data = pd.DataFrame({"Project": list(project_progress.keys()), "Πρόοδος (%)": list(project_progress.values())})
-            st.bar_chart(chart_data, x="Project", y="Πρόοδος (%)", use_container_width=True)
-
-    st.divider()
-    if dashboard_data:
-        dash_df = pd.DataFrame(dashboard_data)
-        st.dataframe(dash_df, use_container_width=True, hide_index=True)
+        st.progress(project_data['progress'] / 100)
         
-        col_exp1, col_exp2 = st.columns(2)
-        with col_exp1:
-            csv = dash_df.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(label="📊 Εξαγωγή CSV", data=csv, file_name=f"Dashboard_{date.today().strftime('%Y-%m-%d')}.csv", mime="text/csv", use_container_width=True)
-        with col_exp2:
-            excel_data = export_to_excel(dash_df, "Dashboard")
-            st.download_button(label="📄 Εξαγωγή Excel", data=excel_data, file_name=f"Dashboard_{date.today().strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+        st.divider()
+        
+        # Materials
+        st.subheader(f"📋 Υλικά & Είδη ({project_data['materials_count']})")
+        if project_data['materials_list']:
+            materials_df = pd.DataFrame(project_data['materials_list'])
+            st.dataframe(materials_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("Δεν βρέθηκαν υλικά")
+        
+        st.divider()
+        
+        # Project tasks
+        st.subheader("⚙️ Γενικές Εργασίες Project")
+        if isinstance(project_data['project_tasks'], dict):
+            tasks_data = []
+            for task_name, p_data in project_data['project_tasks'].items():
+                if isinstance(p_data, dict):
+                    tasks_data.append({
+                        "Εργασία": task_name,
+                        "Κατάσταση": "✅ Ολοκληρώθηκε" if p_data.get("done", False) else "⏳ Εκκρεμεί",
+                        "Υπεύθυνος": p_data.get("user", "-"),
+                        "Ημερομηνία": p_data.get("date", ""),
+                        "Ενεργό": "ΝΑΙ" if p_data.get("active", False) else "ΟΧΙ"
+                    })
+            if tasks_data:
+                tasks_df = pd.DataFrame(tasks_data)
+                st.dataframe(tasks_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("Δεν έχουν οριστεί γενικές εργασίες")
+        else:
+            st.info("Δεν έχουν οριστεί γενικές εργασίες")
 
 def render_project_cards(procurement_df, tasks_database, team_database, availability_database):
-    """NEW: Render projects as cards"""
+    """Render projects as cards"""
     st.header("📇 Project Cards")
     
     if procurement_df.empty:
         st.warning("⚠️ No projects available.")
         return
     
-    # Get unique projects
     projects_list = sorted([p for p in procurement_df["Project"].unique().tolist() if p != "-"])
     
     st.markdown(f"### 📋 Σύνολο Projects: {len(projects_list)}")
@@ -899,11 +753,14 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
         
         proj_data = get_project_details(p_name, procurement_df, tasks_database)
         
-        # Apply status filter
         if status_filter != "Όλα" and proj_data["status"] != status_filter:
             continue
         
         all_projects.append(proj_data)
+    
+    if not all_projects:
+        st.info("Δεν βρέθηκαν projects που να ταιριάζουν με τα κριτήρια αναζήτησης.")
+        return
     
     # Display cards in grid (3 columns)
     cols = st.columns(3)
@@ -911,52 +768,87 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
         col_idx = i % 3
         
         with cols[col_idx]:
-            # Render card
-            st.markdown(render_project_card(proj_data), unsafe_allow_html=True)
+            # Card with button
+            card_html = f"""
+            <div class="project-card">
+                <div class="project-status {proj_data['status_class']}">{proj_data['status']}</div>
+                <div class="project-title">📦 {proj_data['name']}</div>
+                <div class="project-meta">
+                    <span>📋 {proj_data['materials_count']} Υλικά</span>
+                    <span>⚙️ {proj_data['total_tasks']} Tasks</span>
+                    <span>⏱️ {proj_data['total_hours']}h</span>
+                    <span>✅ {proj_data['completed_tasks']}/{proj_data['total_tasks']}</span>
+                </div>
+                <div class="project-progress">
+                    <div style="background:#e0e0e0;border-radius:8px;height:8px;overflow:hidden;">
+                        <div style="background:#1e88e5;height:100%;width:{proj_data['progress']}%;border-radius:8px;transition:width 0.5s ease;"></div>
+                    </div>
+                    <div style="font-size:12px;color:#666;margin-top:3px;">{proj_data['progress']}% Πρόοδος</div>
+                </div>
+            </div>
+            """
+            st.markdown(card_html, unsafe_allow_html=True)
             
-            # Render modal (hidden by default)
-            st.markdown(render_project_modal(proj_data, tasks_database, team_database), unsafe_allow_html=True)
+            # Button to show details
+            if st.button(f"🔍 Δες Λεπτομέρειες", key=f"view_{proj_data['name']}_{i}", use_container_width=True):
+                st.session_state.selected_project = proj_data['name']
+                st.session_state.show_modal = True
+                st.rerun()
     
-    if not all_projects:
-        st.info("Δεν βρέθηκαν projects που να ταιριάζουν με τα κριτήρια αναζήτησης.")
+    # Show modal if a project is selected
+    if st.session_state.show_modal and st.session_state.selected_project:
+        # Find the selected project data
+        selected_data = None
+        for p in all_projects:
+            if p['name'] == st.session_state.selected_project:
+                selected_data = p
+                break
+        
+        if selected_data:
+            st.divider()
+            st.markdown(f"### 📦 Λεπτομέρειες Project: {selected_data['name']}")
+            show_project_modal(selected_data, tasks_database, team_database)
+            
+            if st.button("✕ Κλείσιμο Λεπτομερειών", use_container_width=True):
+                st.session_state.show_modal = False
+                st.session_state.selected_project = None
+                st.rerun()
     
     # Export all projects data
     st.divider()
     col_exp1, col_exp2 = st.columns(2)
     with col_exp1:
-        if all_projects:
-            export_data = []
-            for p in all_projects:
-                export_data.append({
-                    "Project": p["name"],
-                    "Status": p["status"],
-                    "Υλικά": p["materials_count"],
-                    "Σύνολο Tasks": p["total_tasks"],
-                    "Ολοκληρωμένα": p["completed_tasks"],
-                    "Πρόοδος": f"{p['progress']}%",
-                    "Συνολικές Ώρες": p["total_hours"],
-                    "Υπολειπόμενες Ώρες": p["remaining_hours"]
-                })
-            export_df = pd.DataFrame(export_data)
-            csv = export_df.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(label="📊 Εξαγωγή Projects CSV", data=csv, file_name=f"Projects_{date.today().strftime('%Y-%m-%d')}.csv", mime="text/csv", use_container_width=True)
+        export_data = []
+        for p in all_projects:
+            export_data.append({
+                "Project": p["name"],
+                "Status": p["status"],
+                "Υλικά": p["materials_count"],
+                "Σύνολο Tasks": p["total_tasks"],
+                "Ολοκληρωμένα": p["completed_tasks"],
+                "Πρόοδος": f"{p['progress']}%",
+                "Συνολικές Ώρες": p["total_hours"],
+                "Υπολειπόμενες Ώρες": p["remaining_hours"]
+            })
+        export_df = pd.DataFrame(export_data)
+        csv = export_df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(label="📊 Εξαγωγή Projects CSV", data=csv, file_name=f"Projects_{date.today().strftime('%Y-%m-%d')}.csv", mime="text/csv", use_container_width=True)
     with col_exp2:
-        if all_projects:
-            export_data = []
-            for p in all_projects:
-                export_data.append({
-                    "Project": p["name"],
-                    "Status": p["status"],
-                    "Υλικά": p["materials_count"],
-                    "Σύνολο Tasks": p["total_tasks"],
-                    "Ολοκληρωμένα": p["completed_tasks"],
-                    "Πρόοδος": f"{p['progress']}%",
-                    "Συνολικές Ώρες": p["total_hours"],
-                    "Υπολειπόμενες Ώρες": p["remaining_hours"]
-                })
-            export_df = pd.DataFrame(export_data)
-            excel_data = export_to_excel(export_df, "Projects")
-            st.download_button(label="📄 Εξαγωγή Projects Excel", data=excel_data, file_name=f"Projects_{date.today().strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+        export_data = []
+        for p in all_projects:
+            export_data.append({
+                "Project": p["name"],
+                "Status": p["status"],
+                "Υλικά": p["materials_count"],
+                "Σύνολο Tasks": p["total_tasks"],
+                "Ολοκληρωμένα": p["completed_tasks"],
+                "Πρόοδος": f"{p['progress']}%",
+                "Συνολικές Ώρες": p["total_hours"],
+                "Υπολειπόμενες Ώρες": p["remaining_hours"]
+            })
+        export_df = pd.DataFrame(export_data)
+        excel_data = export_to_excel(export_df, "Projects")
+        st.download_button(label="📄 Εξαγωγή Projects Excel", data=excel_data, file_name=f"Projects_{date.today().strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
 def render_project(procurement_df, tasks_database, team_database, availability_database):
     st.header("📋 Διαχείριση Παραγωγής & Αναθέσεις ανά Project")
