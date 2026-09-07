@@ -28,6 +28,159 @@ st.markdown("""
         .stButton button { width: 100% !important; }
         .stSelectbox, .stDateInput { margin-bottom: 10px; }
     }
+    
+    /* Project Cards Styles */
+    .project-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin: 10px 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border-left: 5px solid #1e88e5;
+        position: relative;
+    }
+    .project-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        border-left-color: #ff6f00;
+    }
+    .project-card .project-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #1e88e5;
+        margin-bottom: 8px;
+    }
+    .project-card .project-meta {
+        font-size: 13px;
+        color: #666;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    .project-card .project-meta span {
+        background: #f5f5f5;
+        padding: 3px 10px;
+        border-radius: 12px;
+    }
+    .project-card .project-progress {
+        margin-top: 12px;
+    }
+    .project-card .project-status {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: bold;
+    }
+    .project-card .project-status.completed {
+        background: #e8f5e9;
+        color: #2e7d32;
+    }
+    .project-card .project-status.in-progress {
+        background: #fff3e0;
+        color: #e65100;
+    }
+    .project-card .project-status.pending {
+        background: #fce4ec;
+        color: #c62828;
+    }
+    
+    /* Modal overlay */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+    .modal-overlay.active {
+        display: flex;
+    }
+    .modal-content {
+        background: white;
+        border-radius: 16px;
+        max-width: 900px;
+        width: 95%;
+        max-height: 90vh;
+        overflow-y: auto;
+        padding: 30px;
+        position: relative;
+        animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn {
+        from { transform: translateY(-50px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+    .modal-close {
+        position: sticky;
+        top: 0;
+        float: right;
+        background: #f5f5f5;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        padding: 8px 16px;
+        border-radius: 50%;
+        transition: background 0.3s;
+        z-index: 10;
+    }
+    .modal-close:hover {
+        background: #e0e0e0;
+    }
+    .modal-title {
+        font-size: 24px;
+        color: #1e88e5;
+        border-bottom: 2px solid #1e88e5;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+    .modal-section {
+        margin: 20px 0;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+    .modal-section h4 {
+        color: #1e88e5;
+        margin-bottom: 10px;
+    }
+    .modal-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+    .modal-item {
+        padding: 8px 12px;
+        background: white;
+        border-radius: 6px;
+        border-left: 3px solid #1e88e5;
+    }
+    .modal-item .label {
+        font-size: 11px;
+        color: #999;
+        text-transform: uppercase;
+    }
+    .modal-item .value {
+        font-size: 14px;
+        font-weight: 500;
+    }
+    @media (max-width: 768px) {
+        .modal-grid {
+            grid-template-columns: 1fr;
+        }
+        .modal-content {
+            padding: 15px;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -41,6 +194,10 @@ def init_auth():
         st.session_state.login_attempts = 0
     if "last_login_attempt" not in st.session_state:
         st.session_state.last_login_attempt = None
+    if "selected_project" not in st.session_state:
+        st.session_state.selected_project = None
+    if "modal_open" not in st.session_state:
+        st.session_state.modal_open = False
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -414,6 +571,197 @@ def update_proj_field(p_key, task_name, field, widget_key):
     st.session_state["project_tasks_store"][p_key][task_name][field] = st.session_state[widget_key]
     save_all_assignments_to_sheet()
 
+# --- NEW: PROJECT CARDS FUNCTIONS ---
+def get_project_details(project_name, procurement_df, tasks_database):
+    """Get all details for a specific project"""
+    # Get procurement items
+    items = procurement_df[procurement_df["Project"] == project_name].copy() if not procurement_df.empty else pd.DataFrame()
+    
+    # Calculate project stats
+    total_hours = 0
+    completed_hours = 0
+    total_tasks = 0
+    completed_tasks = 0
+    materials_count = len(items)
+    
+    # Get project tasks
+    p_key = f"proj_{project_name}"
+    project_tasks = st.session_state.get("project_tasks_store", {}).get(p_key, {})
+    
+    # Calculate stats from items
+    for idx, row in items.iterrows():
+        item_id = str(row["ID"])
+        u_key = f"{item_id}_{idx}"
+        qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+        
+        item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
+        for t in item_tasks:
+            if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
+                auto_t = tasks_database.get(t["task"], 0.0)
+                hrs = (auto_t * qty) / 60
+                total_hours += hrs
+                total_tasks += 1
+                if t.get("done", False):
+                    completed_hours += hrs
+                    completed_tasks += 1
+    
+    # Calculate stats from project tasks
+    if isinstance(project_tasks, dict):
+        for task_name, p_data in project_tasks.items():
+            if isinstance(p_data, dict) and p_data.get("active", False):
+                # Get project main quantity
+                main_qty = 1
+                if not items.empty:
+                    for _, r in items.iterrows():
+                        if str(r["Ποσότητα"]).isdigit():
+                            main_qty = max(main_qty, int(r["Ποσότητα"]))
+                auto_t = tasks_database.get(task_name, 0.0)
+                hrs = (auto_t * main_qty) / 60
+                total_hours += hrs
+                total_tasks += 1
+                if p_data.get("done", False):
+                    completed_hours += hrs
+                    completed_tasks += 1
+    
+    # Calculate progress
+    progress = int((completed_tasks / total_tasks) * 100) if total_tasks > 0 else 0
+    
+    # Determine status
+    if progress == 100 and total_tasks > 0:
+        status = "Ολοκληρώθηκε"
+        status_class = "completed"
+    elif progress > 0:
+        status = "Σε Εξέλιξη"
+        status_class = "in-progress"
+    else:
+        status = "Αναμονή"
+        status_class = "pending"
+    
+    return {
+        "name": project_name,
+        "items": items,
+        "total_hours": round(total_hours, 1),
+        "completed_hours": round(completed_hours, 1),
+        "remaining_hours": round(total_hours - completed_hours, 1),
+        "total_tasks": total_tasks,
+        "completed_tasks": completed_tasks,
+        "progress": progress,
+        "materials_count": materials_count,
+        "status": status,
+        "status_class": status_class,
+        "project_tasks": project_tasks
+    }
+
+def render_project_card(project_data):
+    """Render a single project card"""
+    html = f"""
+    <div class="project-card" onclick="document.getElementById('modal-{project_data['name']}').style.display='flex'">
+        <div class="project-status {project_data['status_class']}">{project_data['status']}</div>
+        <div class="project-title">📦 {project_data['name']}</div>
+        <div class="project-meta">
+            <span>📋 {project_data['materials_count']} Υλικά</span>
+            <span>⚙️ {project_data['total_tasks']} Tasks</span>
+            <span>⏱️ {project_data['total_hours']}h</span>
+            <span>✅ {project_data['completed_tasks']}/{project_data['total_tasks']}</span>
+        </div>
+        <div class="project-progress">
+            <div style="background:#e0e0e0;border-radius:8px;height:8px;overflow:hidden;">
+                <div style="background:#1e88e5;height:100%;width:{project_data['progress']}%;border-radius:8px;transition:width 0.5s ease;"></div>
+            </div>
+            <div style="font-size:12px;color:#666;margin-top:3px;">{project_data['progress']}% Πρόοδος</div>
+        </div>
+    </div>
+    """
+    return html
+
+def render_project_modal(project_data, tasks_database, team_database):
+    """Render the modal for a project"""
+    html = f"""
+    <div id="modal-{project_data['name']}" class="modal-overlay" style="display:none;" onclick="if(event.target===this)document.getElementById('modal-{project_data['name']}').style.display='none'">
+        <div class="modal-content">
+            <button class="modal-close" onclick="document.getElementById('modal-{project_data['name']}').style.display='none'">✕</button>
+            <div class="modal-title">📦 {project_data['name']}</div>
+            
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:20px;">
+                <div style="background:#e3f2fd;padding:12px;border-radius:8px;text-align:center;">
+                    <div style="font-size:20px;font-weight:bold;color:#1e88e5;">{project_data['total_hours']}h</div>
+                    <div style="font-size:12px;color:#666;">Συνολικές Ώρες</div>
+                </div>
+                <div style="background:#e8f5e9;padding:12px;border-radius:8px;text-align:center;">
+                    <div style="font-size:20px;font-weight:bold;color:#2e7d32;">{project_data['completed_hours']}h</div>
+                    <div style="font-size:12px;color:#666;">Ολοκληρωμένες</div>
+                </div>
+                <div style="background:#fff3e0;padding:12px;border-radius:8px;text-align:center;">
+                    <div style="font-size:20px;font-weight:bold;color:#e65100;">{project_data['remaining_hours']}h</div>
+                    <div style="font-size:12px;color:#666;">Υπολειπόμενες</div>
+                </div>
+                <div style="background:#f3e5f5;padding:12px;border-radius:8px;text-align:center;">
+                    <div style="font-size:20px;font-weight:bold;color:#6a1b9a;">{project_data['progress']}%</div>
+                    <div style="font-size:12px;color:#666;">Πρόοδος</div>
+                </div>
+            </div>
+            
+            <div class="modal-section">
+                <h4>📋 Υλικά & Είδη ({project_data['materials_count']})</h4>
+                <div class="modal-grid">
+    """
+    
+    if not project_data['items'].empty:
+        for _, item in project_data['items'].iterrows():
+            html += f"""
+                <div class="modal-item">
+                    <div class="label">🆔 {item['ID']}</div>
+                    <div class="value">{item['Υλικό / Προϊόν']}</div>
+                    <div style="font-size:12px;color:#888;">
+                        Ποσότητα: {item['Ποσότητα']} | {item['Status Procurement']}
+                    </div>
+                </div>
+            """
+    else:
+        html += "<div style='grid-column:1/-1;color:#888;'>Δεν βρέθηκαν υλικά</div>"
+    
+    html += """
+                </div>
+            </div>
+            
+            <div class="modal-section">
+                <h4>⚙️ Γενικές Εργασίες Project</h4>
+                <div class="modal-grid">
+    """
+    
+    if isinstance(project_data['project_tasks'], dict):
+        for task_name, p_data in project_data['project_tasks'].items():
+            if isinstance(p_data, dict):
+                status_icon = "✅" if p_data.get("done", False) else "⏳"
+                assigned_to = p_data.get("user", "-")
+                is_active = p_data.get("active", False)
+                html += f"""
+                    <div class="modal-item" style="{'opacity:0.5;' if not is_active else ''}">
+                        <div class="label">{status_icon} {task_name}</div>
+                        <div class="value">{assigned_to}</div>
+                        <div style="font-size:12px;color:#888;">
+                            {p_data.get('date', '')} | {'Ενεργό' if is_active else 'Ανενεργό'}
+                        </div>
+                    </div>
+                """
+    else:
+        html += "<div style='grid-column:1/-1;color:#888;'>Δεν έχουν οριστεί γενικές εργασίες</div>"
+    
+    html += f"""
+                </div>
+            </div>
+            
+            <div style="text-align:center;margin-top:20px;">
+                <button onclick="document.getElementById('modal-{project_data['name']}').style.display='none'" 
+                        style="padding:10px 30px;background:#1e88e5;color:white;border:none;border-radius:5px;cursor:pointer;">
+                    ✕ Κλείσιμο
+                </button>
+            </div>
+        </div>
+    </div>
+    """
+    return html
+
 # --- RENDER FUNCTIONS ---
 def render_dashboard(procurement_df, tasks_database, team_database, availability_database):
     st.header("📈 Dashboard & Επισκόπηση Παραγωγής")
@@ -522,6 +870,93 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
         with col_exp2:
             excel_data = export_to_excel(dash_df, "Dashboard")
             st.download_button(label="📄 Εξαγωγή Excel", data=excel_data, file_name=f"Dashboard_{date.today().strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+
+def render_project_cards(procurement_df, tasks_database, team_database, availability_database):
+    """NEW: Render projects as cards"""
+    st.header("📇 Project Cards")
+    
+    if procurement_df.empty:
+        st.warning("⚠️ No projects available.")
+        return
+    
+    # Get unique projects
+    projects_list = sorted([p for p in procurement_df["Project"].unique().tolist() if p != "-"])
+    
+    st.markdown(f"### 📋 Σύνολο Projects: {len(projects_list)}")
+    
+    # Search and filter
+    col_search, col_filter = st.columns([2, 1])
+    with col_search:
+        search_term = st.text_input("🔍 Αναζήτηση Project:", placeholder="Πληκτρολόγησε το όνομα του project...")
+    with col_filter:
+        status_filter = st.selectbox("📌 Φίλτρο Κατάστασης:", ["Όλα", "Σε Εξέλιξη", "Ολοκληρώθηκε", "Αναμονή"])
+    
+    # Get project details for all projects
+    all_projects = []
+    for p_name in projects_list:
+        if search_term and search_term.lower() not in p_name.lower():
+            continue
+        
+        proj_data = get_project_details(p_name, procurement_df, tasks_database)
+        
+        # Apply status filter
+        if status_filter != "Όλα" and proj_data["status"] != status_filter:
+            continue
+        
+        all_projects.append(proj_data)
+    
+    # Display cards in grid (3 columns)
+    cols = st.columns(3)
+    for i, proj_data in enumerate(all_projects):
+        col_idx = i % 3
+        
+        with cols[col_idx]:
+            # Render card
+            st.markdown(render_project_card(proj_data), unsafe_allow_html=True)
+            
+            # Render modal (hidden by default)
+            st.markdown(render_project_modal(proj_data, tasks_database, team_database), unsafe_allow_html=True)
+    
+    if not all_projects:
+        st.info("Δεν βρέθηκαν projects που να ταιριάζουν με τα κριτήρια αναζήτησης.")
+    
+    # Export all projects data
+    st.divider()
+    col_exp1, col_exp2 = st.columns(2)
+    with col_exp1:
+        if all_projects:
+            export_data = []
+            for p in all_projects:
+                export_data.append({
+                    "Project": p["name"],
+                    "Status": p["status"],
+                    "Υλικά": p["materials_count"],
+                    "Σύνολο Tasks": p["total_tasks"],
+                    "Ολοκληρωμένα": p["completed_tasks"],
+                    "Πρόοδος": f"{p['progress']}%",
+                    "Συνολικές Ώρες": p["total_hours"],
+                    "Υπολειπόμενες Ώρες": p["remaining_hours"]
+                })
+            export_df = pd.DataFrame(export_data)
+            csv = export_df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(label="📊 Εξαγωγή Projects CSV", data=csv, file_name=f"Projects_{date.today().strftime('%Y-%m-%d')}.csv", mime="text/csv", use_container_width=True)
+    with col_exp2:
+        if all_projects:
+            export_data = []
+            for p in all_projects:
+                export_data.append({
+                    "Project": p["name"],
+                    "Status": p["status"],
+                    "Υλικά": p["materials_count"],
+                    "Σύνολο Tasks": p["total_tasks"],
+                    "Ολοκληρωμένα": p["completed_tasks"],
+                    "Πρόοδος": f"{p['progress']}%",
+                    "Συνολικές Ώρες": p["total_hours"],
+                    "Υπολειπόμενες Ώρες": p["remaining_hours"]
+                })
+            export_df = pd.DataFrame(export_data)
+            excel_data = export_to_excel(export_df, "Projects")
+            st.download_button(label="📄 Εξαγωγή Projects Excel", data=excel_data, file_name=f"Projects_{date.today().strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
 def render_project(procurement_df, tasks_database, team_database, availability_database):
     st.header("📋 Διαχείριση Παραγωγής & Αναθέσεις ανά Project")
@@ -784,7 +1219,6 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
             col_user.write(dt['Υπεύθυνος'])
             col_hrs.write(f"{dt['Ώρες']}h")
             
-            # Corrected status display
             if dt['status_proc'] in ["OK STOCK", "RECEIVED", "READY"]:
                 col_st.success(f"✅ {dt['status_proc']}")
             else:
@@ -865,7 +1299,6 @@ def render_technician(procurement_df, tasks_database, team_database, availabilit
             col_qty.write(f"{wt['qty']} τμχ")
             col_h.caption(f"{wt['hours']}h")
             
-            # Corrected status display
             if wt['status_proc'] in ["OK STOCK", "RECEIVED", "READY"]:
                 col_proc.success(f"✅ {wt['status_proc']}")
             else:
@@ -1133,8 +1566,8 @@ def main():
         
         selected = option_menu(
             menu_title="Navigation",
-            options=["📈 Dashboard", "📋 Project", "🗓️ Daily Plan", "👤 Technician", "📆 Projection", "📝 Daily Report", "📊 Database", "⚙️ Settings"],
-            icons=["bar-chart", "list-task", "calendar", "person", "graph-up", "clipboard", "database", "gear"],
+            options=["📈 Dashboard", "📇 Project Cards", "📋 Project", "🗓️ Daily Plan", "👤 Technician", "📆 Projection", "📝 Daily Report", "📊 Database", "⚙️ Settings"],
+            icons=["bar-chart", "grid", "list-task", "calendar", "person", "graph-up", "clipboard", "database", "gear"],
             menu_icon="menu-button",
             default_index=0,
             styles={"container": {"padding": "0!important"}, "icon": {"font-size": "20px"}, "nav-link": {"font-size": "15px", "text-align": "left", "margin": "0px"}, "nav-link-selected": {"background-color": "#1e88e5"}}
@@ -1155,6 +1588,8 @@ def main():
     # Tabs
     if selected == "📈 Dashboard":
         render_dashboard(procurement_df, tasks_database, team_database, availability_database)
+    elif selected == "📇 Project Cards":
+        render_project_cards(procurement_df, tasks_database, team_database, availability_database)
     elif selected == "📋 Project":
         render_project(procurement_df, tasks_database, team_database, availability_database)
     elif selected == "🗓️ Daily Plan":
