@@ -463,6 +463,9 @@ def get_project_details(project_name, procurement_df, tasks_database):
     
     progress = int((completed_tasks / total_tasks) * 100) if total_tasks > 0 else 0
     
+    # Determine if project is active (has pending tasks)
+    is_active = total_tasks > 0 and completed_tasks < total_tasks
+    
     if progress == 100 and total_tasks > 0:
         status = "Ολοκληρώθηκε"
         status_class = "completed"
@@ -495,6 +498,7 @@ def get_project_details(project_name, procurement_df, tasks_database):
         "materials_count": materials_count,
         "status": status,
         "status_class": status_class,
+        "is_active": is_active,
         "project_tasks": project_tasks
     }
 
@@ -608,7 +612,7 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
             st.download_button(label="📄 Εξαγωγή Excel", data=excel_data, file_name=f"Dashboard_{date.today().strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
 def render_project_cards(procurement_df, tasks_database, team_database, availability_database):
-    """Render projects as expandable cards with tasks per material"""
+    """Render projects as expandable cards with active filter"""
     st.header("📇 Project Cards")
     
     if procurement_df.empty:
@@ -617,15 +621,16 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
     
     projects_list = sorted([p for p in procurement_df["Project"].unique().tolist() if p != "-"])
     
-    st.markdown(f"### 📋 Σύνολο Projects: {len(projects_list)}")
-    
-    col_search, col_filter = st.columns([2, 1])
+    # --- FILTERS SECTION ---
+    col_search, col_filter, col_active = st.columns([2, 1, 1])
     with col_search:
         search_term = st.text_input("🔍 Αναζήτηση Project:", placeholder="Πληκτρολόγησε το όνομα του project...")
     with col_filter:
         status_filter = st.selectbox("📌 Φίλτρο Κατάστασης:", ["Όλα", "Σε Εξέλιξη", "Ολοκληρώθηκε", "Αναμονή"])
+    with col_active:
+        show_active_only = st.checkbox("✅ Μόνο Ενεργά Projects", value=True, help="Εμφάνιση μόνο projects που είναι σε εξέλιξη")
     
-    # Get all project details
+    # Get all project details with active status
     all_projects = []
     for p_name in projects_list:
         if search_term and search_term.lower() not in p_name.lower():
@@ -636,11 +641,23 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
         if status_filter != "Όλα" and proj_data["status"] != status_filter:
             continue
         
+        # Filter active projects only
+        if show_active_only and not proj_data['is_active']:
+            continue
+        
         all_projects.append(proj_data)
     
     if not all_projects:
-        st.info("Δεν βρέθηκαν projects που να ταιριάζουν με τα κριτήρια αναζήτησης.")
+        if show_active_only:
+            st.info("📌 Δεν υπάρχουν ενεργά projects. Απενεργοποίησε το 'Μόνο Ενεργά Projects' για να δεις όλα τα projects.")
+        else:
+            st.info("Δεν βρέθηκαν projects που να ταιριάζουν με τα κριτήρια αναζήτησης.")
         return
+    
+    # Show count of active vs total
+    active_count = sum(1 for p in all_projects if p.get('is_active', False))
+    total_projects = len(all_projects)
+    st.caption(f"📊 Εμφανίζονται {total_projects} projects ({active_count} ενεργά)")
     
     # Display cards as expandable cards
     for i, proj_data in enumerate(all_projects):
@@ -652,12 +669,15 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
         else:
             status_emoji = "⏳"
         
+        # Add active indicator
+        active_indicator = "🟢" if proj_data.get('is_active', False) else "🔴"
+        
         # Progress bar color based on status
         progress_color = "#2e7d32" if proj_data['progress'] == 100 else "#1e88e5" if proj_data['progress'] > 0 else "#ff9800"
         
         # Create expander
         with st.expander(
-            f"{status_emoji} 📦 {proj_data['name']}  |  {proj_data['progress']}%  |  {proj_data['status']}  |  {proj_data['total_tasks']} Tasks",
+            f"{active_indicator} {status_emoji} 📦 {proj_data['name']}  |  {proj_data['progress']}%  |  {proj_data['status']}  |  {proj_data['total_tasks']} Tasks",
             expanded=False
         ):
             # Summary metrics in a row
@@ -759,6 +779,7 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
             export_data.append({
                 "Project": p["name"],
                 "Status": p["status"],
+                "Ενεργό": "ΝΑΙ" if p.get('is_active', False) else "ΟΧΙ",
                 "Υλικά": p["materials_count"],
                 "Σύνολο Tasks": p["total_tasks"],
                 "Ολοκληρωμένα": p["completed_tasks"],
@@ -775,6 +796,7 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
             export_data.append({
                 "Project": p["name"],
                 "Status": p["status"],
+                "Ενεργό": "ΝΑΙ" if p.get('is_active', False) else "ΟΧΙ",
                 "Υλικά": p["materials_count"],
                 "Σύνολο Tasks": p["total_tasks"],
                 "Ολοκληρωμένα": p["completed_tasks"],
