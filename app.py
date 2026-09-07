@@ -121,18 +121,21 @@ def get_gspread_client():
         return None, str(e)
 
 # --- CONSTANTS ---
+# 1. Google Sheet 1: Procurement
 PROC_SHEET_ID = "1QhTd58vuulaC_73sgbjuwG5MVxT6c1c_-MbhypGx0fA"
 PROC_GID = "1639392743"
-PROC_CSV_URL = f"https://docs.google.com/spreadsheets/d/{PROC_SHEET_ID}/export?format=csv&gid={PROC_GID}"
+INCOMING_GID = "1362920506"  # GID για το Incoming Projects_List στο Procurement Sheet!
 
+PROC_CSV_URL = f"https://docs.google.com/spreadsheets/d/{PROC_SHEET_ID}/export?format=csv&gid={PROC_GID}"
+INCOMING_CSV_URL = f"https://docs.google.com/spreadsheets/d/{PROC_SHEET_ID}/export?format=csv&gid={INCOMING_GID}"
+
+# 2. Google Sheet 2: Tasks & Assignments
 MY_SHEET_ID = "1rps5ha4wyo8DQ3zwUTqS5BSNMrJPatvqdh8M0iMHVEg"
 TIMES_GID = "2126316973"
 TEAM_GID = "1303086311"
-INCOMING_GID = "1362920506"
 
 TIMES_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TIMES_GID}"
 TEAM_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TEAM_GID}"
-INCOMING_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={INCOMING_GID}"
 
 WEEKDAYS_GREEK = {
     0: "Δευτέρα", 1: "Τρίτη", 2: "Τετάρτη", 3: "Πέμπτη", 
@@ -167,26 +170,17 @@ def load_all_data(version=0):
     except Exception:
         df_proc = pd.DataFrame()
 
+    # Φόρτωση Incoming Projects List από το Procurement Sheet (Στήλη B = Project, Στήλη L = Shipping Status)
     df_incoming = pd.DataFrame()
     try:
-        df_incoming_raw = pd.read_csv(INCOMING_CSV_URL)
-        if not df_incoming_raw.empty:
-            shipping_col = None
-            project_col = None
-            
-            for col in df_incoming_raw.columns:
-                col_lower = str(col).lower()
-                if "shipping" in col_lower or "status" in col_lower:
-                    shipping_col = col
-                if "project" in col_lower or "name" in col_lower:
-                    project_col = col
-            
-            if shipping_col and project_col:
-                df_incoming = df_incoming_raw[[project_col, shipping_col]].copy()
-                df_incoming.columns = ["Project", "Shipping Status"]
-                df_incoming = df_incoming.dropna(subset=["Project"])
-                df_incoming["Shipping Status"] = df_incoming["Shipping Status"].fillna("").astype(str).str.strip()
-    except Exception:
+        df_inc_raw = pd.read_csv(INCOMING_CSV_URL, header=None)
+        # Στήλη B (index 1) = Project, Στήλη L (index 11) = Shipping Status
+        df_incoming = df_inc_raw.iloc[1:, [1, 11]].copy()
+        df_incoming.columns = ["Project", "Shipping Status"]
+        df_incoming["Project"] = df_incoming["Project"].astype(str).str.strip()
+        df_incoming["Shipping Status"] = df_incoming["Shipping Status"].astype(str).str.strip()
+        df_incoming = df_incoming[df_incoming["Project"] != ""]
+    except Exception as e:
         pass
 
     tasks_dict = {}
@@ -424,7 +418,7 @@ def update_proj_field(p_key, task_name, field, widget_key):
     st.session_state["project_tasks_store"][p_key][task_name][field] = st.session_state[widget_key]
     save_all_assignments_to_sheet()
 
-# --- PROJECT DETAILS & STATUS (ΜΟΝΑΔΙΚΟ ΚΡΙΤΗΡΙΟ: OK SHIPPED) ---
+# --- PROJECT DETAILS & STATUS (ΕΛΕΓΧΟΣ ΣΤΗΛΗΣ L: Shipping Status = OK SHIPPED) ---
 def get_project_details(project_name, procurement_df, tasks_database, incoming_df):
     items = procurement_df[procurement_df["Project"] == project_name].copy() if not procurement_df.empty else pd.DataFrame()
     
@@ -472,20 +466,20 @@ def get_project_details(project_name, procurement_df, tasks_database, incoming_d
     
     progress = int((completed_tasks / total_tasks) * 100) if total_tasks > 0 else 0
     
-    # 🎯 ΜΟΝΑΔΙΚΟ ΚΡΙΤΗΡΙΟ: Έχει φύγει το project (OK SHIPPED);
+    # 🎯 ΕΛΕΓΧΟΣ ΣΤΗΛΗΣ L (Shipping Status)
     is_shipped = False
     if not incoming_df.empty:
-        project_row = incoming_df[incoming_df["Project"].astype(str).str.strip().str.upper() == str(project_name).strip().upper()]
+        project_row = incoming_df[incoming_df["Project"].str.upper() == str(project_name).strip().upper()]
         if not project_row.empty:
-            shipping_status = str(project_row.iloc[0]["Shipping Status"]).strip().upper()
-            if "OK SHIPPED" in shipping_status:
+            shipping_val = str(project_row.iloc[0]["Shipping Status"]).strip().upper()
+            if "OK SHIPPED" in shipping_val:
                 is_shipped = True
     
-    # Το project είναι ΕΝΕΡΓΟ αν ΔΕΝ έχει φύγει ακόμα
+    # Το project είναι ΕΝΕΡΓΟ αν ΔΕΝ έχει φύγει ακόμα (Shipping Status != OK SHIPPED)
     is_active = not is_shipped
-    is_completed = is_shipped or (total_tasks > 0 and completed_tasks == total_tasks)
+    is_completed = is_shipped
     
-    status = "🔴 ΦΥΓΕ / SHIPPED" if is_shipped else ("🟢 ΕΝΕΡΓΟ" if is_active else "⚪ ΑΡΧΕΙΟ")
+    status = "🔴 OK SHIPPED" if is_shipped else "🟢 ΕΝΕΡΓΟ"
     
     materials_list = []
     for _, item in items.iterrows():
@@ -525,7 +519,7 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
     all_projects = sorted([p for p in procurement_df["Project"].unique().tolist() if p != "-"])
     
     col_d1, col_d2 = st.columns([0.7, 0.3])
-    show_archived_dash = col_d2.checkbox("📁 Εμφάνιση Όλων των Projects (μαζί με όσα έχουν φύγει)", value=False, key="dash_show_arch")
+    show_archived_dash = col_d2.checkbox("📁 Εμφάνιση Όλων των Projects (μαζί με OK SHIPPED)", value=False, key="dash_show_arch")
 
     dashboard_data = []
     tot_all_hours = 0.0
@@ -593,7 +587,7 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
     
     col_search, col_active = st.columns([2, 1])
     search_term = col_search.text_input("🔍 Αναζήτηση Project:", placeholder="Πληκτρολογήστε όνομα...", key="card_search")
-    show_active_only = col_active.checkbox("✅ Μόνο Ενεργά Projects", value=True, help="Εμφάνιση μόνο projects που ΔΕΝ έχουν φύγει ακόμα")
+    show_active_only = col_active.checkbox("✅ Μόνο Ενεργά Projects", value=True, help="Εμφάνιση μόνο projects που ΔΕΝ έχουν σημειωθεί ως OK SHIPPED")
     
     all_projects = []
     for p_name in projects_list:
@@ -641,11 +635,12 @@ def render_project(procurement_df, tasks_database, team_database, availability_d
     projects_list = sorted([p for p in procurement_df["Project"].unique().tolist() if p != "-"])
     
     col_p1, col_p2 = st.columns([0.7, 0.3])
-    show_all_tab = col_p2.checkbox("📁 Εμφάνιση Όλων των Projects (μαζί με όσα έχουν φύγει)", value=False, key="tab_show_arch")
+    show_all_tab = col_p2.checkbox("📁 Εμφάνιση Όλων των Projects (μαζί με OK SHIPPED)", value=False, key="tab_show_arch")
 
+    incoming_df = st.session_state.get("incoming_df", pd.DataFrame())
     active_projects_list = []
     for p_name in projects_list:
-        proj_data = get_project_details(p_name, procurement_df, tasks_database, pd.DataFrame())
+        proj_data = get_project_details(p_name, procurement_df, tasks_database, incoming_df)
         if show_all_tab or proj_data['is_active']:
             active_projects_list.append(p_name)
 
