@@ -608,7 +608,7 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
             st.download_button(label="📄 Εξαγωγή Excel", data=excel_data, file_name=f"Dashboard_{date.today().strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
 def render_project_cards(procurement_df, tasks_database, team_database, availability_database):
-    """Render projects as expandable cards"""
+    """Render projects as expandable cards with tasks per material"""
     st.header("📇 Project Cards")
     
     if procurement_df.empty:
@@ -678,6 +678,43 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
             
             st.divider()
             
+            # --- TASKS PER MATERIAL ---
+            st.subheader("⚙️ Tasks ανά Υλικό")
+            
+            # Get all items with their tasks
+            items_with_tasks = []
+            for idx, row in proj_data['items'].iterrows():
+                item_id = str(row["ID"])
+                u_key = f"{item_id}_{idx}"
+                material = row["Υλικό / Προϊόν"]
+                qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+                
+                item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
+                
+                if item_tasks:
+                    for t in item_tasks:
+                        if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
+                            auto_time = tasks_database.get(t["task"], 0.0)
+                            hrs = (auto_time * qty) / 60
+                            items_with_tasks.append({
+                                "ID": item_id,
+                                "Υλικό": material[:40] + "..." if len(material) > 40 else material,
+                                "Ποσότητα": qty,
+                                "Εργασία": t["task"],
+                                "Υπεύθυνος": t.get("user", "-"),
+                                "Ημερομηνία": t.get("date", ""),
+                                "Κατάσταση": "✅ Ολοκληρώθηκε" if t.get("done", False) else "⏳ Εκκρεμεί",
+                                "Ώρες": round(hrs, 2)
+                            })
+            
+            if items_with_tasks:
+                tasks_df = pd.DataFrame(items_with_tasks)
+                st.dataframe(tasks_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("📌 Δεν έχουν οριστεί εργασίες για τα υλικά αυτού του project")
+            
+            st.divider()
+            
             # Materials
             st.subheader(f"📋 Υλικά & Είδη ({proj_data['materials_count']})")
             if proj_data['materials_list']:
@@ -689,7 +726,7 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
             st.divider()
             
             # Project tasks
-            st.subheader("⚙️ Γενικές Εργασίες Project")
+            st.subheader("🏗️ Γενικές Εργασίες Project")
             if isinstance(proj_data['project_tasks'], dict):
                 tasks_data = []
                 for task_name, p_data in proj_data['project_tasks'].items():
