@@ -135,7 +135,7 @@ INCOMING_GID = "1362920506"
 
 TIMES_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TIMES_GID}"
 TEAM_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TEAM_GID}"
-INCOMING_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={INCOMING_GID}"
+INCOMING_CSV_URL = f"https://docs.google.com/spreadsheets/d/{PROC_SHEET_ID}/export?format=csv&gid={INCOMING_GID}"
 
 WEEKDAYS_GREEK = {
     0: "Δευτέρα", 1: "Τρίτη", 2: "Τετάρτη", 3: "Πέμπτη", 
@@ -171,7 +171,7 @@ def load_all_data(version=0):
     except Exception:
         df_proc = pd.DataFrame()
 
-    # Load Incoming Projects List
+       # Load Incoming Projects List
     df_incoming = pd.DataFrame()
     try:
         df_incoming_raw = pd.read_csv(INCOMING_CSV_URL)
@@ -192,7 +192,9 @@ def load_all_data(version=0):
                 df_incoming = df_incoming.dropna(subset=["Project"])
                 df_incoming["Shipping Status"] = df_incoming["Shipping Status"].fillna("").str.strip()
     except Exception as e:
-        st.warning(f"⚠️ Could not load Incoming Projects List: {e}")
+        # Silent fail - just show info message, don't crash
+        df_incoming = pd.DataFrame()
+        print(f"⚠️ Incoming Projects List not loaded: {e}")
 
     # Load tasks database
     tasks_dict = {}
