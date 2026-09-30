@@ -122,25 +122,23 @@ def get_gspread_client():
         return None, str(e)
 
 # --- CONSTANTS ---
-# Το σωστό ID και GID για το Procurement Excel
+# Το κοινό Google Sheet ID που περιέχει και τα δύο φύλλα
 PROC_SHEET_ID = "1QhTd58vuulaC_73sgbjuwG5MVxT6c1c_-MbhypGx0fA"
-PROC_GID = "1362920506"
 
-# Το σωστό URL για το CSV του Procurement (Παραγγελίες)
+# GID για το φύλλο "Incoming Projects_List"
+INCOMING_GID = "1362920506"
+
+# GID για το φύλλο "Παρακολούθηση παραγγελιών 2026" (αυτό που πριν ονομαζόταν PROC_GID)
+PROC_GID = "1639392743"
+
+# CSV URLs για κάθε φύλλο
+INCOMING_CSV_URL = f"https://docs.google.com/spreadsheets/d/{PROC_SHEET_ID}/export?format=csv&gid={INCOMING_GID}"
 PROC_CSV_URL = f"https://docs.google.com/spreadsheets/d/{PROC_SHEET_ID}/export?format=csv&gid={PROC_GID}"
 
-# Το ID για το άλλο αρχείο (π.χ. Μηχανολόγιο/Χρονομέτρηση)
+# --- Άλλο αρχείο (Μηχανολόγιο / Χρονομέτρηση) ---
 MY_SHEET_ID = "1rps5ha4wyo8DQ3zwUTqS5BSNMrJPatvqdh8M0iMHVEg"
 TIMES_GID = "2126316973"
 TEAM_GID = "1303086311"
-
-# --- ΔΙΟΡΘΩΣΗ: Το INCOMING_CSV_URL πρέπει να δείχνει στο PROC_SHEET_ID, όχι στο MY_SHEET_ID ---
-# Το "Incoming Projects_List" είναι το φύλλο (tab) με GID 1362920506 μέσα στο Procurement Excel.
-INCOMING_GID = PROC_GID  # Χρησιμοποιούμε το ίδιο GID με το Procurement
-INCOMING_CSV_URL = f"https://docs.google.com/spreadsheets/d/{PROC_SHEET_ID}/export?format=csv&gid={INCOMING_GID}"
-
-# Αν το "Incoming Projects_List" είναι διαφορετικό φύλλο από τις "Παραγγελίες Procurement", 
-# τότε βρες το δικό του GID και βάλε το παραπάνω αντί για το PROC_GID.
 
 TIMES_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TIMES_GID}"
 TEAM_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TEAM_GID}"
