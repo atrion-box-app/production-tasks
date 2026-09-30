@@ -123,7 +123,7 @@ def get_gspread_client():
 
 # --- CONSTANTS ---
 PROC_SHEET_ID = "1QhTd58vuulaC_73sgbjuwG5MVxT6c1c_-MbhypGx0fA"
-PROC_GID = "1639392743"
+PROC_GID = "1362920506"
 PROC_CSV_URL = f"https://docs.google.com/spreadsheets/d/{PROC_SHEET_ID}/export?format=csv&gid={PROC_GID}"
 
 MY_SHEET_ID = "1rps5ha4wyo8DQ3zwUTqS5BSNMrJPatvqdh8M0iMHVEg"
@@ -649,7 +649,7 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
             "Συνολικές Ώρες": round(p_total_hrs, 1),
             "Υπολειπόμενες": round(p_total_hrs - p_done_hrs, 1),
             "Πρόοδος": f"{p_progress}%",
-            "Κατάσταση": "🔴 ΦΥΓΕ" if is_shipped else "🟢 ΕΝΕΡΓΟ"
+            "Κατάσταση": "🔴 OK Shipped" if is_shipped else "🟢 ΕΝΕΡΓΟ"
         })
 
     # --- SECTION TITLE ---
@@ -704,7 +704,7 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
         
         # Style based on status
         def style_status(val):
-            if val == "🔴 OK SHIPPED":
+            if val == "🔴 OK Shipped":
                 return 'background-color: #ffebee; color: #c62828; font-weight: bold;'
             elif val == "🟢 ΕΝΕΡΓΟ":
                 return 'background-color: #e8f5e9; color: #2e7d32; font-weight: bold;'
@@ -796,7 +796,7 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
         
         # Add active indicator
         if proj_data.get('is_shipped', False):
-            active_indicator = "🔴 ΦΥΓΕ"
+            active_indicator = "🔴 OK Shipped"
         elif proj_data.get('is_active', False):
             active_indicator = "🟢 ΕΝΕΡΓΟ"
         else:
