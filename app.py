@@ -235,6 +235,7 @@ def load_all_data(version=0):
         pass
 
     return df_proc, tasks_dict, team_members, availability_dict, df_incoming
+    
 # --- ASSIGNMENTS MANAGEMENT ---
 @st.cache_data(ttl=30)
 def load_assignments_from_sheet():
@@ -574,8 +575,6 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
     tot_done_hours = 0.0
     tot_tasks_count = 0
     tot_done_tasks = 0
-    project_hours = {}
-    project_progress = {}
     
     for p_name in projects_to_show:
         filtered_p = procurement_df[procurement_df["Project"] == p_name]
@@ -622,8 +621,6 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
         tot_tasks_count += p_tasks_cnt
         tot_done_tasks += p_done_cnt
         p_progress = int((p_done_cnt / p_tasks_cnt) * 100) if p_tasks_cnt > 0 else 0
-        project_hours[p_name] = p_total_hrs
-        project_progress[p_name] = p_progress
         
         proj_details = get_project_details(p_name, procurement_df, tasks_database, incoming_df)
         is_shipped = proj_details.get('is_shipped', False)
@@ -649,27 +646,6 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
     overall_pct = int((tot_done_tasks / tot_tasks_count) * 100) if tot_tasks_count > 0 else 0
     c3.metric("Συνολική Πρόοδος", f"{overall_pct}%")
     c4.metric("Εκκρεμή Tasks" if not show_all else "Σύνολο Tasks", tot_tasks_count - tot_done_tasks if not show_all else tot_tasks_count)
-
-    st.divider()
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("📊 Ώρες ανά Project")
-        if project_hours:
-            sorted_hours = dict(sorted(project_hours.items(), key=lambda x: x[1], reverse=True)[:15])
-            chart_data = pd.DataFrame({"Project": list(sorted_hours.keys()), "Ώρες": list(sorted_hours.values())})
-            st.bar_chart(chart_data, x="Project", y="Ώρες", use_container_width=True)
-        else:
-            st.info("Δεν υπάρχουν δεδομένα")
-    
-    with col2:
-        st.subheader("📈 Πρόοδος ανά Project")
-        if project_progress:
-            sorted_progress = dict(sorted(project_progress.items(), key=lambda x: x[1], reverse=True)[:15])
-            chart_data = pd.DataFrame({"Project": list(sorted_progress.keys()), "Πρόοδος (%)": list(sorted_progress.values())})
-            st.bar_chart(chart_data, x="Project", y="Πρόοδος (%)", use_container_width=True)
-        else:
-            st.info("Δεν υπάρχουν δεδομένα")
 
     st.divider()
     
