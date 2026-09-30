@@ -135,7 +135,7 @@ INCOMING_GID = "1362920506"
 
 TIMES_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TIMES_GID}"
 TEAM_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TEAM_GID}"
-INCOMING_CSV_URL = f"https://docs.google.com/spreadsheets/d/{PROC_SHEET_ID}/export?format=csv&gid={INCOMING_GID}"
+INCOMING_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={INCOMING_GID}"
 
 WEEKDAYS_GREEK = {
     0: "Δευτέρα", 1: "Τρίτη", 2: "Τετάρτη", 3: "Πέμπτη", 
@@ -171,7 +171,7 @@ def load_all_data(version=0):
     except Exception:
         df_proc = pd.DataFrame()
 
-       # Load Incoming Projects List
+    # Load Incoming Projects List
     df_incoming = pd.DataFrame()
     try:
         df_incoming_raw = pd.read_csv(INCOMING_CSV_URL)
@@ -192,9 +192,7 @@ def load_all_data(version=0):
                 df_incoming = df_incoming.dropna(subset=["Project"])
                 df_incoming["Shipping Status"] = df_incoming["Shipping Status"].fillna("").str.strip()
     except Exception as e:
-        # Silent fail - just show info message, don't crash
-        df_incoming = pd.DataFrame()
-        print(f"⚠️ Incoming Projects List not loaded: {e}")
+        st.warning(f"⚠️ Could not load Incoming Projects List: {e}")
 
     # Load tasks database
     tasks_dict = {}
@@ -651,7 +649,7 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
             "Συνολικές Ώρες": round(p_total_hrs, 1),
             "Υπολειπόμενες": round(p_total_hrs - p_done_hrs, 1),
             "Πρόοδος": f"{p_progress}%",
-            "Κατάσταση": "🔴 OK Shipped" if is_shipped else "🟢 ΕΝΕΡΓΟ"
+            "Κατάσταση": "🔴 ΦΥΓΕ" if is_shipped else "🟢 ΕΝΕΡΓΟ"
         })
 
     # --- SECTION TITLE ---
@@ -706,7 +704,7 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
         
         # Style based on status
         def style_status(val):
-            if val == "🔴 OK Shipped":
+            if val == "🔴 OK SHIPPED":
                 return 'background-color: #ffebee; color: #c62828; font-weight: bold;'
             elif val == "🟢 ΕΝΕΡΓΟ":
                 return 'background-color: #e8f5e9; color: #2e7d32; font-weight: bold;'
@@ -798,7 +796,7 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
         
         # Add active indicator
         if proj_data.get('is_shipped', False):
-            active_indicator = "🔴 OK Shipped"
+            active_indicator = "🔴 ΦΥΓΕ"
         elif proj_data.get('is_active', False):
             active_indicator = "🟢 ΕΝΕΡΓΟ"
         else:
