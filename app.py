@@ -169,44 +169,26 @@ def load_all_data(version=0):
     except Exception:
         df_proc = pd.DataFrame()
 
+    # --- INCOMING PROJECTS LIST (ΔΙΟΡΘΩΜΕΝΟ ΜΕ INDEX) ---
     df_incoming = pd.DataFrame()
     try:
-        df_incoming_raw = pd.read_csv(INCOMING_CSV_URL)
+        # Διαβάζουμε χωρίς headers, όπως ακριβώς το Procurement
+        df_incoming_raw = pd.read_csv(INCOMING_CSV_URL, header=None)
         
         if not df_incoming_raw.empty:
-            df_incoming_raw.columns = [str(c).strip() for c in df_incoming_raw.columns]
-            
-            project_col = None
-            shipping_col = None
-            
-            for col in df_incoming_raw.columns:
-                col_clean = str(col).strip().lower()
-                if "project" in col_clean:
-                    project_col = col
-                if "shipping" in col_clean and "status" in col_clean:
-                    shipping_col = col
-                elif "shipping" in col_clean:
-                    shipping_col = col
-            
-            if not shipping_col:
-                for col in df_incoming_raw.columns:
-                    if "status" in str(col).strip().lower():
-                        shipping_col = col
-                        break
-            
-            if project_col and shipping_col:
-                df_incoming = df_incoming_raw[[project_col, shipping_col]].copy()
-                df_incoming.columns = ["Project", "Shipping Status"]
-                df_incoming = df_incoming.dropna(subset=["Project"])
-                df_incoming["Project"] = df_incoming["Project"].astype(str).str.strip()
-                df_incoming["Shipping Status"] = df_incoming["Shipping Status"].astype(str).str.strip().str.upper()
-                df_incoming = df_incoming[df_incoming["Project"] != ""]
-                df_incoming = df_incoming[df_incoming["Project"] != "nan"]
-            else:
-                st.warning(f"⚠️ Δεν βρέθηκαν οι στήλες Project/Shipping Status. Στήλες: {list(df_incoming_raw.columns)}")
+            # Παίρνουμε στήλη B (index 1) = Project, στήλη L (index 11) = Shipping Status
+            df_incoming = df_incoming_raw.iloc[1:, [1, 11]].copy()
+            df_incoming.columns = ["Project", "Shipping Status"]
+            df_incoming = df_incoming.dropna(subset=["Project"])
+            df_incoming["Project"] = df_incoming["Project"].astype(str).str.strip()
+            df_incoming["Shipping Status"] = df_incoming["Shipping Status"].astype(str).str.strip()
+            # Κρατάμε μόνο όπου το Project δεν είναι κενό
+            df_incoming = df_incoming[df_incoming["Project"] != ""]
+            df_incoming = df_incoming[df_incoming["Project"] != "nan"]
     except Exception as e:
         st.warning(f"⚠️ Could not load Incoming Projects List: {e}")
 
+    # Load tasks database
     tasks_dict = {}
     try:
         df_times_raw = pd.read_csv(TIMES_CSV_URL, header=None)
@@ -225,6 +207,7 @@ def load_all_data(version=0):
     except Exception:
         tasks_dict = {"Έλεγχος (εύκολο)": 1.0, "Συναρμολόγηση": 2.0, "Συσκευασία": 1.5}
 
+    # Load team and availability
     team_members = ["Βαγγέλης Μ.", "Βαγγέλης JR.", "Εποχικός 1", "Εποχικός 2", "Ana", "Alex"]
     availability_dict = {day: {m: 6.0 for m in team_members} for day in WEEKDAYS_GREEK.values()}
 
@@ -252,7 +235,6 @@ def load_all_data(version=0):
         pass
 
     return df_proc, tasks_dict, team_members, availability_dict, df_incoming
-
 # --- ASSIGNMENTS MANAGEMENT ---
 @st.cache_data(ttl=30)
 def load_assignments_from_sheet():
