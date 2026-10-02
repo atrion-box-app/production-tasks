@@ -780,24 +780,25 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
                         else:
                             st.session_state.selected_project_dashboard = p_name
                         st.rerun()
-        
-        # --- PANEL ΛΕΠΤΟΜΕΡΕΙΩΝ (πλήρους πλάτους) ---
-        if st.session_state.selected_project_dashboard:
-            selected_name = st.session_state.selected_project_dashboard
-            if selected_name in projects_details_cache:
+
+            # --- ΕΛΕΓΧΟΣ ΑΝ ΤΟ ΕΠΙΛΕΓΜΕΝΟ ΕΙΝΑΙ ΣΕ ΑΥΤΗ ΤΗ ΣΕΙΡΑ ---
+            if st.session_state.selected_project_dashboard in batch:
+                selected_name = st.session_state.selected_project_dashboard
                 proj_data = projects_details_cache[selected_name]
                 
-                st.divider()
-                st.markdown(f"## 📦 {selected_name} — Λεπτομέρειες")
+                st.markdown(f"""
+                <div style="background:linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+                            border:2px solid #1e88e5;border-radius:12px;padding:20px;margin:15px 0;">
+                    <h2 style="margin:0;color:#0d47a1;">📦 {selected_name} — Λεπτομέρειες</h2>
+                </div>
+                """, unsafe_allow_html=True)
                 
-                # Κουμπί κλεισίματος
                 col_close, _ = st.columns([1, 5])
                 with col_close:
-                    if st.button("❌ Κλείσιμο Λεπτομερειών", use_container_width=True):
+                    if st.button("❌ Κλείσιμο Λεπτομερειών", use_container_width=True, key=f"close_{selected_name}"):
                         st.session_state.selected_project_dashboard = None
                         st.rerun()
                 
-                # Metrics σε μια σειρά
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Συνολικές Ώρες", f"{proj_data['total_hours']}h")
                 m2.metric("Ολοκληρωμένες", f"{proj_data['completed_hours']}h")
@@ -809,7 +810,6 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
                 
                 st.divider()
                 
-                # Tabs για καθαρή εμφάνιση
                 tab1, tab2, tab3 = st.tabs(["⚙️ Tasks ανά Υλικό", "📋 Υλικά & Είδη", "🏗️ Γενικές Εργασίες"])
                 
                 with tab1:
@@ -869,7 +869,6 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
                             st.info("Δεν έχουν ενεργοποιηθεί γενικές εργασίες")
                     else:
                         st.info("Δεν έχουν οριστεί γενικές εργασίες")
-        st.divider()
         col_exp1, col_exp2 = st.columns(2)
         dash_df = pd.DataFrame(dashboard_data)
         with col_exp1:
