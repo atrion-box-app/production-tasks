@@ -708,14 +708,7 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
                 border-radius: 6px;
                 transition: width 0.5s ease;
             }
-            .project-card-dash + div[data-testid="stButton"] > button {
-                position: relative;
-                margin-top: -110%;
-                height: 110%;
-                opacity: 0;
-                z-index: 10;
-                cursor: pointer;
-            }
+            
         </style>
         """, unsafe_allow_html=True)
         
@@ -767,8 +760,8 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
                     """
                     st.markdown(card_html, unsafe_allow_html=True)
                     
-                    # Κουμπί που καλύπτει όλη την κάρτα (αόρατο)
-                    if st.button("‎", key=f"open_{p_name}", use_container_width=True):
+                    # Κουμπί για άνοιγμα του project
+                    if st.button(f"📂 Άνοιγμα: {p_name}", key=f"open_{p_name}", use_container_width=True):
                         st.session_state["selected_project_from_dashboard"] = p_name
                         st.session_state.page = "📇 Project Cards"
                         st.rerun()
