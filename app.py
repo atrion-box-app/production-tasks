@@ -1184,8 +1184,8 @@ def render_project(procurement_df, tasks_database, team_database, availability_d
         else:
             st.error("❌ Σφάλμα κατά την αποθήκευση")
 
-            def render_daily_plan(procurement_df, tasks_database, team_database, availability_database):
-    st.header("🗓️ Συγκεντρωτικό Πλάνο Παραγωγής")
+    def render_daily_plan(procurement_df, tasks_database, team_database, availability_database):
+        st.header("🗓️ Συγκεντρωτικό Πλάνο Παραγωγής")
     col_d, col_fp, col_fu, col_fs = st.columns([1, 1, 1, 1])
     target_date = col_d.date_input("Ημερομηνία Πλάνου:", value=date.today(), format="DD/MM/YYYY")
     greek_day_name = WEEKDAYS_GREEK.get(target_date.weekday(), "Δευτέρα")
