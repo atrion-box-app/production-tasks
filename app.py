@@ -2067,7 +2067,7 @@ def main():
         st.divider()
         
         st.markdown("### 📋 Navigation")
-                pages_list = ["📈 Dashboard", "📇 Project Cards", "🗓️ Daily Plan", "👤 Technician", "📆 Projection", "📝 Daily Report", "📊 Database", "⚙️ Settings"]
+        pages_list = ["📈 Dashboard", "📇 Project Cards", "🗓️ Daily Plan", "👤 Technician", "📆 Projection", "📝 Daily Report", "📊 Database", "⚙️ Settings"]
         current_page = st.session_state.get("page", "📈 Dashboard")
         if current_page not in pages_list:
             current_page = "📈 Dashboard"
