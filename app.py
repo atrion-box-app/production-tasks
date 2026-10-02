@@ -1132,6 +1132,13 @@ def render_project(procurement_df, tasks_database, team_database, availability_d
             border: 2px solid #1e88e5;
             background: #e3f2fd;
         }
+        .material-card + div[data-testid="stButton"] > button {
+            position: relative;
+            margin-top: -100%;
+            height: 100%;
+            opacity: 0;
+            z-index: 10;
+        }
         .material-title {
             font-size: 13px;
             font-weight: 700;
@@ -1221,7 +1228,7 @@ def render_project(procurement_df, tasks_database, team_database, availability_d
         "done_count": gen_done
     })
     
-    # --- GRID 3 ΚΑΡΤΕΣ ΑΝΑ ΣΕΙΡΑ ---
+        # --- GRID 3 ΚΑΡΤΕΣ ΑΝΑ ΣΕΙΡΑ ---
     num_cols = 3
     for i in range(0, len(cards_to_show), num_cols):
         cols = st.columns(num_cols)
@@ -1247,6 +1254,7 @@ def render_project(procurement_df, tasks_database, team_database, availability_d
                         status_emoji = "🟡"
                     status_text = f"{status_emoji} {card['status']}"
                 
+                # Αν είναι επιλεγμένη, αλλάζει χρώμα
                 selected_class = " selected" if is_selected else ""
                 
                 # Όνομα που κόβεται
@@ -1270,9 +1278,8 @@ def render_project(procurement_df, tasks_database, team_database, availability_d
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
                 
-                # Κουμπί επιλογής
-                btn_label = "🔽 Κλείσιμο" if is_selected else ("⚙️ Διαχείριση" if card["type"] == "general" else "⚙️ Tasks")
-                if st.button(btn_label, key=f"mat_btn_{card['key']}", use_container_width=True):
+                # Κουμπί που καλύπτει όλη την κάρτα (αόρατο)
+                if st.button("‎", key=f"mat_btn_{card['key']}", use_container_width=True):
                     if is_selected:
                         st.session_state.selected_material_project = None
                     else:
@@ -1288,13 +1295,14 @@ def render_project(procurement_df, tasks_database, team_database, availability_d
             # Εύρεση της κάρτας
             selected_card = next(c for c in batch if c["key"] == selected_key)
             
+            # Header με μόνο το Status (χωρίς το τεράστιο μπλε πλαίσιο)
             st.markdown(f"""
-            <div style="background:linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-                        border:2px solid #1e88e5;border-radius:12px;padding:20px;margin:15px 0;">
-                <h2 style="margin:0;color:#0d47a1;">⚙️ {selected_card['name']}</h2>
-                <div style="color:#333;font-size:13px;margin-top:6px;">
-                    Status: <b>{selected_card['status']}</b> | Ποσότητα: <b>{selected_card['qty']} τμχ</b>
-                </div>
+            <div style="background:#f5f5f5;border-left:4px solid #1e88e5;
+                        border-radius:6px;padding:10px 14px;margin:12px 0;">
+                <span style="color:#333;font-size:13px;">
+                    Status: <b>{selected_card['status']}</b> | 
+                    Ποσότητα: <b>{selected_card['qty']} τμχ</b>
+                </span>
             </div>
             """, unsafe_allow_html=True)
             
@@ -1345,11 +1353,9 @@ def render_project(procurement_df, tasks_database, team_database, availability_d
             else:
                 # Βρες το υλικό
                 matched_row = None
-                matched_idx = None
                 for idx, row in filtered_df.iterrows():
                     if f"{row['ID']}_{idx}" == selected_key:
                         matched_row = row
-                        matched_idx = idx
                         break
                 
                 if matched_row is None:
