@@ -996,25 +996,6 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
                         st.session_state.selected_material_cards = card["key"]
                     st.rerun()
         
-        # --- PANEL ΚΑΤΩ ΑΠΟ ΤΗ ΣΕΙΡΑ ---
-        selected_in_row = st.session_state.selected_material_cards in [c["key"] for c in batch]
-        
-        if selected_in_row:
-            selected_key = st.session_state.selected_material_cards
-            selected_card = next(c for c in batch if c["key"] == selected_key)
-            
-            # Header με Status (compact)
-            st.markdown(f"""
-            <div style="background:#f5f5f5;border-left:4px solid #1e88e5;
-                        border-radius:6px;padding:10px 14px;margin:12px 0;">
-                <b style="color:#0d47a1;">⚙️ {selected_card['name']}</b><br>
-                <span style="color:#555;font-size:12px;">
-                    Status: <b>{selected_card['status']}</b> | 
-                    Ποσότητα: <b>{selected_card['qty']} τμχ</b> | 
-                    Tasks: <b>{selected_card['done_count']}/{selected_card['task_count']}</b>
-                </span>
-            </div>
-            """, unsafe_allow_html=True)
             
             col_close, _ = st.columns([1, 5])
             with col_close:
@@ -1397,9 +1378,15 @@ def render_project(procurement_df, tasks_database, team_database, availability_d
                 
                 # Κουμπί για άνοιγμα του project
                 if st.button(f"📂 Άνοιγμα: {p_name}", key=f"open_{p_name}", use_container_width=True):
-                        st.session_state["selected_project_from_dashboard"] = p_name
-                        st.session_state.page = "📇 Project Cards"
-                        st.rerun()
+                    st.session_state["selected_project_from_dashboard"] = p_name
+                    st.session_state.page = "📇 Project Cards"
+                    st.rerun()
+        
+        # Export buttons
+        st.divider()
+        col_exp1, col_exp2 = st.columns(2)
+        dash_df = pd.DataFrame(dashboard_data)
+        ...
         
         # --- PANEL ΚΑΤΩ ΑΠΟ ΤΗ ΣΕΙΡΑ ---
         selected_in_row = st.session_state.selected_material_project in [c["key"] for c in batch]
