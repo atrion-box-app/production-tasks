@@ -1395,13 +1395,11 @@ def render_project(procurement_df, tasks_database, team_database, availability_d
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
                 
-                # Κουμπί που καλύπτει όλη την κάρτα (αόρατο)
-                if st.button("‎", key=f"mat_btn_{card['key']}", use_container_width=True):
-                    if is_selected:
-                        st.session_state.selected_material_project = None
-                    else:
-                        st.session_state.selected_material_project = card["key"]
-                    st.rerun()
+                # Κουμπί για άνοιγμα του project
+                    if st.button(f"📂 Άνοιγμα: {p_name}", key=f"open_{p_name}", use_container_width=True):
+                        st.session_state["selected_project_from_dashboard"] = p_name
+                        st.session_state.page = "📇 Project Cards"
+                        st.rerun()
         
         # --- PANEL ΚΑΤΩ ΑΠΟ ΤΗ ΣΕΙΡΑ ---
         selected_in_row = st.session_state.selected_material_project in [c["key"] for c in batch]
