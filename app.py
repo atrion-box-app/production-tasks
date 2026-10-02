@@ -719,6 +719,10 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
         </style>
         """, unsafe_allow_html=True)
         
+               # --- SESSION STATE ΓΙΑ ΤΟ ΕΠΙΛΕΓΜΕΝΟ PROJECT ---
+        if "selected_project_dashboard" not in st.session_state:
+            st.session_state.selected_project_dashboard = None
+        
         num_cols = 4
         for i in range(0, len(projects_to_show), num_cols):
             cols = st.columns(num_cols)
@@ -767,61 +771,104 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
                     """
                     st.markdown(card_html, unsafe_allow_html=True)
                     
-                    with st.expander("🔍 Λεπτομέρειες", expanded=False):
-                        m1, m2 = st.columns(2)
-                        m1.metric("Ώρες", f"{proj_data['total_hours']}h")
-                        m2.metric("Πρόοδος", f"{proj_data['progress']}%")
-                        
-                        st.caption(f"**Κατάσταση:** {proj_data['status']}")
-                        
-                        items_with_tasks = []
-                        for idx, row in proj_data['items'].iterrows():
-                            item_id = str(row["ID"])
-                            u_key = f"{item_id}_{idx}"
-                            material = row["Υλικό / Προϊόν"]
-                            qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
-                            
-                            item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
-                            
-                            if item_tasks:
-                                for t in item_tasks:
-                                    if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
-                                        auto_time = tasks_database.get(t["task"], 0.0)
-                                        hrs = (auto_time * qty) / 60
-                                        items_with_tasks.append({
-                                            "Υλικό": material[:25] + "..." if len(material) > 25 else material,
-                                            "Εργασία": t["task"],
-                                            "Υπεύθυνος": t.get("user", "-"),
-                                            "Κατάσταση": "✅" if t.get("done", False) else "⏳",
-                                            "Ώρες": round(hrs, 2)
-                                        })
-                        
-                        if items_with_tasks:
-                            st.markdown("**⚙️ Tasks ανά Υλικό**")
-                            tasks_df = pd.DataFrame(items_with_tasks)
-                            st.dataframe(tasks_df, use_container_width=True, hide_index=True)
+                    # Κουμπί επιλογής project
+                    is_selected = st.session_state.selected_project_dashboard == p_name
+                    btn_label = "🔽 Κλείσιμο" if is_selected else "🔍 Λεπτομέρειες"
+                    if st.button(btn_label, key=f"btn_{p_name}", use_container_width=True):
+                        if is_selected:
+                            st.session_state.selected_project_dashboard = None
                         else:
-                            st.info("📌 Δεν έχουν οριστεί εργασίες")
-                        
-                        st.markdown(f"**📋 Υλικά ({proj_data['materials_count']})**")
-                        if proj_data['materials_list']:
-                            materials_df = pd.DataFrame(proj_data['materials_list'])
-                            materials_df.columns = ["ID", "Υλικό", "Ποσότητα", "Status"]
-                            st.dataframe(materials_df, use_container_width=True, hide_index=True)
-                        
-                        if isinstance(proj_data['project_tasks'], dict) and proj_data['project_tasks']:
-                            st.markdown("**🏗️ Γενικές Εργασίες**")
-                            gen_tasks = []
-                            for task_name, p_data in proj_data['project_tasks'].items():
-                                if isinstance(p_data, dict) and p_data.get("active", False):
-                                    gen_tasks.append({
-                                        "Εργασία": task_name,
-                                        "Κατάσταση": "✅" if p_data.get("done", False) else "⏳",
-                                        "Υπεύθυνος": p_data.get("user", "-")
-                                    })
-                            if gen_tasks:
-                                st.dataframe(pd.DataFrame(gen_tasks), use_container_width=True, hide_index=True)
+                            st.session_state.selected_project_dashboard = p_name
+                        st.rerun()
         
+        # --- PANEL ΛΕΠΤΟΜΕΡΕΙΩΝ (πλήρους πλάτους) ---
+        if st.session_state.selected_project_dashboard:
+            selected_name = st.session_state.selected_project_dashboard
+            if selected_name in projects_details_cache:
+                proj_data = projects_details_cache[selected_name]
+                
+                st.divider()
+                st.markdown(f"## 📦 {selected_name} — Λεπτομέρειες")
+                
+                # Κουμπί κλεισίματος
+                col_close, _ = st.columns([1, 5])
+                with col_close:
+                    if st.button("❌ Κλείσιμο Λεπτομερειών", use_container_width=True):
+                        st.session_state.selected_project_dashboard = None
+                        st.rerun()
+                
+                # Metrics σε μια σειρά
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Συνολικές Ώρες", f"{proj_data['total_hours']}h")
+                m2.metric("Ολοκληρωμένες", f"{proj_data['completed_hours']}h")
+                m3.metric("Υπολειπόμενες", f"{proj_data['remaining_hours']}h")
+                m4.metric("Πρόοδος", f"{proj_data['progress']}%")
+                
+                st.progress(proj_data['progress'] / 100)
+                st.caption(f"**Κατάσταση:** {proj_data['status']} | **Υλικά:** {proj_data['materials_count']}")
+                
+                st.divider()
+                
+                # Tabs για καθαρή εμφάνιση
+                tab1, tab2, tab3 = st.tabs(["⚙️ Tasks ανά Υλικό", "📋 Υλικά & Είδη", "🏗️ Γενικές Εργασίες"])
+                
+                with tab1:
+                    items_with_tasks = []
+                    for idx, row in proj_data['items'].iterrows():
+                        item_id = str(row["ID"])
+                        u_key = f"{item_id}_{idx}"
+                        material = row["Υλικό / Προϊόν"]
+                        qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+                        
+                        item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
+                        
+                        if item_tasks:
+                            for t in item_tasks:
+                                if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
+                                    auto_time = tasks_database.get(t["task"], 0.0)
+                                    hrs = (auto_time * qty) / 60
+                                    items_with_tasks.append({
+                                        "ID": item_id,
+                                        "Υλικό": material[:40] + "..." if len(material) > 40 else material,
+                                        "Ποσότητα": qty,
+                                        "Εργασία": t["task"],
+                                        "Υπεύθυνος": t.get("user", "-"),
+                                        "Ημερομηνία": t.get("date", ""),
+                                        "Κατάσταση": "✅ Ολοκληρώθηκε" if t.get("done", False) else "⏳ Εκκρεμεί",
+                                        "Ώρες": round(hrs, 2)
+                                    })
+                    
+                    if items_with_tasks:
+                        tasks_df = pd.DataFrame(items_with_tasks)
+                        st.dataframe(tasks_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("📌 Δεν έχουν οριστεί εργασίες για τα υλικά αυτού του project")
+                
+                with tab2:
+                    if proj_data['materials_list']:
+                        materials_df = pd.DataFrame(proj_data['materials_list'])
+                        materials_df.columns = ["ID", "Υλικό / Προϊόν", "Ποσότητα", "Status Procurement"]
+                        st.dataframe(materials_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Δεν βρέθηκαν υλικά")
+                
+                with tab3:
+                    if isinstance(proj_data['project_tasks'], dict) and proj_data['project_tasks']:
+                        gen_tasks = []
+                        for task_name, p_data in proj_data['project_tasks'].items():
+                            if isinstance(p_data, dict) and p_data.get("active", False):
+                                gen_tasks.append({
+                                    "Εργασία": task_name,
+                                    "Κατάσταση": "✅ Ολοκληρώθηκε" if p_data.get("done", False) else "⏳ Εκκρεμεί",
+                                    "Υπεύθυνος": p_data.get("user", "-"),
+                                    "Ημερομηνία": p_data.get("date", "")
+                                })
+                        if gen_tasks:
+                            st.dataframe(pd.DataFrame(gen_tasks), use_container_width=True, hide_index=True)
+                        else:
+                            st.info("Δεν έχουν ενεργοποιηθεί γενικές εργασίες")
+                    else:
+                        st.info("Δεν έχουν οριστεί γενικές εργασίες")
         st.divider()
         col_exp1, col_exp2 = st.columns(2)
         dash_df = pd.DataFrame(dashboard_data)
