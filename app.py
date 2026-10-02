@@ -169,26 +169,21 @@ def load_all_data(version=0):
     except Exception:
         df_proc = pd.DataFrame()
 
-    # --- INCOMING PROJECTS LIST (ΔΙΟΡΘΩΜΕΝΟ ΜΕ INDEX) ---
     df_incoming = pd.DataFrame()
     try:
-        # Διαβάζουμε χωρίς headers, όπως ακριβώς το Procurement
         df_incoming_raw = pd.read_csv(INCOMING_CSV_URL, header=None)
         
         if not df_incoming_raw.empty:
-            # Παίρνουμε στήλη B (index 1) = Project, στήλη L (index 11) = Shipping Status
             df_incoming = df_incoming_raw.iloc[1:, [1, 11]].copy()
             df_incoming.columns = ["Project", "Shipping Status"]
             df_incoming = df_incoming.dropna(subset=["Project"])
             df_incoming["Project"] = df_incoming["Project"].astype(str).str.strip()
             df_incoming["Shipping Status"] = df_incoming["Shipping Status"].astype(str).str.strip()
-            # Κρατάμε μόνο όπου το Project δεν είναι κενό
             df_incoming = df_incoming[df_incoming["Project"] != ""]
             df_incoming = df_incoming[df_incoming["Project"] != "nan"]
     except Exception as e:
         st.warning(f"⚠️ Could not load Incoming Projects List: {e}")
 
-    # Load tasks database
     tasks_dict = {}
     try:
         df_times_raw = pd.read_csv(TIMES_CSV_URL, header=None)
@@ -207,7 +202,6 @@ def load_all_data(version=0):
     except Exception:
         tasks_dict = {"Έλεγχος (εύκολο)": 1.0, "Συναρμολόγηση": 2.0, "Συσκευασία": 1.5}
 
-    # Load team and availability
     team_members = ["Βαγγέλης Μ.", "Βαγγέλης JR.", "Εποχικός 1", "Εποχικός 2", "Ana", "Alex"]
     availability_dict = {day: {m: 6.0 for m in team_members} for day in WEEKDAYS_GREEK.values()}
 
@@ -235,7 +229,7 @@ def load_all_data(version=0):
         pass
 
     return df_proc, tasks_dict, team_members, availability_dict, df_incoming
-    
+
 # --- ASSIGNMENTS MANAGEMENT ---
 @st.cache_data(ttl=30)
 def load_assignments_from_sheet():
@@ -441,7 +435,7 @@ def update_proj_field(p_key, task_name, field, widget_key):
     st.session_state["project_tasks_store"][p_key][task_name][field] = st.session_state[widget_key]
     save_all_assignments_to_sheet()
 
-# --- PROJECT CARDS FUNCTIONS (ΔΙΟΡΘΩΜΕΝΟ) ---
+# --- PROJECT CARDS FUNCTIONS ---
 def get_project_details(project_name, procurement_df, tasks_database, incoming_df):
     items = procurement_df[procurement_df["Project"] == project_name].copy() if not procurement_df.empty else pd.DataFrame()
     
@@ -489,7 +483,6 @@ def get_project_details(project_name, procurement_df, tasks_database, incoming_d
     
     progress = int((completed_tasks / total_tasks) * 100) if total_tasks > 0 else 0
     
-    # ΔΙΟΡΘΩΜΕΝΟΣ ΕΛΕΓΧΟΣ ΓΙΑ SHIPPED
     is_shipped = False
     if not incoming_df.empty and "Project" in incoming_df.columns and "Shipping Status" in incoming_df.columns:
         project_name_clean = str(project_name).strip().upper()
@@ -575,6 +568,7 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
     tot_done_hours = 0.0
     tot_tasks_count = 0
     tot_done_tasks = 0
+    projects_details_cache = {}
     
     for p_name in projects_to_show:
         filtered_p = procurement_df[procurement_df["Project"] == p_name]
@@ -623,6 +617,7 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
         p_progress = int((p_done_cnt / p_tasks_cnt) * 100) if p_tasks_cnt > 0 else 0
         
         proj_details = get_project_details(p_name, procurement_df, tasks_database, incoming_df)
+        projects_details_cache[p_name] = proj_details
         is_shipped = proj_details.get('is_shipped', False)
         
         dashboard_data.append({
@@ -649,21 +644,187 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
 
     st.divider()
     
+    # --- PROJECT CARDS GRID (4 ανά σειρά) ---
     st.subheader(f"📋 {section_title}")
-    if dashboard_data:
-        dash_df = pd.DataFrame(dashboard_data)
+    
+    if not projects_to_show:
+        st.info("Δεν βρέθηκαν projects.")
+    else:
+        st.markdown("""
+        <style>
+            .project-card {
+                background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+                border: 1px solid #e0e0e0;
+                border-radius: 12px;
+                padding: 16px;
+                margin-bottom: 10px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
+                height: 100%;
+            }
+            .project-card:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            }
+            .project-card.active {
+                border-left: 4px solid #2e7d32;
+            }
+            .project-card.shipped {
+                border-left: 4px solid #c62828;
+                opacity: 0.75;
+            }
+            .project-card-title {
+                font-size: 15px;
+                font-weight: 700;
+                color: #1a1a1a;
+                margin-bottom: 8px;
+                word-wrap: break-word;
+                line-height: 1.2;
+            }
+            .project-card-status {
+                font-size: 11px;
+                font-weight: 600;
+                padding: 3px 8px;
+                border-radius: 10px;
+                display: inline-block;
+                margin-bottom: 10px;
+            }
+            .status-active {
+                background: #e8f5e9;
+                color: #2e7d32;
+            }
+            .status-shipped {
+                background: #ffebee;
+                color: #c62828;
+            }
+            .project-card-meta {
+                font-size: 12px;
+                color: #666;
+                margin-top: 8px;
+                display: flex;
+                justify-content: space-between;
+            }
+            .progress-bar-bg {
+                background: #e0e0e0;
+                border-radius: 6px;
+                height: 8px;
+                overflow: hidden;
+                margin: 8px 0;
+            }
+            .progress-bar-fill {
+                height: 100%;
+                border-radius: 6px;
+                transition: width 0.5s ease;
+            }
+        </style>
+        """, unsafe_allow_html=True)
         
-        def style_status(val):
-            if val == "🔴 OK Shipped":
-                return 'background-color: #ffebee; color: #c62828; font-weight: bold;'
-            elif val == "🟢 ΕΝΕΡΓΟ":
-                return 'background-color: #e8f5e9; color: #2e7d32; font-weight: bold;'
-            return ''
+        num_cols = 4
+        for i in range(0, len(projects_to_show), num_cols):
+            cols = st.columns(num_cols)
+            batch = projects_to_show[i:i+num_cols]
+            for j, p_name in enumerate(batch):
+                proj_data = projects_details_cache[p_name]
+                
+                with cols[j]:
+                    is_shipped = proj_data.get('is_shipped', False)
+                    if is_shipped:
+                        card_class = "project-card shipped"
+                        status_html = '<span class="project-card-status status-shipped">🔴 OK Shipped</span>'
+                    else:
+                        card_class = "project-card active"
+                        status_html = '<span class="project-card-status status-active">🟢 ΕΝΕΡΓΟ</span>'
+                    
+                    progress = proj_data['progress']
+                    if progress == 100:
+                        bar_color = "#2e7d32"
+                    elif progress > 50:
+                        bar_color = "#1e88e5"
+                    elif progress > 0:
+                        bar_color = "#ff9800"
+                    else:
+                        bar_color = "#9e9e9e"
+                    
+                    total_h = proj_data['total_hours']
+                    materials = proj_data['materials_count']
+                    done_tasks = proj_data['completed_tasks']
+                    total_tasks = proj_data['total_tasks']
+                    
+                    card_html = f"""
+                    <div class="{card_class}">
+                        <div class="project-card-title">📦 {p_name}</div>
+                        {status_html}
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" style="width:{progress}%;background:{bar_color};"></div>
+                        </div>
+                        <div style="text-align:center;font-size:13px;font-weight:600;color:#333;">{progress}%</div>
+                        <div class="project-card-meta">
+                            <span>⏱️ {total_h}h</span>
+                            <span>📋 {materials}</span>
+                            <span>✅ {done_tasks}/{total_tasks}</span>
+                        </div>
+                    </div>
+                    """
+                    st.markdown(card_html, unsafe_allow_html=True)
+                    
+                    with st.expander("🔍 Λεπτομέρειες", expanded=False):
+                        m1, m2 = st.columns(2)
+                        m1.metric("Ώρες", f"{proj_data['total_hours']}h")
+                        m2.metric("Πρόοδος", f"{proj_data['progress']}%")
+                        
+                        st.caption(f"**Κατάσταση:** {proj_data['status']}")
+                        
+                        items_with_tasks = []
+                        for idx, row in proj_data['items'].iterrows():
+                            item_id = str(row["ID"])
+                            u_key = f"{item_id}_{idx}"
+                            material = row["Υλικό / Προϊόν"]
+                            qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+                            
+                            item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
+                            
+                            if item_tasks:
+                                for t in item_tasks:
+                                    if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
+                                        auto_time = tasks_database.get(t["task"], 0.0)
+                                        hrs = (auto_time * qty) / 60
+                                        items_with_tasks.append({
+                                            "Υλικό": material[:25] + "..." if len(material) > 25 else material,
+                                            "Εργασία": t["task"],
+                                            "Υπεύθυνος": t.get("user", "-"),
+                                            "Κατάσταση": "✅" if t.get("done", False) else "⏳",
+                                            "Ώρες": round(hrs, 2)
+                                        })
+                        
+                        if items_with_tasks:
+                            st.markdown("**⚙️ Tasks ανά Υλικό**")
+                            tasks_df = pd.DataFrame(items_with_tasks)
+                            st.dataframe(tasks_df, use_container_width=True, hide_index=True)
+                        else:
+                            st.info("📌 Δεν έχουν οριστεί εργασίες")
+                        
+                        st.markdown(f"**📋 Υλικά ({proj_data['materials_count']})**")
+                        if proj_data['materials_list']:
+                            materials_df = pd.DataFrame(proj_data['materials_list'])
+                            materials_df.columns = ["ID", "Υλικό", "Ποσότητα", "Status"]
+                            st.dataframe(materials_df, use_container_width=True, hide_index=True)
+                        
+                        if isinstance(proj_data['project_tasks'], dict) and proj_data['project_tasks']:
+                            st.markdown("**🏗️ Γενικές Εργασίες**")
+                            gen_tasks = []
+                            for task_name, p_data in proj_data['project_tasks'].items():
+                                if isinstance(p_data, dict) and p_data.get("active", False):
+                                    gen_tasks.append({
+                                        "Εργασία": task_name,
+                                        "Κατάσταση": "✅" if p_data.get("done", False) else "⏳",
+                                        "Υπεύθυνος": p_data.get("user", "-")
+                                    })
+                            if gen_tasks:
+                                st.dataframe(pd.DataFrame(gen_tasks), use_container_width=True, hide_index=True)
         
-        styled_df = dash_df.style.map(style_status, subset=['Κατάσταση'])
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
-        
+        st.divider()
         col_exp1, col_exp2 = st.columns(2)
+        dash_df = pd.DataFrame(dashboard_data)
         with col_exp1:
             csv = dash_df.to_csv(index=False).encode('utf-8-sig')
             st.download_button(
@@ -682,8 +843,6 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
                 use_container_width=True
             )
-    else:
-        st.info("Δεν βρέθηκαν projects.")
 
 
 def render_project_cards(procurement_df, tasks_database, team_database, availability_database, incoming_df):
@@ -1025,8 +1184,7 @@ def render_project(procurement_df, tasks_database, team_database, availability_d
         else:
             st.error("❌ Σφάλμα κατά την αποθήκευση")
 
-
-def render_daily_plan(procurement_df, tasks_database, team_database, availability_database):
+            def render_daily_plan(procurement_df, tasks_database, team_database, availability_database):
     st.header("🗓️ Συγκεντρωτικό Πλάνο Παραγωγής")
     col_d, col_fp, col_fu, col_fs = st.columns([1, 1, 1, 1])
     target_date = col_d.date_input("Ημερομηνία Πλάνου:", value=date.today(), format="DD/MM/YYYY")
