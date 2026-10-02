@@ -928,7 +928,7 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
         if str(r["Ποσότητα"]).isdigit():
             project_main_qty = max(project_main_qty, int(r["Ποσότητα"]))
     
-    # --- ΚΟΥΜΠΙ ΓΕΝΙΚΩΝ ΕΡΓΑΣΙΩΝ + ΣΥΝΟΨΗ ---
+        # --- ΥΠΟΛΟΓΙΣΜΟΣ ΓΕΝΙΚΩΝ ΕΡΓΑΣΙΩΝ ---
     st.divider()
     
     proj_key = f"proj_{selected_project}"
@@ -938,19 +938,6 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
     if isinstance(proj_tasks_dict, dict):
         gen_active = sum(1 for t in proj_tasks_dict.values() if isinstance(t, dict) and t.get("active", False))
         gen_done = sum(1 for t in proj_tasks_dict.values() if isinstance(t, dict) and t.get("active", False) and t.get("done", False))
-    
-    col_gen_btn, col_gen_info, _ = st.columns([1, 2, 2])
-    with col_gen_btn:
-        is_gen_selected = st.session_state.get("selected_material_cards") == "GENERAL_TASKS"
-        btn_label = "🔽 Κλείσιμο Γενικών" if is_gen_selected else "🛠️ Γενικές Εργασίες"
-        if st.button(btn_label, use_container_width=True, type="secondary"):
-            if is_gen_selected:
-                st.session_state.selected_material_cards = None
-            else:
-                st.session_state.selected_material_cards = "GENERAL_TASKS"
-            st.rerun()
-    with col_gen_info:
-        st.caption(f"Ενεργές: **{gen_active}/5**  |  Ολοκληρωμένες: **{gen_done}**")
     
     st.divider()
     
@@ -1205,46 +1192,44 @@ def render_project_cards(procurement_df, tasks_database, team_database, availabi
                     save_all_assignments_to_sheet()
                     st.rerun()
     
-    # --- PANEL ΓΕΝΙΚΩΝ ΕΡΓΑΣΙΩΝ ---
-    if st.session_state.selected_material_cards == "GENERAL_TASKS":
-        st.divider()
-        st.markdown(f"### 🛠️ Γενικές Εργασίες — {selected_project}")
-        st.caption("Ενεργοποίησε τις εργασίες που χρειάζονται και όρισε υπεύθυνο + ημερομηνία.")
+    # --- ΓΕΝΙΚΕΣ ΕΡΓΑΣΙΕΣ (ΠΑΝΤΑ ΑΝΟΙΧΤΕΣ) ---
+    st.divider()
+    st.markdown(f"### 🛠️ Γενικές Εργασίες — {selected_project}")
+    st.caption("Ενεργοποίησε τις εργασίες που χρειάζονται και όρισε υπεύθυνο + ημερομηνία.")
+    
+    if proj_key not in st.session_state["project_tasks_store"] or not isinstance(st.session_state["project_tasks_store"][proj_key], dict):
+        st.session_state["project_tasks_store"][proj_key] = {t_name: {"active": False, "done": False, "user": "- Χωρίς Ανάθεση -", "date": date.today()} for t_name in FIXED_PROJECT_TASKS}
+    
+    proj_tasks_dict = st.session_state["project_tasks_store"][proj_key]
+    team_options = ["- Χωρίς Ανάθεση -"] + team_database
+    
+    for task_name in FIXED_PROJECT_TASKS:
+        t_data = proj_tasks_dict.get(task_name, {"active": False, "done": False, "user": "- Χωρίς Ανάθεση -", "date": date.today()})
         
-        proj_key = f"proj_{selected_project}"
-        if proj_key not in st.session_state["project_tasks_store"] or not isinstance(st.session_state["project_tasks_store"][proj_key], dict):
-            st.session_state["project_tasks_store"][proj_key] = {t_name: {"active": False, "done": False, "user": "- Χωρίς Ανάθεση -", "date": date.today()} for t_name in FIXED_PROJECT_TASKS}
-        
-        proj_tasks_dict = st.session_state["project_tasks_store"][proj_key]
-        team_options = ["- Χωρίς Ανάθεση -"] + team_database
-        
-        for task_name in FIXED_PROJECT_TASKS:
-            t_data = proj_tasks_dict.get(task_name, {"active": False, "done": False, "user": "- Χωρίς Ανάθεση -", "date": date.today()})
+        with st.container(border=True):
+            c_active, c_name, c_done = st.columns([0.08, 0.62, 0.30])
+            pact_k = f"pact_card_{proj_key}_{task_name}"
+            is_active = c_active.checkbox("", value=t_data["active"], key=pact_k, on_change=update_proj_field, args=(proj_key, task_name, "active", pact_k))
+            c_name.markdown(f"**{task_name}**" if is_active else f"<span style='color:gray;'>{task_name}</span>", unsafe_allow_html=True)
             
-            with st.container(border=True):
-                c_active, c_name, c_done = st.columns([0.08, 0.62, 0.30])
-                pact_k = f"pact_card_{proj_key}_{task_name}"
-                is_active = c_active.checkbox("", value=t_data["active"], key=pact_k, on_change=update_proj_field, args=(proj_key, task_name, "active", pact_k))
-                c_name.markdown(f"**{task_name}**" if is_active else f"<span style='color:gray;'>{task_name}</span>", unsafe_allow_html=True)
+            if is_active:
+                pdone_k = f"proj_pdone_card_{proj_key}_{task_name}"
+                is_done = c_done.checkbox("✅ Done", value=t_data["done"], key=pdone_k, on_change=toggle_project_task, args=(proj_key, task_name, pdone_k))
+            else:
+                c_done.caption("—")
+            
+            if is_active:
+                c_user, c_date, c_time = st.columns([0.4, 0.4, 0.2])
+                user_idx = team_options.index(t_data["user"]) if t_data["user"] in team_options else 0
+                puser_k = f"puser_card_{proj_key}_{task_name}"
+                c_user.selectbox("Υπεύθυνος", team_options, index=user_idx, key=puser_k, on_change=update_proj_field, args=(proj_key, task_name, "user", puser_k))
                 
-                if is_active:
-                    pdone_k = f"proj_pdone_card_{proj_key}_{task_name}"
-                    is_done = c_done.checkbox("✅ Done", value=t_data["done"], key=pdone_k, on_change=toggle_project_task, args=(proj_key, task_name, pdone_k))
-                else:
-                    c_done.caption("—")
+                pdate_k = f"pdate_card_{proj_key}_{task_name}"
+                c_date.date_input("Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", key=pdate_k, on_change=update_proj_field, args=(proj_key, task_name, "date", pdate_k))
                 
-                if is_active:
-                    c_user, c_date, c_time = st.columns([0.4, 0.4, 0.2])
-                    user_idx = team_options.index(t_data["user"]) if t_data["user"] in team_options else 0
-                    puser_k = f"puser_card_{proj_key}_{task_name}"
-                    c_user.selectbox("Υπεύθυνος", team_options, index=user_idx, key=puser_k, on_change=update_proj_field, args=(proj_key, task_name, "user", puser_k))
-                    
-                    pdate_k = f"pdate_card_{proj_key}_{task_name}"
-                    c_date.date_input("Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", key=pdate_k, on_change=update_proj_field, args=(proj_key, task_name, "date", pdate_k))
-                    
-                    auto_time = tasks_database.get(task_name, 0.0)
-                    task_hours = (auto_time * project_main_qty) / 60
-                    c_time.metric("Ώρες", f"{round(task_hours, 2)}h")
+                auto_time = tasks_database.get(task_name, 0.0)
+                task_hours = (auto_time * project_main_qty) / 60
+                c_time.metric("Ώρες", f"{round(task_hours, 2)}h")
     
     # --- ΣΥΝΟΨΗ PROJECT ---
     st.divider()
