@@ -1078,6 +1078,11 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
         item_id = str(row["ID"])
         unique_key = f"{item_id}_{idx}"
         project_name = str(row["Project"])
+
+        # Παράλειψη αν το project δεν είναι ενεργό
+        if project_name not in active_projects_set:
+            continue
+            
         material = str(row["Υλικό / Προϊόν"])
         qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
         status_proc = str(row["Status Procurement"])
@@ -1108,6 +1113,11 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
         if isinstance(p_tasks_dict, dict):
             proj_name = p_key.replace("proj_", "")
+
+            # Παράλειψη αν το project δεν είναι ενεργό
+            if proj_name not in active_projects_set:
+                continue
+                
             proj_qty = 1
             p_items = procurement_df[procurement_df["Project"] == proj_name]
             for _, r in p_items.iterrows():
