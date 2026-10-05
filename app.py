@@ -638,15 +638,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         text-align: left !important;
                         width: 100% !important;
                     }
-                    /* Αόρατο κουμπί πάνω στη γραμμή */
-                    .mat-row-wrapper + div[data-testid="stButton"] > button {
-                        position: relative;
-                        margin-top: -50px;
-                        height: 46px;
-                        opacity: 0;
-                        z-index: 10;
-                        cursor: pointer;
-                    }
+                   
                 </style>
                 """, unsafe_allow_html=True)
                 
@@ -695,27 +687,29 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     # Κλικ στη γραμμή (κουμπί που καλύπτει τη γραμμή)
                     arrow = "▼" if is_open else "▶"
                     
-                    # HTML γραμμή
-                    st.markdown(f"""
-                    <div class="mat-row-wrapper" style="display:flex;align-items:center;justify-content:space-between;padding:10px 15px;background:#ffffff;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:4px;font-size:13px;">
-                        <div style="display:flex;align-items:center;gap:12px;flex:1;">
-                            <span style="font-weight:700;color:#1e88e5;min-width:24px;">{arrow}</span>
+                    # Γραμμή υλικού (μόνο HTML, χωρίς κλικ)
+                    col_info, col_btn = st.columns([8, 1])
+                    
+                    with col_info:
+                        st.markdown(f"""
+                        <div style="display:flex;align-items:center;gap:12px;padding:10px 15px;background:#ffffff;border:1px solid #e0e0e0;border-radius:6px;font-size:13px;">
                             <span style="font-weight:700;color:#333;min-width:70px;">{item_id}</span>
                             <span style="color:#333;flex:1;">{material[:50]}{'...' if len(material)>50 else ''}</span>
                             <span style="color:#666;min-width:60px;">{qty} τμχ</span>
                             <span style="padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;{'background:#e8f5e9;color:#2e7d32;' if status in ['OK STOCK','RECEIVED','READY'] else 'background:#fff8e1;color:#f57c00;'}">{status}</span>
                             {progress_html}
                         </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                        """, unsafe_allow_html=True)
                     
-                    # Κουμπί "αόρατο" που καλύπτει τη γραμμή
-                    if st.button("‎", key=f"mat_row_{unique_key}", use_container_width=True):
-                        if is_open:
-                            st.session_state.selected_material_expand = None
-                        else:
-                            st.session_state.selected_material_expand = unique_key
-                        st.rerun()
+                    with col_btn:
+                        btn_icon = "▼" if is_open else "▶"
+                        if st.button(btn_icon, key=f"mat_row_{unique_key}", use_container_width=True):
+                            if is_open:
+                                st.session_state.selected_material_expand = None
+                            else:
+                                st.session_state.selected_material_expand = unique_key
+                            st.rerun()
+                    
                     
                     # Expandable Panel αν είναι ανοιχτό
                     if is_open:
