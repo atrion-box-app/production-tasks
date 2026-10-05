@@ -1053,6 +1053,27 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     # --- ΣΥΛΛΟΓΗ ΟΛΩΝ ΤΩΝ ΕΡΓΑΣΙΩΝ ---
     all_tasks = []
     
+    # --- CHECKBOX: ΕΜΦΑΝΙΣΗ ΟΛΩΝ Ή ΜΟΝΟ ΕΝΕΡΓΩΝ ---
+    col_chk, col_info = st.columns([1, 3])
+    with col_chk:
+        show_all_projects = st.checkbox(
+            "Εμφάνιση Όλων των Projects (μαζί με OK Shipped)",
+            value=False,
+            key="mv_show_all",
+            help="Αν τσεκαριστεί, εμφανίζονται εργασίες από ΟΛΑ τα projects. Αν όχι, μόνο από τα ενεργά."
+        )
+    
+    # --- ΕΝΕΡΓΑ PROJECTS ΜΟΝΟ ---
+    if show_all_projects:
+        active_projects_set = set(p for p in procurement_df["Project"].unique() if p != "-")
+    else:
+        active_projects_set = set()
+        for p_name in procurement_df["Project"].unique():
+            if p_name != "-":
+                proj_data = get_project_details(p_name, procurement_df, tasks_database, incoming_df)
+                if proj_data['is_active']:
+                    active_projects_set.add(p_name)
+    
     for idx, row in procurement_df.iterrows():
         item_id = str(row["ID"])
         unique_key = f"{item_id}_{idx}"
