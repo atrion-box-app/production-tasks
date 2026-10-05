@@ -638,6 +638,15 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         text-align: left !important;
                         width: 100% !important;
                     }
+                    /* Αόρατο κουμπί πάνω στη γραμμή */
+                    .mat-row-wrapper + div[data-testid="stButton"] > button {
+                        position: relative;
+                        margin-top: -50px;
+                        height: 46px;
+                        opacity: 0;
+                        z-index: 10;
+                        cursor: pointer;
+                    }
                 </style>
                 """, unsafe_allow_html=True)
                 
@@ -671,17 +680,37 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     # Progress bar (text)
                     if task_count > 0:
                         progress_pct = int((done_count / task_count) * 100)
-                        progress_bar = "▓" * (progress_pct // 20) + "░" * (5 - progress_pct // 20)
-                        progress_html = f"{progress_bar} {done_count}/{task_count}"
+                        # Χρώμα μπάρας
+                        if progress_pct == 100:
+                            bar_color = "#2e7d32"
+                        elif progress_pct > 0:
+                            bar_color = "#1e88e5"
+                        else:
+                            bar_color = "#9e9e9e"
+                        
+                        progress_html = f'<div style="display:inline-flex;align-items:center;gap:6px;"><div style="width:50px;height:6px;background:#e0e0e0;border-radius:3px;overflow:hidden;"><div style="width:{progress_pct}%;height:100%;background:{bar_color};"></div></div><span style="font-size:11px;color:#555;">{done_count}/{task_count}</span></div>'
                     else:
-                        progress_html = "— 0/0"
+                        progress_html = '<span style="font-size:11px;color:#999;">0/0</span>'
                     
                     # Κλικ στη γραμμή (κουμπί που καλύπτει τη γραμμή)
                     arrow = "▼" if is_open else "▶"
-                    # Κείμενο ευθυγραμμισμένο αριστερά
-                    btn_label = f"{arrow}  {item_id}  │  {material[:60]}{'...' if len(material)>60 else ''}  │  {qty} τμχ  │  {status}  │  {progress_html}"
                     
-                    if st.button(btn_label, key=f"mat_row_{unique_key}", use_container_width=True):
+                    # HTML γραμμή
+                    st.markdown(f"""
+                    <div class="mat-row-wrapper" style="display:flex;align-items:center;justify-content:space-between;padding:10px 15px;background:#ffffff;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:4px;font-size:13px;">
+                        <div style="display:flex;align-items:center;gap:12px;flex:1;">
+                            <span style="font-weight:700;color:#1e88e5;min-width:24px;">{arrow}</span>
+                            <span style="font-weight:700;color:#333;min-width:70px;">{item_id}</span>
+                            <span style="color:#333;flex:1;">{material[:50]}{'...' if len(material)>50 else ''}</span>
+                            <span style="color:#666;min-width:60px;">{qty} τμχ</span>
+                            <span style="padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;{'background:#e8f5e9;color:#2e7d32;' if status in ['OK STOCK','RECEIVED','READY'] else 'background:#fff8e1;color:#f57c00;'}">{status}</span>
+                            {progress_html}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Κουμπί "αόρατο" που καλύπτει τη γραμμή
+                    if st.button("‎", key=f"mat_row_{unique_key}", use_container_width=True):
                         if is_open:
                             st.session_state.selected_material_expand = None
                         else:
