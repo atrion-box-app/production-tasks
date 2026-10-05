@@ -75,26 +75,27 @@ def verify_user(username, password):
     return False
 
 def login_form():
-    with st.container():
+    # Κενό διάστημα για να κεντράρει κάθετα
+    st.markdown("<div style='height:20vh;'></div>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
         st.markdown("""
-        <div style="max-width:400px;margin:100px auto;padding:40px;border-radius:10px;box-shadow:0 4px 6px rgba(0,0,0,0.1);background:white;">
-            <h2 style="text-align:center;color:#1e88e5;">🏭 Production Tasks</h2>
-            <p style="text-align:center;color:#666;">Please login to continue</p>
+        <div style="text-align:center;margin-bottom:30px;">
+            <div style="font-size:20px;font-weight:600;color:#555;">Production Tasks</div>
         </div>
         """, unsafe_allow_html=True)
         
         with st.form("login_form"):
-            username = st.text_input("👤 Username", placeholder="Enter your username")
-            password = st.text_input("🔑 Password", type="password", placeholder="Enter your password")
-            submitted = st.form_submit_button("🚀 Login", use_container_width=True)
+            username = st.text_input("Username", placeholder="", label_visibility="collapsed")
+            password = st.text_input("Password", type="password", placeholder="Password", label_visibility="collapsed")
+            submitted = st.form_submit_button("Login", use_container_width=True)
             
             if submitted:
                 if verify_user(username, password):
-                    st.success("✅ Login successful!")
                     st.rerun()
                 else:
-                    st.error("❌ Invalid username or password")
-
+                    st.error("Λάθος στοιχεία")
 def logout():
     st.session_state.authenticated = False
     st.session_state.username = None
