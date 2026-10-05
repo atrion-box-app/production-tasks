@@ -754,10 +754,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 auto_time = tasks_database.get(t_data["task"], 0.0)
                                 if t_data["task"] != "- Επιλογή Εργασίας -":
                                     task_hours = (auto_time * qty) / 60
-                                    if t_data["done"]:
-                                        c_time.markdown("✅ **Done**")
-                                    else:
-                                        c_time.metric("Ώρες", f"{round(task_hours, 2)}h")
+                                    c_time.metric("Ώρες", f"{round(task_hours, 2)}h")
                                 else:
                                     c_time.caption("—")
                                 
