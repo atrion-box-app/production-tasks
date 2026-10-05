@@ -45,7 +45,7 @@ def init_auth():
     if "last_login_attempt" not in st.session_state:
         st.session_state.last_login_attempt = None
     if "page" not in st.session_state:
-        st.session_state.page = "📦 Projects"
+        st.session_state.page = "Projects"
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -61,7 +61,7 @@ def verify_user(username, password):
     if st.session_state.login_attempts >= 5:
         last_attempt = st.session_state.last_login_attempt
         if last_attempt and (datetime.now() - last_attempt).seconds < 300:
-            st.error("🔒 Too many failed attempts. Please wait 5 minutes.")
+            st.error("Too many failed attempts. Please wait 5 minutes.")
             return False
     
     if username in valid_users and valid_users[username] == hash_password(password):
@@ -75,7 +75,6 @@ def verify_user(username, password):
     return False
 
 def login_form():
-    # Κενό διάστημα για να κεντράρει κάθετα
     st.markdown("<div style='height:20vh;'></div>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 1, 1])
@@ -96,6 +95,7 @@ def login_form():
                     st.rerun()
                 else:
                     st.error("Λάθος στοιχεία")
+
 def logout():
     st.session_state.authenticated = False
     st.session_state.username = None
@@ -187,7 +187,7 @@ def load_all_data(version=0):
             df_incoming = df_incoming[df_incoming["Project"] != ""]
             df_incoming = df_incoming[df_incoming["Project"] != "nan"]
     except Exception as e:
-        st.warning(f"⚠️ Could not load Incoming Projects List: {e}")
+        st.warning(f"Could not load Incoming Projects List: {e}")
 
     tasks_dict = {}
     try:
@@ -285,14 +285,14 @@ def load_assignments_from_sheet():
                     "date": assign_date
                 })
     except Exception as e:
-        st.warning(f"⚠️ Could not load assignments: {e}")
+        st.warning(f"Could not load assignments: {e}")
     
     return assignments_item, assignments_proj
 
 def save_all_assignments_to_sheet():
     gc, _ = get_gspread_client()
     if not gc:
-        st.warning("⚠️ Δεν είναι δυνατή η αποθήκευση λόγω σφάλματος σύνδεσης API.")
+        st.warning("Δεν είναι δυνατή η αποθήκευση λόγω σφάλματος σύνδεσης API.")
         return False
     
     try:
@@ -330,7 +330,7 @@ def save_all_assignments_to_sheet():
         return True
         
     except Exception as e:
-        st.error(f"❌ Σφάλμα κατά την αποθήκευση: {e}")
+        st.error(f"Σφάλμα κατά την αποθήκευση: {e}")
         return False
 
 # --- EXPORT FUNCTIONS ---
@@ -356,8 +356,8 @@ def generate_printable_html(title, date_str, df_data):
         </style>
     </head>
     <body>
-        <h2>🏭 {title}</h2>
-        <div class="date">📅 Ημερομηνία: <b>{date_str}</b> | Σύνολο: {len(df_data)}</div>
+        <h2>{title}</h2>
+        <div class="date">Ημερομηνία: <b>{date_str}</b> | Σύνολο: {len(df_data)}</div>
         <table>
             <thead><tr>{"".join([f"<th>{col}</th>" for col in df_data.columns])}</tr></thead>
             <tbody>
@@ -367,9 +367,9 @@ def generate_printable_html(title, date_str, df_data):
         for col in df_data.columns:
             val = str(row[col])
             if val == "ΝΑΙ":
-                val_str = '<span class="done">✅ Ολοκληρώθηκε</span>'
+                val_str = '<span class="done">Ολοκληρώθηκε</span>'
             elif val == "ΟΧΙ":
-                val_str = '<span class="pending">⏳ Εκκρεμεί</span>'
+                val_str = '<span class="pending">Εκκρεμεί</span>'
             else:
                 val_str = val
             html += f"<td>{val_str}</td>"
@@ -377,7 +377,7 @@ def generate_printable_html(title, date_str, df_data):
     html += """
             </tbody>
         </table>
-        <br><button onclick="window.print()" style="padding:10px 20px;background:#1e88e5;color:white;border:none;border-radius:5px;cursor:pointer;">🖨️ Εκτύπωση</button>
+        <br><button onclick="window.print()" style="padding:10px 20px;background:#1e88e5;color:white;border:none;border-radius:5px;cursor:pointer;">Εκτύπωση</button>
     </body>
     </html>
     """
@@ -405,7 +405,7 @@ def check_notifications():
             ~st.session_state.procurement_df["Status Procurement"].isin(["OK STOCK", "RECEIVED", "READY"])
         ]
         if not pending.empty:
-            notifications.append(f"⚠️ {len(pending)} υλικά σε εκκρεμότητα procurement")
+            notifications.append(f"{len(pending)} υλικά σε εκκρεμότητα procurement")
     return notifications
 
 # --- TOGGLE FUNCTIONS ---
@@ -526,10 +526,10 @@ def get_project_details(project_name, procurement_df, tasks_database, incoming_d
 
 # --- RENDER PROJECTS (MAIN PAGE) ---
 def render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df):
-    st.header("📦 Projects")
+    st.header("Projects")
     
     if procurement_df.empty:
-        st.warning("⚠️ No procurement data available.")
+        st.warning("No procurement data available.")
         return
     
     # --- SESSION STATE ΓΙΑ DRILL-DOWN ---
@@ -559,19 +559,19 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         
         col_title, col_status = st.columns([3, 1])
         with col_title:
-            st.markdown(f"## 📦 {selected_project}")
+            st.markdown(f"## {selected_project}")
         with col_status:
             if proj_details['is_shipped']:
-                st.markdown('<div style="background:#ffebee;color:#c62828;padding:8px 16px;border-radius:10px;text-align:center;font-weight:700;font-size:13px;">🔴 OK Shipped</div>', unsafe_allow_html=True)
+                st.markdown('<div style="background:#ffebee;color:#c62828;padding:8px 16px;border-radius:10px;text-align:center;font-weight:700;font-size:13px;">SHIPPED</div>', unsafe_allow_html=True)
             else:
-                st.markdown('<div style="background:#e8f5e9;color:#2e7d32;padding:8px 16px;border-radius:10px;text-align:center;font-weight:700;font-size:13px;">🟢 ΕΝΕΡΓΟ</div>', unsafe_allow_html=True)
+                st.markdown('<div style="background:#e8f5e9;color:#2e7d32;padding:8px 16px;border-radius:10px;text-align:center;font-weight:700;font-size:13px;">ΕΝΕΡΓΟ</div>', unsafe_allow_html=True)
         
         # --- COMPACT METRICS ---
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("⏱️ Ώρες", f"{proj_details['total_hours']}h")
-        m2.metric("📊 Πρόοδος", f"{proj_details['progress']}%")
-        m3.metric("📋 Υλικά", proj_details['materials_count'])
-        m4.metric("✅ Tasks", f"{proj_details['completed_tasks']}/{proj_details['total_tasks']}")
+        m1.metric("Ώρες", f"{proj_details['total_hours']}h")
+        m2.metric("Πρόοδος", f"{proj_details['progress']}%")
+        m3.metric("Υλικά", proj_details['materials_count'])
+        m4.metric("Tasks", f"{proj_details['completed_tasks']}/{proj_details['total_tasks']}")
         
         st.progress(proj_details['progress'] / 100)
         st.caption(f"**Κατάσταση:** {proj_details['status']}")
@@ -579,7 +579,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         st.divider()
         
         # --- TABS: Υλικά / Γενικές Εργασίες ---
-        tab1, tab2 = st.tabs(["📦 Υλικά", "🛠️ Γενικές Εργασίες"])
+        tab1, tab2 = st.tabs(["Υλικά", "Γενικές Εργασίες"])
         
         # ==================== TAB 1: ΥΛΙΚΑ ====================
         with tab1:
@@ -588,13 +588,13 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
             # --- SEARCH + FILTER ---
             col_search, col_status_filter, col_clear = st.columns([2, 1, 1])
             with col_search:
-                search_term = st.text_input("🔍 Αναζήτηση υλικού:", placeholder="ID ή όνομα...", key="proj_mat_search")
+                search_term = st.text_input("Αναζήτηση υλικού:", placeholder="ID ή όνομα...", key="proj_mat_search")
             with col_status_filter:
-                status_filter = st.selectbox("📌 Status:", ["Όλα", "🟢 Έτοιμα", "🟡 Σε Εκκρεμότητα"], key="proj_mat_filter")
+                status_filter = st.selectbox("Status:", ["Όλα", "Έτοιμα", "Σε Εκκρεμότητα"], key="proj_mat_filter")
             with col_clear:
                 st.write("")
                 st.write("")
-                if st.button("🔄 Καθαρισμός", use_container_width=True):
+                if st.button("Καθαρισμός", use_container_width=True):
                     st.session_state.selected_material_expand = None
                     st.rerun()
             
@@ -605,9 +605,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     filtered_df["Υλικό / Προϊόν"].astype(str).str.contains(search_term, case=False, na=False)
                 ]
             
-            if status_filter == "🟢 Έτοιμα":
+            if status_filter == "Έτοιμα":
                 filtered_df = filtered_df[filtered_df["Status Procurement"].isin(["OK STOCK", "RECEIVED", "READY"])]
-            elif status_filter == "🟡 Σε Εκκρεμότητα":
+            elif status_filter == "Σε Εκκρεμότητα":
                 filtered_df = filtered_df[~filtered_df["Status Procurement"].isin(["OK STOCK", "RECEIVED", "READY"])]
             
             st.caption(f"Εμφανίζονται **{len(filtered_df)}** υλικά")
@@ -615,33 +615,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
             if filtered_df.empty:
                 st.info("Δεν βρέθηκαν υλικά με τα συγκεκριμένα φίλτρα.")
             else:
-                # --- TABLE + EXPANDABLE ---
-                st.markdown("""
-                <style>
-                    /* Στοίχιση αριστερά στα κουμπιά των γραμμών υλικών */
-                    div[data-testid="stButton"] > button {
-                        justify-content: flex-start !important;
-                        text-align: left !important;
-                        padding-left: 15px !important;
-                        background: #ffffff !important;
-                        color: #333 !important;
-                        border: 1px solid #e0e0e0 !important;
-                        font-weight: 500 !important;
-                        font-size: 13px !important;
-                    }
-                    div[data-testid="stButton"] > button:hover {
-                        background: #f5f9ff !important;
-                        border-color: #1e88e5 !important;
-                    }
-                    div[data-testid="stButton"] > button p {
-                        justify-content: flex-start !important;
-                        text-align: left !important;
-                        width: 100% !important;
-                    }
-                   
-                </style>
-                """, unsafe_allow_html=True)
-                
                 num_cols = 1
                 for idx, row in filtered_df.iterrows():
                     item_id = str(row["ID"])
@@ -656,38 +629,26 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     
                     is_open = st.session_state.selected_material_expand == unique_key
                     
-                    # Status class
-                    if status in ["OK STOCK", "RECEIVED", "READY"]:
-                        status_class = "s-ready"
-                        status_emoji = "🟢"
-                        row_class = "ready"
-                    else:
-                        status_class = "s-pending"
-                        status_emoji = "🟡"
-                        row_class = "pending"
-                    
-                    if is_open:
-                        row_class += " open"
-                    
-                    # Progress bar (text)
+                    # Progress bar
                     if task_count > 0:
                         progress_pct = int((done_count / task_count) * 100)
-                        # Χρώμα μπάρας
                         if progress_pct == 100:
                             bar_color = "#2e7d32"
                         elif progress_pct > 0:
                             bar_color = "#1e88e5"
                         else:
                             bar_color = "#9e9e9e"
-                        
                         progress_html = f'<div style="display:inline-flex;align-items:center;gap:6px;"><div style="width:50px;height:6px;background:#e0e0e0;border-radius:3px;overflow:hidden;"><div style="width:{progress_pct}%;height:100%;background:{bar_color};"></div></div><span style="font-size:11px;color:#555;">{done_count}/{task_count}</span></div>'
                     else:
                         progress_html = '<span style="font-size:11px;color:#999;">0/0</span>'
                     
-                    # Κλικ στη γραμμή (κουμπί που καλύπτει τη γραμμή)
-                    arrow = "▼" if is_open else "▶"
+                    # Status class
+                    if status in ["OK STOCK", "RECEIVED", "READY"]:
+                        status_bg = "background:#e8f5e9;color:#2e7d32;"
+                    else:
+                        status_bg = "background:#fff8e1;color:#f57c00;"
                     
-                    # Γραμμή υλικού (μόνο HTML, χωρίς κλικ)
+                    # Γραμμή υλικού
                     col_info, col_btn = st.columns([8, 1])
                     
                     with col_info:
@@ -696,7 +657,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             <span style="font-weight:700;color:#333;min-width:70px;">{item_id}</span>
                             <span style="color:#333;flex:1;">{material[:50]}{'...' if len(material)>50 else ''}</span>
                             <span style="color:#666;min-width:60px;">{qty} τμχ</span>
-                            <span style="padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;{'background:#e8f5e9;color:#2e7d32;' if status in ['OK STOCK','RECEIVED','READY'] else 'background:#fff8e1;color:#f57c00;'}">{status}</span>
+                            <span style="padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;{status_bg}">{status}</span>
                             {progress_html}
                         </div>
                         """, unsafe_allow_html=True)
@@ -710,16 +671,13 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 st.session_state.selected_material_expand = unique_key
                             st.rerun()
                     
-                    
                     # Expandable Panel αν είναι ανοιχτό
                     if is_open:
-                        matched_row = row
-                        
                         # --- PANEL ---
                         if status not in ["OK STOCK", "RECEIVED", "READY"]:
-                            st.warning(f"⚠️ Εκκρεμότητα Procurement: {status}")
+                            st.warning(f"Εκκρεμότητα Procurement: {status}")
                         else:
-                            st.success(f"✅ Υλικό Διαθέσιμο: {status}")
+                            st.success(f"Υλικό Διαθέσιμο: {status}")
                         
                         if unique_key not in st.session_state["tasks_store"]:
                             st.session_state["tasks_store"][unique_key] = []
@@ -729,7 +687,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         team_options = ["- Χωρίς Ανάθεση -"] + team_database
                         
                         if not item_tasks:
-                            st.info("📌 Δεν έχουν οριστεί εργασίες. Πάτησε **➕ Προσθήκη Εργασίας** παρακάτω.")
+                            st.info("Δεν έχουν οριστεί εργασίες. Πάτησε **Προσθήκη Εργασίας** παρακάτω.")
                         
                         for t_idx, t_data in enumerate(list(item_tasks)):
                             with st.container(border=True):
@@ -764,21 +722,21 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                     st.rerun()
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
-                        if col_add.button("➕ Προσθήκη Εργασίας", key=f"mat_add_{unique_key}", use_container_width=True):
+                        if col_add.button("Προσθήκη Εργασίας", key=f"mat_add_{unique_key}", use_container_width=True):
                             st.session_state["tasks_store"][unique_key].append({"done": False, "task": "- Επιλογή Εργασίας -", "user": "- Χωρίς Ανάθεση -", "date": date.today()})
                             save_all_assignments_to_sheet()
                             st.rerun()
-                        if len(item_tasks) > 0 and col_rem.button("➖ Αφαίρεση", key=f"mat_rem_{unique_key}", use_container_width=True):
+                        if len(item_tasks) > 0 and col_rem.button("Αφαίρεση", key=f"mat_rem_{unique_key}", use_container_width=True):
                             st.session_state["tasks_store"][unique_key].pop()
                             save_all_assignments_to_sheet()
                             st.rerun()
-                        if col_close.button("🔽 Κλείσιμο", key=f"mat_close_{unique_key}", use_container_width=True):
+                        if col_close.button("Κλείσιμο", key=f"mat_close_{unique_key}", use_container_width=True):
                             st.session_state.selected_material_expand = None
                             st.rerun()
         
         # ==================== TAB 2: ΓΕΝΙΚΕΣ ΕΡΓΑΣΙΕΣ ====================
         with tab2:
-            st.markdown(f"### 🛠️ Γενικές Εργασίες — {selected_project}")
+            st.markdown(f"### Γενικές Εργασίες — {selected_project}")
             st.caption("Ενεργοποίησε τις εργασίες που χρειάζονται και όρισε υπεύθυνο + ημερομηνία.")
             
             proj_key = f"proj_{selected_project}"
@@ -804,7 +762,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     
                     if is_active:
                         pdone_k = f"proj_pdone_proj_{proj_key}_{task_name}"
-                        is_done = c_done.checkbox("✅ Done", value=t_data["done"], key=pdone_k, on_change=toggle_project_task, args=(proj_key, task_name, pdone_k))
+                        is_done = c_done.checkbox("Done", value=t_data["done"], key=pdone_k, on_change=toggle_project_task, args=(proj_key, task_name, pdone_k))
                     else:
                         c_done.caption("—")
                     
@@ -824,13 +782,13 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         # --- ΚΟΥΜΠΙ ΑΠΟΘΗΚΕΥΣΗΣ ---
         st.divider()
         col_save, _ = st.columns([1, 3])
-        if col_save.button("💾 Αποθήκευση Αλλαγών", use_container_width=True, type="primary", key="save_project"):
+        if col_save.button("Αποθήκευση Αλλαγών", use_container_width=True, type="primary", key="save_project"):
             if save_all_assignments_to_sheet():
-                st.success("✅ Όλες οι αναθέσεις αποθηκεύτηκαν επιτυχώς!")
+                st.success("Όλες οι αναθέσεις αποθηκεύτηκαν.")
             else:
-                st.error("❌ Σφάλμα κατά την αποθήκευση")
+                st.error("Σφάλμα κατά την αποθήκευση")
         
-        return  # Σταματάμε εδώ — δεν δείχνουμε το grid
+        return
     
     # =========================================================
     # MODE 1: GRID VIEW (default) — Compact Cards Grid 5
@@ -839,23 +797,23 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
     col_check, col_info = st.columns([1, 3])
     with col_check:
         show_all = st.checkbox(
-            "📊 Εμφάνιση Όλων των Projects (μαζί με OK SHIPPED)", 
+            "Εμφάνιση Όλων των Projects (μαζί με OK SHIPPED)", 
             value=False,
-            help="Αν τσεκαριστεί, εμφανίζονται ΟΛΑ τα projects (ενεργά + ολοκληρωμένα). Αν όχι, μόνο τα ενεργά."
+            help="Αν τσεκαριστεί, εμφανίζονται ΟΛΑ τα projects."
         )
     
     all_projects = sorted([p for p in procurement_df["Project"].unique().tolist() if p != "-"])
     
     if show_all:
         projects_to_show = all_projects
-        section_title = "📊 Όλα τα Projects"
+        section_title = "Όλα τα Projects"
     else:
         projects_to_show = []
         for p_name in all_projects:
             proj_data = get_project_details(p_name, procurement_df, tasks_database, incoming_df)
             if proj_data['is_active']:
                 projects_to_show.append(p_name)
-        section_title = "🟢 Ενεργά Projects"
+        section_title = "Ενεργά Projects"
     
     # --- ΥΠΟΛΟΓΙΣΜΟΙ ---
     dashboard_data = []
@@ -921,7 +879,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
             "Συνολικές Ώρες": round(p_total_hrs, 1),
             "Υπολειπόμενες": round(p_total_hrs - p_done_hrs, 1),
             "Πρόοδος": f"{p_progress}%",
-            "Κατάσταση": "🔴 OK Shipped" if is_shipped else "🟢 ΕΝΕΡΓΟ"
+            "Κατάσταση": "OK Shipped" if is_shipped else "ΕΝΕΡΓΟ"
         })
 
     st.markdown(f"### {section_title}")
@@ -938,8 +896,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
     st.divider()
     
     # --- COMPACT PROJECT CARDS GRID (5 ανά σειρά) ---
-    st.subheader(f"📋 {section_title}")
-    st.caption("👆 Πάτησε σε μια κάρτα για να δεις τις λεπτομέρειες")
+    st.subheader(section_title)
+    st.caption("Πάτησε σε μια κάρτα για να δεις τις λεπτομέρειες")
     
     if not projects_to_show:
         st.info("Δεν βρέθηκαν projects.")
@@ -1016,10 +974,10 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     is_shipped = proj_data.get('is_shipped', False)
                     if is_shipped:
                         card_class = "compact-card shipped"
-                        status_html = '<span class="compact-status" style="background:#ffebee;color:#c62828;">🔴 SHIPPED</span>'
+                        status_html = '<span class="compact-status" style="background:#ffebee;color:#c62828;">SHIPPED</span>'
                     else:
                         card_class = "compact-card active"
-                        status_html = '<span class="compact-status" style="background:#e8f5e9;color:#2e7d32;">🟢 ΕΝΕΡΓΟ</span>'
+                        status_html = '<span class="compact-status" style="background:#e8f5e9;color:#2e7d32;">ΕΝΕΡΓΟ</span>'
                     
                     progress = proj_data['progress']
                     if progress == 100:
@@ -1036,28 +994,26 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     done_tasks = proj_data['completed_tasks']
                     total_tasks = proj_data['total_tasks']
                     
-                    # Trim name για να χωράει
                     display_name = p_name[:22] + "..." if len(p_name) > 22 else p_name
                     
                     card_html = f"""
                     <div class="{card_class}">
-                        <div class="compact-title">📦 {display_name}</div>
+                        <div class="compact-title">{display_name}</div>
                         {status_html}
                         <div class="compact-progress-bg">
                             <div class="compact-progress-fill" style="width:{progress}%;background:{bar_color};"></div>
                         </div>
                         <div style="text-align:center;font-size:11px;font-weight:600;color:#333;">{progress}%</div>
                         <div class="compact-meta">
-                            <span>⏱️ {total_h}h</span>
-                            <span>📋 {materials}</span>
-                            <span>✅ {done_tasks}/{total_tasks}</span>
+                            <span>{total_h}h</span>
+                            <span>{materials} υλικά</span>
+                            <span>{done_tasks}/{total_tasks}</span>
                         </div>
                     </div>
                     """
                     st.markdown(card_html, unsafe_allow_html=True)
                     
-                    # Κουμπί για Drill-Down (μικρό)
-                    if st.button("🔍 Άνοιγμα", key=f"drill_{p_name}", use_container_width=True):
+                    if st.button("Άνοιγμα", key=f"drill_{p_name}", use_container_width=True):
                         st.session_state.selected_project_drill = p_name
                         st.session_state.selected_material_expand = None
                         st.rerun()
@@ -1069,7 +1025,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         with col_exp1:
             csv = dash_df.to_csv(index=False).encode('utf-8-sig')
             st.download_button(
-                label="📊 Εξαγωγή CSV", 
+                label="Εξαγωγή CSV", 
                 data=csv, 
                 file_name=f"Projects_{'All' if show_all else 'Active'}_{date.today().strftime('%Y-%m-%d')}.csv", 
                 mime="text/csv", 
@@ -1078,7 +1034,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         with col_exp2:
             excel_data = export_to_excel(dash_df, "Projects")
             st.download_button(
-                label="📄 Εξαγωγή Excel", 
+                label="Εξαγωγή Excel", 
                 data=excel_data, 
                 file_name=f"Projects_{'All' if show_all else 'Active'}_{date.today().strftime('%Y-%m-%d')}.xlsx", 
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
@@ -1088,7 +1044,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
 
 # --- RENDER DAILY PLAN ---
 def render_daily_plan(procurement_df, tasks_database, team_database, availability_database):
-    st.header("🗓️ Συγκεντρωτικό Πλάνο Παραγωγής")
+    st.header("Συγκεντρωτικό Πλάνο Παραγωγής")
     col_d, col_fp, col_fu, col_fs = st.columns([1, 1, 1, 1])
     target_date = col_d.date_input("Ημερομηνία Πλάνου:", value=date.today(), format="DD/MM/YYYY")
     greek_day_name = WEEKDAYS_GREEK.get(target_date.weekday(), "Δευτέρα")
@@ -1135,9 +1091,9 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
     available_users = ["Όλοι οι Τεχνίτες"] + sorted(list(set(d["Υπεύθυνος"] for d in daily_tasks_raw))) if daily_tasks_raw else ["Όλοι οι Τεχνίτες"]
     available_statuses = ["Όλα τα Status"] + sorted(list(set(d["status_proc"] for d in daily_tasks_raw))) if daily_tasks_raw else ["Όλα τα Status"]
 
-    selected_filter_proj = col_fp.selectbox("🔍 Φίλτρο Project:", available_projects)
-    selected_filter_user = col_fu.selectbox("👤 Φίλτρο Τεχνίτη:", available_users)
-    selected_filter_status = col_fs.selectbox("📦 Φίλτρο Procurement:", available_statuses)
+    selected_filter_proj = col_fp.selectbox("Φίλτρο Project:", available_projects)
+    selected_filter_user = col_fu.selectbox("Φίλτρο Τεχνίτη:", available_users)
+    selected_filter_status = col_fs.selectbox("Φίλτρο Procurement:", available_statuses)
 
     daily_tasks = [d for d in daily_tasks_raw if (selected_filter_proj == "Όλα τα Projects" or d["Project"] == selected_filter_proj) and (selected_filter_user == "Όλοι οι Τεχνίτες" or d["Υπεύθυνος"] == selected_filter_user) and (selected_filter_status == "Όλα τα Status" or d["status_proc"] == selected_filter_status)]
 
@@ -1147,18 +1103,18 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
         export_df = pd.DataFrame(export_list)
         csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
         col_head, col_exp_csv, col_exp_pdf, col_exp_excel = st.columns([0.4, 0.2, 0.2, 0.2])
-        col_head.subheader(f"📌 Εργασίες για τις {target_date.strftime('%d/%m/%Y')} ({len(daily_tasks)} Tasks)")
-        col_exp_csv.download_button(label="📊 CSV", data=csv_data, file_name=f"Daily_Plan_{target_date.strftime('%Y-%m-%d')}.csv", mime="text/csv", use_container_width=True)
+        col_head.subheader(f"Εργασίες για τις {target_date.strftime('%d/%m/%Y')} ({len(daily_tasks)} Tasks)")
+        col_exp_csv.download_button(label="CSV", data=csv_data, file_name=f"Daily_Plan_{target_date.strftime('%Y-%m-%d')}.csv", mime="text/csv", use_container_width=True)
         printable_html = generate_printable_html("Ημερήσιο Πλάνο Παραγωγής", target_date.strftime('%d/%m/%Y'), export_df)
-        col_exp_pdf.download_button(label="📄 PDF", data=printable_html, file_name=f"Daily_Plan_{target_date.strftime('%Y-%m-%d')}.html", mime="text/html", use_container_width=True)
+        col_exp_pdf.download_button(label="PDF", data=printable_html, file_name=f"Daily_Plan_{target_date.strftime('%Y-%m-%d')}.html", mime="text/html", use_container_width=True)
         excel_data = export_to_excel(export_df, "Daily Plan")
-        col_exp_excel.download_button(label="📊 Excel", data=excel_data, file_name=f"Daily_Plan_{target_date.strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+        col_exp_excel.download_button(label="Excel", data=excel_data, file_name=f"Daily_Plan_{target_date.strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
         pending_proc = [dt for dt in daily_tasks if dt["status_proc"] not in ["OK STOCK", "RECEIVED", "READY"]]
         if pending_proc:
-            st.warning(f"⚠️ **Προσοχή:** Υπάρχουν **{len(pending_proc)} tasks** με υλικά σε εκκρεμότητα!")
+            st.warning(f"**Προσοχή:** Υπάρχουν **{len(pending_proc)} tasks** με υλικά σε εκκρεμότητα!")
 
-        st.markdown("#### 👥 Φόρτος Εργασίας & Διαθεσιμότητα Ομάδας")
+        st.markdown("#### Φόρτος Εργασίας & Διαθεσιμότητα Ομάδας")
         day_availability = availability_database.get(greek_day_name, {})
         user_hours = {}
         for d in daily_tasks:
@@ -1171,14 +1127,14 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
                 max_hrs = day_availability.get(member_name, 6.0)
                 delta_hrs = round(assigned_hrs - max_hrs, 2)
                 if delta_hrs > 0:
-                    cols[i].metric(f"⚠️ {member_name}", f"{assigned_hrs} / {max_hrs}h", delta=f"+{delta_hrs}h Υπερκάλυψη", delta_color="inverse")
+                    cols[i].metric(f"{member_name}", f"{assigned_hrs} / {max_hrs}h", delta=f"+{delta_hrs}h Υπερκάλυψη", delta_color="inverse")
                 else:
-                    cols[i].metric(f"🟢 {member_name}", f"{assigned_hrs} / {max_hrs}h", delta=f"{delta_hrs}h Διαθέσιμο", delta_color="normal")
+                    cols[i].metric(f"{member_name}", f"{assigned_hrs} / {max_hrs}h", delta=f"{delta_hrs}h Διαθέσιμο", delta_color="normal")
             else:
-                cols[i].metric(f"❓ {member_name}", f"{assigned_hrs} Ώρες")
+                cols[i].metric(f"{member_name}", f"{assigned_hrs} Ώρες")
             
         st.divider()
-        st.markdown("#### 📋 Διαδραστική Λίστα Εργασιών")
+        st.markdown("#### Διαδραστική Λίστα Εργασιών")
         for d_idx, dt in enumerate(daily_tasks):
             col_chk, col_p, col_mat, col_tsk, col_user, col_hrs, col_st = st.columns([0.08, 0.20, 0.26, 0.20, 0.14, 0.07, 0.12])
             if dt["type"] == "project":
@@ -1189,20 +1145,20 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
                 is_done = col_chk.checkbox("Done", value=dt["done"], key=chk_k, on_change=toggle_item_task, args=(dt['u_key'], dt['t_idx'], chk_k))
             col_p.markdown(f"**{dt['Project']}**")
             col_mat.caption(f"{dt['Υλικό']} ({dt['Ποσότητα']} τμχ)")
-            col_tsk.markdown(f"~~{dt['Εργασία']}~~ ✅" if is_done else f"**{dt['Εργασία']}**")
+            col_tsk.markdown(f"~~{dt['Εργασία']}~~" if is_done else f"**{dt['Εργασία']}**")
             col_user.write(dt['Υπεύθυνος'])
             col_hrs.write(f"{dt['Ώρες']}h")
             
             if dt['status_proc'] in ["OK STOCK", "RECEIVED", "READY"]:
-                col_st.success(f"✅ {dt['status_proc']}")
+                col_st.success(f"{dt['status_proc']}")
             else:
-                col_st.error(f"⚠️ {dt['status_proc']}")
+                col_st.error(f"{dt['status_proc']}")
     else:
         st.info(f"Δεν βρέθηκαν εργασίες για τις {target_date.strftime('%d/%m/%Y')} με τα συγκεκριμένα φίλτρα.")
 
 # --- RENDER TECHNICIAN ---
 def render_technician(procurement_df, tasks_database, team_database, availability_database):
-    st.header("👤 Ημερήσιο Πρόγραμμα Εργασιών ανά Τεχνίτη")
+    st.header("Ημερήσιο Πρόγραμμα ανά Τεχνίτη")
     c_date, c_user = st.columns([1, 1])
     target_date = c_date.date_input("Ημερομηνία:", value=date.today(), format="DD/MM/YYYY", key="tech_date")
     selected_member = c_user.selectbox("Επιλέξτε Τεχνίτη:", team_database)
@@ -1246,18 +1202,18 @@ def render_technician(procurement_df, tasks_database, team_database, availabilit
         w_export_df = pd.DataFrame(w_export_list)
         w_csv_data = w_export_df.to_csv(index=False).encode('utf-8-sig')
         col_w_head, col_w_csv, col_w_pdf, col_w_excel = st.columns([0.4, 0.2, 0.2, 0.2])
-        col_w_head.subheader(f"📋 Πρόγραμμα για τον/την {selected_member} — {target_date.strftime('%d/%m/%Y')}")
-        col_w_csv.download_button(label="📊 CSV", data=w_csv_data, file_name=f"Schedule_{selected_member.replace(' ', '_')}_{target_date.strftime('%Y-%m-%d')}.csv", mime="text/csv", use_container_width=True)
+        col_w_head.subheader(f"Πρόγραμμα για {selected_member} — {target_date.strftime('%d/%m/%Y')}")
+        col_w_csv.download_button(label="CSV", data=w_csv_data, file_name=f"Schedule_{selected_member.replace(' ', '_')}_{target_date.strftime('%Y-%m-%d')}.csv", mime="text/csv", use_container_width=True)
         w_printable_html = generate_printable_html(f"Πρόγραμμα Τεχνίτη: {selected_member}", target_date.strftime('%d/%m/%Y'), w_export_df)
-        col_w_pdf.download_button(label="📄 PDF", data=w_printable_html, file_name=f"Schedule_{selected_member.replace(' ', '_')}_{target_date.strftime('%Y-%m-%d')}.html", mime="text/html", use_container_width=True)
+        col_w_pdf.download_button(label="PDF", data=w_printable_html, file_name=f"Schedule_{selected_member.replace(' ', '_')}_{target_date.strftime('%Y-%m-%d')}.html", mime="text/html", use_container_width=True)
         excel_data = export_to_excel(w_export_df, f"Schedule {selected_member}")
-        col_w_excel.download_button(label="📊 Excel", data=excel_data, file_name=f"Schedule_{selected_member.replace(' ', '_')}_{target_date.strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+        col_w_excel.download_button(label="Excel", data=excel_data, file_name=f"Schedule_{selected_member.replace(' ', '_')}_{target_date.strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
         total_w_hours = sum(t["hours"] for t in worker_tasks)
-        st.info(f"💡 Συνολικός εκτιμώμενος χρόνος: **{round(total_w_hours, 1)} Ώρες** ({len(worker_tasks)} Tasks)")
+        st.info(f"Συνολικός εκτιμώμενος χρόνος: **{round(total_w_hours, 1)} Ώρες** ({len(worker_tasks)} Tasks)")
         pending_w_proc = [wt for wt in worker_tasks if wt["status_proc"] not in ["OK STOCK", "RECEIVED", "READY"]]
         if pending_w_proc:
-            st.warning(f"⚠️ Ο/Η {selected_member} έχει **{len(pending_w_proc)} tasks** με υλικά σε εκκρεμότητα.")
+            st.warning(f"Ο/Η {selected_member} έχει **{len(pending_w_proc)} tasks** με υλικά σε εκκρεμότητα.")
 
         st.divider()
         for w_idx, wt in enumerate(worker_tasks):
@@ -1270,26 +1226,26 @@ def render_technician(procurement_df, tasks_database, team_database, availabilit
                 is_done = col_c.checkbox("Done", value=wt["done"], key=chk_k, on_change=toggle_item_task, args=(wt['u_key'], wt['t_idx'], chk_k))
             col_proj.markdown(f"**{wt['project']}**")
             col_mat.write(wt['item'])
-            col_task.markdown(f"~~{wt['task']}~~ ✅" if is_done else f"`{wt['task']}`")
+            col_task.markdown(f"~~{wt['task']}~~" if is_done else f"`{wt['task']}`")
             col_qty.write(f"{wt['qty']} τμχ")
             col_h.caption(f"{wt['hours']}h")
             
             if wt['status_proc'] in ["OK STOCK", "RECEIVED", "READY"]:
-                col_proc.success(f"✅ {wt['status_proc']}")
+                col_proc.success(f"{wt['status_proc']}")
             else:
-                col_proc.error(f"⚠️ {wt['status_proc']}")
+                col_proc.error(f"{wt['status_proc']}")
     else:
-        st.success(f"🎉 Δεν έχουν ανατεθεί εργασίες στον/στην {selected_member} για τις {target_date.strftime('%d/%m/%Y')}.")
+        st.success(f"Δεν έχουν ανατεθεί εργασίες στον/στην {selected_member} για τις {target_date.strftime('%d/%m/%Y')}.")
 
 
 # --- RENDER PROJECTION ---
 def render_projection(procurement_df, tasks_database, team_database, availability_database):
-    st.header("📆 Πρόβλεψη Φόρτου Εργασίας (Projection)")
+    st.header("Πρόβλεψη Φόρτου Εργασίας")
     start_monday = date.today() - timedelta(days=date.today().weekday())
     col_w_choice, col_range_choice, col_weekend = st.columns([1, 1, 1])
     week_choice = col_w_choice.selectbox("ΕΝΑΡΞΗ ΠΡΟΒΟΛΗΣ:", ["Τρέχουσα Εβδομάδα", "Επόμενη Εβδομάδα (+1)", "Μεθεπόμενη Εβδομάδα (+2)", "Προσαρμοσμένη Ημερομηνία"])
     range_weeks = col_range_choice.selectbox("ΕΥΡΟΣ ΠΡΟΒΟΛΗΣ:", ["1 Εβδομάδα", "2 Εβδομάδες", "4 Εβδομάδες / Μήνας"])
-    include_weekends = col_weekend.checkbox("📅 Συμπερίληψη Σαββατοκύριακων", value=False, key="proj_wknd")
+    include_weekends = col_weekend.checkbox("Συμπερίληψη Σαββατοκύριακων", value=False, key="proj_wknd")
     num_weeks = 1 if "1 Εβδομάδα" in range_weeks else 2 if "2 Εβδομάδες" in range_weeks else 4
     if week_choice == "Τρέχουσα Εβδομάδα":
         sel_start = start_monday
@@ -1375,7 +1331,7 @@ def render_projection(procurement_df, tasks_database, team_database, availabilit
     kc1, kc2, kc3, kc4 = st.columns(4)
     kc1.metric("Προγραμματισμένες Ώρες", f"{round(total_assigned_range, 1)}h")
     kc2.metric(f"Διαθέσιμες Ώρες ({num_weeks} εβδ.)", f"{round(total_available_range, 1)}h")
-    kc3.metric("Overbooked Ημέρες", f"⚠️ {overbooked_days_count} / {len(all_flat_days)}" if overbooked_days_count > 0 else f"🟢 0 / {len(all_flat_days)}")
+    kc3.metric("Overbooked Ημέρες", f"{overbooked_days_count} / {len(all_flat_days)}")
     kc4.metric("Πληρότητα Περιόδου", f"{load_ratio}%", delta=f"{load_ratio - 100}%" if load_ratio > 100 else "Εντός Ορίων")
 
     st.divider()
@@ -1386,7 +1342,7 @@ def render_projection(procurement_df, tasks_database, team_database, availabilit
 
     for w_num, w_monday, w_days, w_matrix in weeks_matrices:
         w_sunday = w_days[-1]
-        st.subheader(f"📅 Εβδομάδα {w_num}: {w_monday.strftime('%d/%m/%Y')} έως {w_sunday.strftime('%d/%m/%Y')}")
+        st.subheader(f"Εβδομάδα {w_num}: {w_monday.strftime('%d/%m/%Y')} έως {w_sunday.strftime('%d/%m/%Y')}")
         proj_df = pd.DataFrame(w_matrix).T
         proj_df = proj_df.round(1)
         proj_df["Σύνολο (h)"] = proj_df.sum(axis=1)
@@ -1399,7 +1355,7 @@ def render_projection(procurement_df, tasks_database, team_database, availabilit
 
 # --- RENDER DAILY REPORT ---
 def render_daily_report(procurement_df, tasks_database, team_database, availability_database):
-    st.header("📝 Ημερήσιος Απολογισμός Παραγωγής")
+    st.header("Ημερήσιος Απολογισμός Παραγωγής")
     rep_date = st.date_input("Επιλέξτε Ημερομηνία:", value=date.today(), format="DD/MM/YYYY", key="rep_date_input")
     st.divider()
     rep_completed = []
@@ -1451,54 +1407,54 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
     rc3.metric("Ποσοστό Ολοκλήρωσης", f"{completion_rate}%")
 
     st.divider()
-    st.subheader("✅ Ολοκληρωμένες Εργασίες")
+    st.subheader("Ολοκληρωμένες Εργασίες")
     if rep_completed:
         st.dataframe(pd.DataFrame(rep_completed), use_container_width=True, hide_index=True)
     else:
         st.info("Δεν υπάρχουν ολοκληρωμένες εργασίες για αυτή την ημερομηνία.")
 
     st.divider()
-    st.subheader("⏳ Εκκρεμότητες")
+    st.subheader("Εκκρεμότητες")
     if rep_pending:
         st.dataframe(pd.DataFrame(rep_pending), use_container_width=True, hide_index=True)
     else:
-        st.success("🎉 Όλες οι εργασίες έχουν ολοκληρωθεί!")
+        st.success("Όλες οι εργασίες έχουν ολοκληρωθεί!")
 
 
 # --- RENDER DATABASE ---
 def render_database(tasks_database, team_database, availability_database):
-    st.header("📊 Βάση Δεδομένων")
+    st.header("Βάση Δεδομένων")
     col_a, col_b = st.columns(2)
     with col_a:
-        st.subheader(f"⏱️ Πρότυπα Χρόνων ({len(tasks_database)} Εργασίες)")
+        st.subheader(f"Πρότυπα Χρόνων ({len(tasks_database)} Εργασίες)")
         tasks_df = pd.DataFrame(list(tasks_database.items()), columns=["Εργασία", "Χρόνος (λεπτά)"])
         st.dataframe(tasks_df, use_container_width=True, hide_index=True)
     with col_b:
-        st.subheader("👥 Ομάδα & Όρια Ώρων")
+        st.subheader("Ομάδα & Όρια Ωρών")
         avail_data = [{"Ημέρα": day, "Τεχνίτης": member, "Ώρες": hours} for day, members in availability_database.items() for member, hours in members.items()]
         st.dataframe(pd.DataFrame(avail_data), use_container_width=True, hide_index=True)
 
 
 # --- RENDER SETTINGS ---
 def render_settings():
-    st.header("⚙️ Ρυθμίσεις")
-    st.subheader("🔐 Ασφάλεια")
-    st.info("🔒 Οι ρυθμίσεις ασφαλείας διαχειρίζονται μέσω των Streamlit Secrets")
+    st.header("Ρυθμίσεις")
+    st.subheader("Ασφάλεια")
+    st.info("Οι ρυθμίσεις ασφαλείας διαχειρίζονται μέσω των Streamlit Secrets")
     st.markdown("**Users:** admin/admin123, manager/manager123, operator/operator123, maria@atrionartgifts.com/atrionmaria")
     
-    st.subheader("💾 Αποθήκευση")
+    st.subheader("Αποθήκευση")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("💾 Αποθήκευση", use_container_width=True):
+        if st.button("Αποθήκευση", use_container_width=True):
             if save_all_assignments_to_sheet():
-                st.success("✅ Αποθηκεύτηκε!")
+                st.success("Αποθηκεύτηκε!")
     with col2:
-        if st.button("🔄 Επαναφόρτωση", use_container_width=True):
+        if st.button("Επαναφόρτωση", use_container_width=True):
             st.cache_data.clear()
             st.session_state.data_version = st.session_state.get("data_version", 0) + 1
             st.rerun()
     
-    st.subheader("📋 Audit Log")
+    st.subheader("Audit Log")
     if "audit_log" in st.session_state and st.session_state.audit_log:
         st.dataframe(pd.DataFrame(st.session_state.audit_log[-50:]), use_container_width=True, hide_index=True)
     else:
@@ -1541,18 +1497,21 @@ def main():
         st.markdown(f"### 🏭 Production Tasks")
         st.markdown(f"👋 Welcome, **{st.session_state.username}**!")
         
-        notifications = check_notifications()
-        if notifications:
-            with st.expander(f"🔔 Notifications ({len(notifications)})", expanded=True):
-                for notif in notifications:
-                    st.warning(notif)
         st.divider()
         
+        # Notifications - πάντα ορατά
+        notifications = check_notifications()
+        if notifications:
+            st.markdown(f"### 🔔 Ειδοποιήσεις ({len(notifications)})")
+            for notif in notifications:
+                st.warning(notif)
+            st.divider()
+        
         st.markdown("### 📋 Navigation")
-        pages_list = ["📦 Projects", "🗓️ Daily Plan", "👤 Technician", "📆 Projection", "📝 Daily Report", "📊 Database", "⚙️ Settings"]
-        current_page = st.session_state.get("page", "📦 Projects")
+        pages_list = ["Projects", "Daily Plan", "Technician", "Projection", "Daily Report", "Database", "Settings"]
+        current_page = st.session_state.get("page", "Projects")
         if current_page not in pages_list:
-            current_page = "📦 Projects"
+            current_page = "Projects"
         page_index = pages_list.index(current_page)
         
         page = st.radio(
@@ -1576,29 +1535,41 @@ def main():
                     if proj_data['is_active']:
                         active_count += 1
         st.metric("Active Projects", active_count)
+        
         st.divider()
-        if st.button("🚪 Logout", use_container_width=True):
+        
+        # Ένδειξη τελευταίας αποθήκευσης
+        if "last_save" in st.session_state:
+            seconds_ago = int((datetime.now() - st.session_state.last_save).seconds)
+            if seconds_ago < 60:
+                st.caption(f"Αποθηκεύτηκε πριν {seconds_ago}δ")
+            else:
+                minutes_ago = seconds_ago // 60
+                st.caption(f"Αποθηκεύτηκε πριν {minutes_ago}λ")
+        
+        if st.button("Logout", use_container_width=True):
             logout()
 
-    if (datetime.now() - st.session_state.last_save).seconds > 300:
+    # Auto-save κάθε 2 λεπτά
+    if (datetime.now() - st.session_state.last_save).seconds > 120:
         if save_all_assignments_to_sheet():
             st.session_state.last_save = datetime.now()
 
     page = st.session_state.page
     
-    if page == "📦 Projects":
+    if page == "Projects":
         render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df)
-    elif page == "🗓️ Daily Plan":
+    elif page == "Daily Plan":
         render_daily_plan(procurement_df, tasks_database, team_database, availability_database)
-    elif page == "👤 Technician":
+    elif page == "Technician":
         render_technician(procurement_df, tasks_database, team_database, availability_database)
-    elif page == "📆 Projection":
+    elif page == "Projection":
         render_projection(procurement_df, tasks_database, team_database, availability_database)
-    elif page == "📝 Daily Report":
+    elif page == "Daily Report":
         render_daily_report(procurement_df, tasks_database, team_database, availability_database)
-    elif page == "📊 Database":
+    elif page == "Database":
         render_database(tasks_database, team_database, availability_database)
-    elif page == "⚙️ Settings":
+    elif page == "Settings":
         render_settings()
 
 
