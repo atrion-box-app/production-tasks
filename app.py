@@ -618,33 +618,26 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                 # --- TABLE + EXPANDABLE ---
                 st.markdown("""
                 <style>
-                    .mat-row {
-                        display: flex;
-                        align-items: center;
-                        padding: 8px 12px;
-                        border-bottom: 1px solid #eee;
-                        font-size: 13px;
+                    /* Στοίχιση αριστερά στα κουμπιά των γραμμών υλικών */
+                    div[data-testid="stButton"] > button {
+                        justify-content: flex-start !important;
+                        text-align: left !important;
+                        padding-left: 15px !important;
+                        background: #ffffff !important;
+                        color: #333 !important;
+                        border: 1px solid #e0e0e0 !important;
+                        font-weight: 500 !important;
+                        font-size: 13px !important;
                     }
-                    .mat-row.ready {
-                        border-left: 4px solid #2e7d32;
+                    div[data-testid="stButton"] > button:hover {
+                        background: #f5f9ff !important;
+                        border-color: #1e88e5 !important;
                     }
-                    .mat-row.pending {
-                        border-left: 4px solid #f9a825;
+                    div[data-testid="stButton"] > button p {
+                        justify-content: flex-start !important;
+                        text-align: left !important;
+                        width: 100% !important;
                     }
-                    .mat-row.open {
-                        background: #f5f9ff;
-                        border-left: 4px solid #1e88e5;
-                        font-weight: 600;
-                    }
-                    .mat-id { font-weight: 700; color: #1e88e5; min-width: 70px; }
-                    .mat-name { flex: 1; color: #333; }
-                    .mat-qty { color: #666; min-width: 60px; text-align: right; }
-                    .mat-status { min-width: 100px; text-align: center; }
-                    .mat-status span { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
-                    .mat-status .s-ready { background:#e8f5e9; color:#2e7d32; }
-                    .mat-status .s-pending { background:#fff8e1; color:#f57c00; }
-                    .mat-tasks { min-width: 80px; text-align: right; color: #555; font-size: 12px; }
-                    .mat-progress { min-width: 80px; text-align: center; color: #555; font-size: 12px; }
                 </style>
                 """, unsafe_allow_html=True)
                 
@@ -685,7 +678,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     
                     # Κλικ στη γραμμή (κουμπί που καλύπτει τη γραμμή)
                     arrow = "▼" if is_open else "▶"
-                    btn_label = f"{arrow}  {status_emoji}  {item_id}  │  {material[:60]}{'...' if len(material)>60 else ''}  │  {qty} τμχ  │  {status}  │  {progress_html}"
+                    # Κείμενο ευθυγραμμισμένο αριστερά
+                    btn_label = f"{arrow}  {item_id}  │  {material[:60]}{'...' if len(material)>60 else ''}  │  {qty} τμχ  │  {status}  │  {progress_html}"
                     
                     if st.button(btn_label, key=f"mat_row_{unique_key}", use_container_width=True):
                         if is_open:
