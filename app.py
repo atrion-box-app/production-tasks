@@ -527,6 +527,128 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
         st.warning("⚠️ No procurement data available.")
         return
     
+    # --- SESSION STATE ΓΙΑ DRILL-DOWN ---
+    if "selected_project_drill" not in st.session_state:
+        st.session_state.selected_project_drill = None
+    
+    # =========================================================
+    # MODE 2: DETAILS VIEW (όταν έχει επιλεγεί project)
+    # =========================================================
+    if st.session_state.selected_project_drill is not None:
+        selected_project = st.session_state.selected_project_drill
+        
+        # Κουμπί επιστροφής
+        col_back, _ = st.columns([1, 4])
+        with col_back:
+            if st.button("← Πίσω στο Dashboard", use_container_width=True):
+                st.session_state.selected_project_drill = None
+                st.rerun()
+        
+        st.divider()
+        
+        # --- HEADER ΤΟΥ PROJECT ---
+        proj_details = get_project_details(selected_project, procurement_df, tasks_database, incoming_df)
+        
+        col_title, col_status = st.columns([3, 1])
+        with col_title:
+            st.markdown(f"## 📦 {selected_project}")
+        with col_status:
+            if proj_details['is_shipped']:
+                st.markdown('<div style="background:#ffebee;color:#c62828;padding:8px 16px;border-radius:10px;text-align:center;font-weight:700;">🔴 OK Shipped</div>', unsafe_allow_html=True)
+            else:
+                st.markdown('<div style="background:#e8f5e9;color:#2e7d32;padding:8px 16px;border-radius:10px;text-align:center;font-weight:700;">🟢 ΕΝΕΡΓΟ</div>', unsafe_allow_html=True)
+        
+        # --- METRICS ---
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Συνολικές Ώρες", f"{proj_details['total_hours']}h")
+        m2.metric("Ολοκληρωμένες", f"{proj_details['completed_hours']}h")
+        m3.metric("Υπολειπόμενες", f"{proj_details['remaining_hours']}h")
+        m4.metric("Πρόοδος", f"{proj_details['progress']}%")
+        
+        st.progress(proj_details['progress'] / 100)
+        st.caption(f"**Κατάσταση:** {proj_details['status']} | **Υλικά:** {proj_details['materials_count']}")
+        
+        st.divider()
+        
+        # --- ΚΟΥΜΠΙ ΓΙΑ ΑΝΟΙΓΜΑ ΣΤΟ PROJECT CARDS ---
+        col_open, _ = st.columns([1, 2])
+        with col_open:
+            if st.button("📇 Άνοιγμα στο Project Cards", use_container_width=True, type="primary"):
+                st.session_state["selected_project_from_dashboard"] = selected_project
+                st.session_state.page = "📇 Project Cards"
+                st.session_state.selected_project_drill = None
+                st.rerun()
+        
+        st.divider()
+        
+        # --- TABS ΓΙΑ ΛΕΠΤΟΜΕΡΕΙΕΣ ---
+        tab1, tab2, tab3 = st.tabs(["⚙️ Tasks ανά Υλικό", "📋 Υλικά & Είδη", "🏗️ Γενικές Εργασίες"])
+        
+        with tab1:
+            items_with_tasks = []
+            for idx, row in proj_details['items'].iterrows():
+                item_id = str(row["ID"])
+                u_key = f"{item_id}_{idx}"
+                material = row["Υλικό / Προϊόν"]
+                qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+                
+                item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
+                
+                if item_tasks:
+                    for t in item_tasks:
+                        if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
+                            auto_time = tasks_database.get(t["task"], 0.0)
+                            hrs = (auto_time * qty) / 60
+                            items_with_tasks.append({
+                                "ID": item_id,
+                                "Υλικό": material[:40] + "..." if len(material) > 40 else material,
+                                "Ποσότητα": qty,
+                                "Εργασία": t["task"],
+                                "Υπεύθυνος": t.get("user", "-"),
+                                "Ημερομηνία": t.get("date", ""),
+                                "Κατάσταση": "✅ Ολοκληρώθηκε" if t.get("done", False) else "⏳ Εκκρεμεί",
+                                "Ώρες": round(hrs, 2)
+                            })
+            
+            if items_with_tasks:
+                tasks_df = pd.DataFrame(items_with_tasks)
+                st.dataframe(tasks_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("📌 Δεν έχουν οριστεί εργασίες για τα υλικά αυτού του project.")
+        
+        with tab2:
+            if proj_details['materials_list']:
+                materials_df = pd.DataFrame(proj_details['materials_list'])
+                materials_df.columns = ["ID", "Υλικό / Προϊόν", "Ποσότητα", "Status Procurement"]
+                st.dataframe(materials_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("Δεν βρέθηκαν υλικά.")
+        
+        with tab3:
+            project_tasks = proj_details.get('project_tasks', {})
+            if isinstance(project_tasks, dict) and project_tasks:
+                gen_tasks = []
+                for task_name, p_data in project_tasks.items():
+                    if isinstance(p_data, dict) and p_data.get("active", False):
+                        gen_tasks.append({
+                            "Εργασία": task_name,
+                            "Κατάσταση": "✅ Ολοκληρώθηκε" if p_data.get("done", False) else "⏳ Εκκρεμεί",
+                            "Υπεύθυνος": p_data.get("user", "-"),
+                            "Ημερομηνία": p_data.get("date", "")
+                        })
+                if gen_tasks:
+                    st.dataframe(pd.DataFrame(gen_tasks), use_container_width=True, hide_index=True)
+                else:
+                    st.info("Δεν έχουν ενεργοποιηθεί γενικές εργασίες.")
+            else:
+                st.info("Δεν έχουν οριστεί γενικές εργασίες.")
+        
+        return  # Σταματάμε εδώ — δεν δείχνουμε το grid
+    
+    # =========================================================
+    # MODE 1: GRID VIEW (default)
+    # =========================================================
+    
     col_check, col_info = st.columns([1, 3])
     with col_check:
         show_all = st.checkbox(
@@ -630,7 +752,7 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
     
     # --- PROJECT CARDS GRID (4 ανά σειρά) ---
     st.subheader(f"📋 {section_title}")
-    st.caption("👆 Πάτησε σε μια κάρτα για να ανοίξεις τη διαχείριση του project")
+    st.caption("👆 Πάτησε σε μια κάρτα για να δεις τις λεπτομέρειες")
     
     if not projects_to_show:
         st.info("Δεν βρέθηκαν projects.")
@@ -744,10 +866,9 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
                     """
                     st.markdown(card_html, unsafe_allow_html=True)
                     
-                    # Κουμπί για άνοιγμα του project
-                    if st.button(f"📂 Άνοιγμα: {p_name}", key=f"open_{p_name}", use_container_width=True):
-                        st.session_state["selected_project_from_dashboard"] = p_name
-                        st.session_state.page = "📇 Project Cards"
+                    # Κουμπί για Drill-Down
+                    if st.button(f"🔍 Δες Λεπτομέρειες", key=f"drill_{p_name}", use_container_width=True):
+                        st.session_state.selected_project_drill = p_name
                         st.rerun()
         
         # Export buttons
@@ -772,8 +893,6 @@ def render_dashboard(procurement_df, tasks_database, team_database, availability
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
                 use_container_width=True
             )
-
-
 # --- RENDER PROJECT CARDS ---
 def render_project_cards(procurement_df, tasks_database, team_database, availability_database, incoming_df):
     st.header("📇 Project Cards & Διαχείριση Tasks")
