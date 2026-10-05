@@ -45,7 +45,7 @@ def init_auth():
     if "last_login_attempt" not in st.session_state:
         st.session_state.last_login_attempt = None
     if "page" not in st.session_state:
-        st.session_state.page = "Projects"
+        st.session_state.page = "📦 Projects"
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -1493,8 +1493,12 @@ def main():
         st.session_state.last_save = datetime.now()
 
     with st.sidebar:
-        st.image("https://img.icons8.com/color/96/000000/factory.png", width=80)
-        st.markdown(f"### 🏭 Production Tasks")
+        # Τίτλος (χωρίς εικονίδιο εργοστασίου)
+        st.markdown("""
+        <div style="text-align:center;padding:10px 0 5px 0;">
+            <div style="font-size:20px;font-weight:700;color:#1e88e5;">Production Tasks</div>
+        </div>
+        """, unsafe_allow_html=True)
         st.markdown(f"👋 Welcome, **{st.session_state.username}**!")
         
         st.divider()
@@ -1508,10 +1512,10 @@ def main():
             st.divider()
         
         st.markdown("### 📋 Navigation")
-        pages_list = ["Projects", "Daily Plan", "Technician", "Projection", "Daily Report", "Database", "Settings"]
-        current_page = st.session_state.get("page", "Projects")
+        pages_list = ["📦 Projects", "🗓️ Daily Plan", "👤 Technician", "📆 Projection", "📝 Daily Report", "📊 Database", "⚙️ Settings"]
+        current_page = st.session_state.get("page", "📦 Projects")
         if current_page not in pages_list:
-            current_page = "Projects"
+            current_page = "📦 Projects"
         page_index = pages_list.index(current_page)
         
         page = st.radio(
@@ -1557,19 +1561,19 @@ def main():
 
     page = st.session_state.page
     
-    if page == "Projects":
+    if page == "📦 Projects":
         render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df)
-    elif page == "Daily Plan":
+    elif page == "🗓️ Daily Plan":
         render_daily_plan(procurement_df, tasks_database, team_database, availability_database)
-    elif page == "Technician":
+    elif page == "👤 Technician":
         render_technician(procurement_df, tasks_database, team_database, availability_database)
-    elif page == "Projection":
+    elif page == "📆 Projection":
         render_projection(procurement_df, tasks_database, team_database, availability_database)
-    elif page == "Daily Report":
+    elif page == "📝 Daily Report":
         render_daily_report(procurement_df, tasks_database, team_database, availability_database)
-    elif page == "Database":
+    elif page == "📊 Database":
         render_database(tasks_database, team_database, availability_database)
-    elif page == "Settings":
+    elif page == "⚙️ Settings":
         render_settings()
 
 
