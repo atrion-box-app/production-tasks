@@ -780,7 +780,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 c_date.date_input("Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", key=date_k, on_change=update_item_field, args=(unique_key, t_idx, "date", date_k))
                                 
                                 auto_time = tasks_database.get(t_data["task"], 0.0)
-                                    if t_data["task"] != "- Επιλογή Εργασίας -":
+                                if t_data["task"] != "- Επιλογή Εργασίας -":
                                         num_users = max(len(t_data.get("users", [])), 1)
                                         task_hours_total = (auto_time * qty) / 60
                                         task_hours_per_user = task_hours_total / num_users
