@@ -253,7 +253,10 @@ def load_assignments_from_sheet():
             p_name = str(r.get("Project", ""))
             item_id = str(r.get("Item_ID", ""))
             task_name = str(r.get("Task_Name", ""))
-            user = str(r.get("Assigned_User", "- Χωρίς Ανάθεση -"))
+            user_raw = str(r.get("Assigned_User", "- Χωρίς Ανάθεση -"))
+            # Διαχωρισμός σε λίστα (αν έχει κόμμα)
+            user = user_raw
+            users_list = [u.strip() for u in user_raw.split(",") if u.strip() and u.strip() != "- Χωρίς Ανάθεση -"]
             
             assign_date_str = str(r.get("Assigned_Date", r.get("Assigned_Done", "")))
             
@@ -272,8 +275,8 @@ def load_assignments_from_sheet():
                 assignments_proj[p_key][task_name] = {
                     "active": True,
                     "done": done,
-                    "user": user,
-                    "users": [user] if user and user != "- Χωρίς Ανάθεση -" else [],
+                    "user": users_list[0] if users_list else "- Χωρίς Ανάθεση -",
+                    "users": users_list,
                     "date": assign_date
                 }
             else:
@@ -293,8 +296,8 @@ def load_assignments_from_sheet():
                     assignments_item[item_id].append({
                         "done": done,
                         "task": task_name,
-                        "user": user,
-                        "users": [user] if user and user != "- Χωρίς Ανάθεση -" else [],
+                        "user": users_list[0] if users_list else "- Χωρίς Ανάθεση -",
+                        "users": users_list,
                         "date": assign_date
                     })
                     
@@ -323,8 +326,18 @@ def save_all_assignments_to_sheet():
             proj_name = item_to_project.get(item_id, "-")
             for t in t_list:
                 if t.get("task") and t.get("task") != "- Επιλογή Εργασίας -":
+                    # Παίρνουμε τη λίστα users (ή το user αν δεν υπάρχει)
+                    task_users = t.get("users", [])
+                    if not task_users:
+                        task_users = [t.get("user", "- Χωρίς Ανάθεση -")]
+                    
+                    # Ενώνουμε τα ονόματα με κόμμα
+                    users_str = ", ".join([str(u) for u in task_users if u and u != "- Χωρίς Ανάθεση -"])
+                    if not users_str:
+                        users_str = "- Χωρίς Ανάθεση -"
+                    
                     rows.append([
-                        proj_name, item_id, t.get("task"), t.get("user"), 
+                        proj_name, item_id, t.get("task"), users_str, 
                         str(t.get("date")), str(t.get("done")), "ITEM"
                     ])
 
@@ -333,8 +346,17 @@ def save_all_assignments_to_sheet():
             if isinstance(p_dict, dict):
                 for t_name, p_data in p_dict.items():
                     if isinstance(p_data, dict) and p_data.get("active", False):
+                        # Παίρνουμε τη λίστα users (ή το user αν δεν υπάρχει)
+                        task_users = p_data.get("users", [])
+                        if not task_users:
+                            task_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
+                        
+                        users_str = ", ".join([str(u) for u in task_users if u and u != "- Χωρίς Ανάθεση -"])
+                        if not users_str:
+                            users_str = "- Χωρίς Ανάθεση -"
+                        
                         rows.append([
-                            proj_name, "-", t_name, p_data.get("user"), 
+                            proj_name, "-", t_name, users_str, 
                             str(p_data.get("date")), str(p_data.get("done")), "PROJECT"
                         ])
 
