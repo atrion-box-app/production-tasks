@@ -273,6 +273,7 @@ def load_assignments_from_sheet():
                     "active": True,
                     "done": done,
                     "user": user,
+                    "users": [user] if user and user != "- Χωρίς Ανάθεση -" else [],
                     "date": assign_date
                 }
             else:
@@ -293,6 +294,7 @@ def load_assignments_from_sheet():
                         "done": done,
                         "task": task_name,
                         "user": user,
+                        "users": [user] if user and user != "- Χωρίς Ανάθεση -" else [],
                         "date": assign_date
                     })
                     
@@ -759,7 +761,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
                         if col_add.button("Προσθήκη Εργασίας", key=f"mat_add_{unique_key}", use_container_width=True):
-                            st.session_state["tasks_store"][unique_key].append({"done": False, "task": "- Επιλογή Εργασίας -", "user": "- Χωρίς Ανάθεση -", "date": date.today()})
+                            st.session_state["tasks_store"][unique_key].append({"done": False, "task": "- Επιλογή Εργασίας -", "user": "- Χωρίς Ανάθεση -", "users": [], "date": date.today()})
                             save_all_assignments_to_sheet()
                             st.rerun()
                         if len(item_tasks) > 0 and col_rem.button("Αφαίρεση", key=f"mat_rem_{unique_key}", use_container_width=True):
@@ -777,7 +779,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
             
             proj_key = f"proj_{selected_project}"
             if proj_key not in st.session_state["project_tasks_store"] or not isinstance(st.session_state["project_tasks_store"][proj_key], dict):
-                st.session_state["project_tasks_store"][proj_key] = {t_name: {"active": False, "done": False, "user": "- Χωρίς Ανάθεση -", "date": date.today()} for t_name in FIXED_PROJECT_TASKS}
+                st.session_state["project_tasks_store"][proj_key] = {t_name: {"active": False, "done": False, "user": "- Χωρίς Ανάθεση -", "users": [], "date": date.today()} for t_name in FIXED_PROJECT_TASKS}
             
             proj_tasks_dict = st.session_state["project_tasks_store"][proj_key]
             team_options = ["- Χωρίς Ανάθεση -"] + team_database
