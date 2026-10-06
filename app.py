@@ -450,6 +450,16 @@ def update_proj_field(p_key, task_name, field, widget_key):
     st.session_state["project_tasks_store"][p_key][task_name][field] = st.session_state[widget_key]
     save_all_assignments_to_sheet()
 
+def update_proj_users(p_key, task_name, widget_key):
+    """Ενημερώνει τους υπεύθυνους μιας γενικής εργασίας (λίστα)."""
+    selected = st.session_state[widget_key]
+    st.session_state["project_tasks_store"][p_key][task_name]["users"] = list(selected)
+    if selected:
+        st.session_state["project_tasks_store"][p_key][task_name]["user"] = selected[0]
+    else:
+        st.session_state["project_tasks_store"][p_key][task_name]["user"] = "- Χωρίς Ανάθεση -"
+    save_all_assignments_to_sheet()
+
 # --- PROJECT DETAILS FUNCTION ---
 def get_project_details(project_name, procurement_df, tasks_database, incoming_df):
     items = procurement_df[procurement_df["Project"] == project_name].copy() if not procurement_df.empty else pd.DataFrame()
@@ -806,9 +816,21 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     
                     if is_active:
                         c_user, c_date, c_time = st.columns([0.4, 0.4, 0.2])
-                        user_idx = team_options.index(t_data["user"]) if t_data["user"] in team_options else 0
+                        # Multiselect για γενικές εργασίες
+                        current_users = t_data.get("users", [])
+                        if not isinstance(current_users, list):
+                            current_users = [current_users] if current_users else []
+                        valid_users = [u for u in current_users if u in team_database]
+                        
                         puser_k = f"puser_proj_{proj_key}_{task_name}"
-                        c_user.selectbox("Υπεύθυνος", team_options, index=user_idx, key=puser_k, on_change=update_proj_field, args=(proj_key, task_name, "user", puser_k))
+                        c_user.multiselect(
+                            "Υπεύθυνοι",
+                            options=team_database,
+                            default=valid_users,
+                            key=puser_k,
+                            on_change=update_proj_users,
+                            args=(proj_key, task_name, puser_k)
+                        )
                         
                         pdate_k = f"pdate_proj_{proj_key}_{task_name}"
                         c_date.date_input("Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", key=pdate_k, on_change=update_proj_field, args=(proj_key, task_name, "date", pdate_k))
