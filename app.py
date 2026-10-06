@@ -1413,29 +1413,29 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
                     if str(r["Ποσότητα"]).isdigit():
                         proj_qty = max(proj_qty, int(r["Ποσότητα"]))
                 for task_name, p_data in p_tasks_dict.items():
-                if isinstance(p_data, dict) and p_data.get("active", False) and p_data.get("date") == target_date:
-                    t_users = p_data.get("users", [])
-                    if not t_users:
-                        t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
-                    t_done = p_data.get("done", False)
-                    auto_time = tasks_database.get(task_name, 0.0)
-                    num_users = max(len(t_users), 1)
-                    hours_total = (auto_time * proj_qty) / 60
-                    hours_per_user = hours_total / num_users
-                    for user in t_users:
-                        daily_tasks_raw.append({
-                            "type": "project",
-                            "p_key": p_key,
-                            "task_name": task_name,
-                            "Project": proj_name,
-                            "Υλικό": "Γενική Σύνθεση / Box",
-                            "Ποσότητα": proj_qty,
-                            "Εργασία": task_name,
-                            "Υπεύθυνος": user,
-                            "Ώρες": round(hours_per_user, 2),
-                            "done": t_done,
-                            "status_proc": "READY"
-                        })
+                    if isinstance(p_data, dict) and p_data.get("active", False) and p_data.get("date") == target_date:
+                        t_users = p_data.get("users", [])
+                        if not t_users:
+                            t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
+                        t_done = p_data.get("done", False)
+                        auto_time = tasks_database.get(task_name, 0.0)
+                        num_users = max(len(t_users), 1)
+                        hours_total = (auto_time * proj_qty) / 60
+                        hours_per_user = hours_total / num_users
+                        for user in t_users:
+                            daily_tasks_raw.append({
+                                "type": "project",
+                                "p_key": p_key,
+                                "task_name": task_name,
+                                "Project": proj_name,
+                                "Υλικό": "Γενική Σύνθεση / Box",
+                                "Ποσότητα": proj_qty,
+                                "Εργασία": task_name,
+                                "Υπεύθυνος": user,
+                                "Ώρες": round(hours_per_user, 2),
+                                "done": t_done,
+                                "status_proc": "READY"
+                            })
 
     if not procurement_df.empty:
         for idx, row in procurement_df.iterrows():
