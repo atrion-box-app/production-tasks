@@ -433,6 +433,17 @@ def update_item_field(u_key, t_idx, field, widget_key):
     st.session_state["tasks_store"][u_key][t_idx][field] = st.session_state[widget_key]
     save_all_assignments_to_sheet()
 
+def update_item_users(u_key, t_idx, widget_key):
+    """Ενημερώνει τους υπεύθυνους ενός task (λίστα)."""
+    selected = st.session_state[widget_key]
+    st.session_state["tasks_store"][u_key][t_idx]["users"] = list(selected)
+    # Κρατάμε και το "user" για backward compatibility
+    if selected:
+        st.session_state["tasks_store"][u_key][t_idx]["user"] = selected[0]
+    else:
+        st.session_state["tasks_store"][u_key][t_idx]["user"] = "- Χωρίς Ανάθεση -"
+    save_all_assignments_to_sheet()
+
 def update_proj_field(p_key, task_name, field, widget_key):
     st.session_state["project_tasks_store"][p_key][task_name][field] = st.session_state[widget_key]
     save_all_assignments_to_sheet()
@@ -714,10 +725,23 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 
                                 c_user, c_date, c_time, c_del = st.columns([0.4, 0.3, 0.2, 0.1])
                                 
-                                user_idx = team_options.index(t_data["user"]) if t_data["user"] in team_options else 0
-                                user_k = f"mat_user_{unique_key}_{t_idx}"
-                                c_user.selectbox("Υπεύθυνος", team_options, index=user_idx, key=user_k, on_change=update_item_field, args=(unique_key, t_idx, "user", user_k))
+                                # Multiselect για υπεύθυνους
+                                current_users = t_data.get("users", [])
+                                if not isinstance(current_users, list):
+                                    current_users = [current_users] if current_users else []
                                 
+                                # Φιλτράρουμε τα "- Χωρίς Ανάθεση -"
+                                valid_users = [u for u in current_users if u in team_database]
+                                
+                                user_k = f"mat_users_{unique_key}_{t_idx}"
+                                selected_users = c_user.multiselect(
+                                    "Υπεύθυνοι",
+                                    options=team_database,
+                                    default=valid_users,
+                                    key=user_k,
+                                    on_change=update_item_users,
+                                    args=(unique_key, t_idx, user_k)
+                                )
                                 date_k = f"mat_date_{unique_key}_{t_idx}"
                                 c_date.date_input("Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", key=date_k, on_change=update_item_field, args=(unique_key, t_idx, "date", date_k))
                                 
