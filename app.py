@@ -278,12 +278,24 @@ def load_assignments_from_sheet():
             else:
                 if item_id not in assignments_item:
                     assignments_item[item_id] = []
-                assignments_item[item_id].append({
-                    "done": done,
-                    "task": task_name,
-                    "user": user,
-                    "date": assign_date
-                })
+                
+                # Έλεγχος για διπλότυπα
+                is_duplicate = False
+                for existing in assignments_item[item_id]:
+                    if (existing["task"] == task_name and 
+                        existing["user"] == user and 
+                        str(existing["date"]) == str(assign_date)):
+                        is_duplicate = True
+                        break
+                
+                if not is_duplicate:
+                    assignments_item[item_id].append({
+                        "done": done,
+                        "task": task_name,
+                        "user": user,
+                        "date": assign_date
+                    })
+                    
     except Exception as e:
         st.warning(f"Could not load assignments: {e}")
     
@@ -1736,8 +1748,20 @@ def main():
     
     sheet_item_assignments, sheet_proj_assignments = load_assignments_from_sheet()
     
+    # Καθαρισμός tasks_store
     if "tasks_store" not in st.session_state:
         st.session_state["tasks_store"] = {}
+    else:
+        # Αφαίρεση διπλότυπων από κάθε item
+        for u_key, task_list in st.session_state["tasks_store"].items():
+            unique_tasks = []
+            seen = set()
+            for t in task_list:
+                signature = (t.get("task", ""), t.get("user", ""), str(t.get("date", "")))
+                if signature not in seen:
+                    seen.add(signature)
+                    unique_tasks.append(t)
+            st.session_state["tasks_store"][u_key] = unique_tasks
     if procurement_df is not None and not procurement_df.empty:
         for idx, row in procurement_df.iterrows():
             item_id = str(row["ID"])
