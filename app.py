@@ -788,8 +788,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                             c_time.metric("Ώρες/άτομο", f"{round(task_hours_per_user, 2)}h")
                                         else:
                                             c_time.metric("Ώρες", f"{round(task_hours_per_user, 2)}h")
-                                        else:
-                                        c_time.caption("—")
+                                else:
+                                    c_time.caption("—")
                                 
                                 if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}"):
                                     st.session_state["tasks_store"][unique_key].pop(t_idx)
