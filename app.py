@@ -1709,13 +1709,18 @@ def render_projection(procurement_df, tasks_database, team_database, availabilit
                 for task_name, p_data in p_tasks_dict.items():
                     if isinstance(p_data, dict) and p_data.get("active", False):
                         t_date = p_data.get("date")
-                        t_user = p_data.get("user")
-                        if t_user in w_matrix and t_date in w_days:
+                        t_users = p_data.get("users", [])
+                        if not t_users:
+                            t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
+                        if t_date in w_days:
                             auto_time = tasks_database.get(task_name, 0.0)
-                            hrs = (auto_time * proj_qty) / 60
+                            num_users = max(len(t_users), 1)
+                            hrs_per_user = (auto_time * proj_qty) / 60 / num_users
                             col_str = f"{WEEKDAYS_SHORT_GREEK[t_date.weekday()]} {t_date.strftime('%d/%m')}"
-                            w_matrix[t_user][col_str] += hrs
-                            d_totals[col_str] += hrs
+                            for user in t_users:
+                                if user in w_matrix:
+                                    w_matrix[user][col_str] += hrs_per_user
+                            d_totals[col_str] += hrs_per_user * num_users
 
         if not procurement_df.empty:
             for idx, row in procurement_df.iterrows():
@@ -1725,14 +1730,19 @@ def render_projection(procurement_df, tasks_database, team_database, availabilit
                 item_tasks = st.session_state["tasks_store"].get(unique_item_key, [])
                 for t_data in item_tasks:
                     t_task = t_data.get("task")
-                    t_user = t_data.get("user")
+                    t_users = t_data.get("users", [])
+                    if not t_users:
+                        t_users = [t_data.get("user", "- Χωρίς Ανάθεση -")]
                     t_date = t_data.get("date")
-                    if t_task != "- Επιλογή Εργασίας -" and t_user in w_matrix and t_date in w_days:
+                    if t_task != "- Επιλογή Εργασίας -" and t_date in w_days:
                         auto_time = tasks_database.get(t_task, 0.0)
-                        hrs = (auto_time * qty) / 60
+                        num_users = max(len(t_users), 1)
+                        hrs_per_user = (auto_time * qty) / 60 / num_users
                         col_str = f"{WEEKDAYS_SHORT_GREEK[t_date.weekday()]} {t_date.strftime('%d/%m')}"
-                        w_matrix[t_user][col_str] += hrs
-                        d_totals[col_str] += hrs
+                        for user in t_users:
+                            if user in w_matrix:
+                                w_matrix[user][col_str] += hrs_per_user
+                        d_totals[col_str] += hrs_per_user * num_users
 
         w_assigned_tot = sum(d_totals.values())
         total_assigned_range += w_assigned_tot
