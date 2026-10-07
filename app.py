@@ -698,6 +698,16 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         progress_html = f'<div style="display:inline-flex;align-items:center;gap:6px;"><div style="width:50px;height:6px;background:#e0e0e0;border-radius:3px;overflow:hidden;"><div style="width:{progress_pct}%;height:100%;background:{bar_color};"></div></div><span style="font-size:11px;color:#555;">{done_count}/{task_count}</span></div>'
                     else:
                         progress_html = '<span style="font-size:11px;color:#999;">0/0</span>'
+
+                    # Παίρνουμε το due date από τη γραμμή
+                    row_due_date = str(row["Αναμενόμενη Ημ. Παραλαβής"]).strip() if "Αναμενόμενη Ημ. Παραλαβής" in row else ""
+                    if row_due_date in ["-", "nan", ""]:
+                        row_due_date = ""
+
+                    # Δημιουργούμε το badge του due date
+                    due_date_html = ""
+                    if row_due_date:
+                        due_date_html = f'<span style="background:#e3f2fd;color:#1565c0;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;margin-left:6px;">📅 {row_due_date}</span>'
                     
                     # Καθαρισμός HTML για αποφυγή σπασίματος
                     safe_progress = progress_html.replace("\n", "").replace("  ", " ")
@@ -709,21 +719,13 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     else:
                         status_bg = "background:#fff8e1;color:#f57c00;"
 
-                    # Παίρνουμε το due date από τη γραμμή
-                    row_due_date = str(row["Αναμενόμενη Ημ. Παραλαβής"]).strip() if "Αναμενόμενη Ημ. Παραλαβής" in row else ""
-                    if row_due_date in ["-", "nan", ""]:
-                        row_due_date = ""
-                    
+                   
                     # Παίρνουμε και την αναμενόμενη ποσότητα
                     row_expected_qty = str(row["Αναμενόμενη Ποσότητα Παραλαβής"]).strip() if "Αναμενόμενη Ποσότητα Παραλαβής" in row else ""
                     if row_expected_qty in ["-", "nan", ""]:
                         row_expected_qty = ""
                     
-                    # Δημιουργούμε το badge του due date
-                    due_date_html = ""
-                    if row_due_date:
-                        due_date_html = f'<span style="background:#e3f2fd;color:#1565c0;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;margin-left:6px;">📅 {row_due_date}</span>'
-                    
+               
                     # Γραμμή υλικού
                     col_info, col_btn = st.columns([8, 1])
                     
