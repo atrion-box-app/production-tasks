@@ -2050,20 +2050,20 @@ def main():
         
         st.divider()
         
-# Total Tasks: υλικά + γενικές
-total_tasks = 0
-# Tasks υλικών
-for u_key, task_list in st.session_state.get("tasks_store", {}).items():
-    for t in task_list:
-        if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
-            total_tasks += 1
-# Tasks γενικών εργασιών
-for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
-    if isinstance(p_dict, dict):
-        for t_name, p_data in p_dict.items():
-            if isinstance(p_data, dict) and p_data.get("active", False):
-                total_tasks += 1
-st.metric("Total Tasks", total_tasks)
+        # Total Tasks: υλικά + γενικές
+        total_tasks = 0
+        # Tasks υλικών
+        for u_key, task_list in st.session_state.get("tasks_store", {}).items():
+            for t in task_list:
+                if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
+                    total_tasks += 1
+        # Tasks γενικών εργασιών
+        for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
+            if isinstance(p_dict, dict):
+                for t_name, p_data in p_dict.items():
+                    if isinstance(p_data, dict) and p_data.get("active", False):
+                        total_tasks += 1
+        st.metric("Total Tasks", total_tasks)
         
         active_count = 0
         if not procurement_df.empty:
