@@ -1222,6 +1222,10 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
             if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
                 auto_time = tasks_database.get(t["task"], 0.0)
                 hrs = (auto_time * qty) / 60
+                 t_users = t.get("users", [])
+                if not t_users:
+                    t_users = [t.get("user", "- Χωρίς Ανάθεση -")]
+                
                 all_tasks.append({
                     "type": "item",
                     "u_key": unique_key,
@@ -1231,7 +1235,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
                     "ID": item_id,
                     "Ποσότητα": qty,
                     "Εργασία": t["task"],
-                    "Υπεύθυνος": t.get("user", "- Χωρίς Ανάθεση -"),
+                    "Υπεύθυνος": ", ".join(t_users),
                     "Ημερομηνία": t.get("date", date.today()),
                     "Status": "✅" if t.get("done", False) else "⏳",
                     "done": t.get("done", False),
@@ -1255,6 +1259,10 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
                 if isinstance(p_data, dict) and p_data.get("active", False):
                     auto_time = tasks_database.get(task_name, 0.0)
                     hrs = (auto_time * proj_qty) / 60
+                    t_users = p_data.get("users", [])
+                    if not t_users:
+                        t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
+                    
                     all_tasks.append({
                         "type": "project",
                         "p_key": p_key,
@@ -1264,7 +1272,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
                         "ID": "-",
                         "Ποσότητα": proj_qty,
                         "Εργασία": task_name,
-                        "Υπεύθυνος": p_data.get("user", "- Χωρίς Ανάθεση -"),
+                        "Υπεύθυνος": ", ".join(t_users),
                         "Ημερομηνία": p_data.get("date", date.today()),
                         "Status": "✅" if p_data.get("done", False) else "⏳",
                         "done": p_data.get("done", False),
