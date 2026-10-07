@@ -1222,7 +1222,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
             if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
                 auto_time = tasks_database.get(t["task"], 0.0)
                 hrs = (auto_time * qty) / 60
-                 t_users = t.get("users", [])
+                t_users = t.get("users", [])
                 if not t_users:
                     t_users = [t.get("user", "- Χωρίς Ανάθεση -")]
                 
