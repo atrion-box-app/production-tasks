@@ -1369,7 +1369,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     
     st.markdown(f"### Εργασίες ({len(filtered_tasks)})")
     
-    h0, h1, h2, h3, h4, h5, h6, h7 = st.columns([0.4, 1.5, 2, 1.8, 1.5, 1.3, 0.7, 0.5])
+    h0, h1, h2, h3, h4, h5, h6, h7 = st.columns([0.4, 1.5, 2, 1.8, 2.5, 1.3, 0.7, 0.5])
     h0.markdown("**✓**")
     h1.markdown("**Project**")
     h2.markdown("**Υλικό**")
@@ -1382,7 +1382,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     for i, t in enumerate(filtered_tasks):
         row_id = f"mv_row_{i}_{t.get('u_key', t.get('p_key'))}_{t.get('t_idx', t.get('task_name'))}"
         
-        c0, c1, c2, c3, c4, c5, c6, c7 = st.columns([0.4, 1.5, 2, 1.8, 1.5, 1.3, 0.7, 0.5])
+        c0, c1, c2, c3, c4, c5, c6, c7 = st.columns([0.4, 1.5, 2, 1.8, 2.5, 1.3, 0.7, 0.5])
         
         chk_key = f"mv_chk_{t.get('u_key', t.get('p_key'))}_{t.get('t_idx', t.get('task_name'))}"
         c0.checkbox("", key=chk_key)
@@ -1390,7 +1390,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
         c1.caption(f"**{t['Project'][:18]}{'...' if len(t['Project'])>18 else ''}**")
         c2.caption(f"{t['Υλικό'][:25]}{'...' if len(t['Υλικό'])>25 else ''}")
         c3.caption(t['Εργασία'][:20])
-        c4.caption(t['Υπεύθυνος'][:15])
+        c4.caption(t['Υπεύθυνος'])
         
         date_key = f"mv_date_{t.get('u_key', t.get('p_key'))}_{t.get('t_idx', t.get('task_name'))}"
         new_date = c5.date_input("", value=t['Ημερομηνία'], format="DD/MM/YYYY", key=date_key, label_visibility="collapsed")
