@@ -699,6 +699,10 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     else:
                         progress_html = '<span style="font-size:11px;color:#999;">0/0</span>'
                     
+                    # Καθαρισμός HTML για αποφυγή σπασίματος
+                    safe_progress = progress_html.replace("\n", "").replace("  ", " ")
+                    safe_due_date = due_date_html.replace("\n", "").replace("  ", " ")
+                    
                     # Status class
                     if status in ["OK STOCK", "RECEIVED", "READY"]:
                         status_bg = "background:#e8f5e9;color:#2e7d32;"
@@ -729,9 +733,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             <span style="font-weight:700;color:#333;min-width:70px;">{item_id}</span>
                             <span style="color:#333;flex:1;">{material[:50]}{'...' if len(material)>50 else ''}</span>
                             <span style="color:#666;min-width:60px;">{qty} τμχ</span>
-                            {due_date_html}
+                            {safe_due_date}
                             <span style="padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;{status_bg}">{status}</span>
-                            {progress_html}
+                            {safe_progress}
                         </div>
                         """, unsafe_allow_html=True)
                     
