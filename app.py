@@ -96,6 +96,17 @@ def login_form():
                     st.error("Λάθος στοιχεία")
 
 def logout():
+    # ΠΡΟΣΤΑΣΙΑ: Αποθήκευση πριν το logout (αν υπάρχουν tasks στη μνήμη)
+    total_tasks_in_memory = sum(len(tasks) for tasks in st.session_state.get("tasks_store", {}).values())
+    total_proj_tasks_in_memory = sum(
+        len([t for t in p_dict.values() if isinstance(t, dict) and t.get("active", False)])
+        for p_dict in st.session_state.get("project_tasks_store", {}).values()
+        if isinstance(p_dict, dict)
+    )
+    
+    if total_tasks_in_memory > 0 or total_proj_tasks_in_memory > 0:
+        save_all_assignments_to_sheet()
+    
     st.session_state.authenticated = False
     st.session_state.username = None
     st.rerun()
@@ -310,6 +321,25 @@ def save_all_assignments_to_sheet():
         return False
     
     try:
+        # ΠΡΟΣΤΑΣΙΑ: Έλεγχος πριν το clear
+        total_tasks = sum(len(tasks) for tasks in st.session_state.get("tasks_store", {}).values())
+        total_proj = sum(
+            len([t for t in p_dict.values() if isinstance(t, dict) and t.get("active", False)])
+            for p_dict in st.session_state.get("project_tasks_store", {}).values()
+            if isinstance(p_dict, dict)
+        )
+        
+        # Αν η μνήμη είναι ΚΕΝΗ, έλεγξε αν το Sheet έχει δεδομένα
+        if total_tasks == 0 and total_proj == 0:
+            try:
+                existing_sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
+                existing_data = existing_sheet.get_all_values()
+                if len(existing_data) > 1:
+                    st.warning("⚠️ Αποτροπή διαγραφής: Η μνήμη είναι κενή αλλά το Sheet έχει δεδομένα.")
+                    return False
+            except:
+                pass
+        
         sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
         rows = [["Project", "Item_ID", "Task_Name", "Assigned_User", "Assigned_Date", "Status_Done", "Task_Type"]]
 
@@ -670,7 +700,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     
                     is_open = st.session_state.selected_material_expand == unique_key
                     
-                    # Progress bar
                     if task_count > 0:
                         progress_pct = int((done_count / task_count) * 100)
                         if progress_pct == 100:
@@ -683,7 +712,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     else:
                         progress_html = '<span style="font-size:11px;color:#999;">0/0</span>'
 
-                    # Due date
                     row_due_date = str(row["Αναμενόμενη Ημ. Παραλαβής"]).strip() if "Αναμενόμενη Ημ. Παραλαβής" in row else ""
                     if row_due_date in ["-", "nan", ""]:
                         row_due_date = ""
@@ -692,13 +720,11 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     if row_due_date:
                         due_date_html = f'<span style="background:#e3f2fd;color:#1565c0;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;margin-left:6px;">📅 {row_due_date}</span>'
                     
-                    # Status class
                     if status in ["OK STOCK", "RECEIVED", "READY"]:
                         status_bg = "background:#e8f5e9;color:#2e7d32;"
                     else:
                         status_bg = "background:#fff8e1;color:#f57c00;"
 
-                    # Γραμμή υλικού
                     col_info, col_btn = st.columns([8, 1])
                     
                     with col_info:
@@ -723,7 +749,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 st.session_state.selected_material_expand = unique_key
                             st.rerun()
                     
-                    # Expandable Panel
                     if is_open:
                         if status not in ["OK STOCK", "RECEIVED", "READY"]:
                             st.warning(f"Εκκρεμότητα Procurement: {status}")
@@ -1978,9 +2003,18 @@ def main():
         if st.button("Logout", use_container_width=True):
             logout()
 
+    # Auto-save κάθε 2 λεπτά (ΠΡΟΣΤΑΣΙΑ: μόνο αν υπάρχουν tasks)
     if (datetime.now() - st.session_state.last_save).seconds > 120:
-        if save_all_assignments_to_sheet():
-            st.session_state.last_save = datetime.now()
+        total_tasks_in_memory = sum(len(tasks) for tasks in st.session_state.get("tasks_store", {}).values())
+        total_proj_tasks_in_memory = sum(
+            len([t for t in p_dict.values() if isinstance(t, dict) and t.get("active", False)])
+            for p_dict in st.session_state.get("project_tasks_store", {}).values()
+            if isinstance(p_dict, dict)
+        )
+        
+        if total_tasks_in_memory > 0 or total_proj_tasks_in_memory > 0:
+            if save_all_assignments_to_sheet():
+                st.session_state.last_save = datetime.now()
 
     page = st.session_state.page
     
