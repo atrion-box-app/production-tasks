@@ -811,7 +811,27 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
                         if col_add.button("Προσθήκη Εργασίας", key=f"mat_add_{unique_key}", use_container_width=True):
-                            st.session_state["tasks_store"][unique_key].append({"done": False, "task": "- Επιλογή Εργασίας -", "user": "- Χωρίς Ανάθεση -", "users": [], "date": date.today()})
+                            # Auto-fill με Due Date αν υπάρχει
+                            auto_date = date.today()
+                            try:
+                                due_date_str = str(row["Αναμενόμενη Ημ. Παραλαβής"]).strip()
+                                if due_date_str and due_date_str not in ["-", "nan", ""]:
+                                    for fmt in ["%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%Y-%m-%d %H:%M:%S"]:
+                                        try:
+                                            auto_date = datetime.strptime(due_date_str.split(" ")[0], fmt.split(" ")[0]).date()
+                                            break
+                                        except:
+                                            continue
+                            except:
+                                pass
+                            
+                            st.session_state["tasks_store"][unique_key].append({
+                                "done": False, 
+                                "task": "- Επιλογή Εργασίας -", 
+                                "user": "- Χωρίς Ανάθεση -", 
+                                "users": [], 
+                                "date": auto_date
+                            })
                             save_all_assignments_to_sheet()
                             st.rerun()
                         if len(item_tasks) > 0 and col_rem.button("Αφαίρεση", key=f"mat_rem_{unique_key}", use_container_width=True):
