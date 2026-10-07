@@ -1422,6 +1422,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
 
 
 # --- RENDER DAILY PLAN ---
+# --- RENDER DAILY PLAN ---
 def render_daily_plan(procurement_df, tasks_database, team_database, availability_database):
     st.header("Συγκεντρωτικό Πλάνο Παραγωγής")
     col_d, col_fp, col_fu, col_fs = st.columns([1, 1, 1, 1])
@@ -1430,6 +1431,8 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
     st.caption(f"Ημέρα εβδομάδας: **{greek_day_name}**")
 
     daily_tasks_raw = []
+    
+    # Project tasks (γενικές)
     for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
         if isinstance(p_tasks_dict, dict):
             proj_name = p_key.replace("proj_", "")
@@ -1439,30 +1442,33 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
                 for _, r in p_items.iterrows():
                     if str(r["Ποσότητα"]).isdigit():
                         proj_qty = max(proj_qty, int(r["Ποσότητα"]))
-                for task_name, p_data in p_tasks_dict.items():
-                    if isinstance(p_data, dict) and p_data.get("active", False) and p_data.get("date") == target_date:
-                        t_users = p_data.get("users", [])
-                        if not t_users:
-                            t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
-                        t_done = p_data.get("done", False)
-                        auto_time = tasks_database.get(task_name, 0.0)
-                        num_users = max(len(t_users), 1)
-                        hours_total = (auto_time * proj_qty) / 60
-                        hours_per_user = hours_total / num_users
-                        for user in t_users:
-                            daily_tasks_raw.append({
-                                "type": "project",
-                                "p_key": p_key,
-                                "task_name": task_name,
-                                "Project": proj_name,
-                                "Υλικό": "Γενική Σύνθεση / Box",
-                                "Ποσότητα": proj_qty,
-                                "Εργασία": task_name,
-                                "Υπεύθυνος": user,
-                                "Ώρες": round(hours_per_user, 2),
-                                "done": t_done,
-                                "status_proc": "READY"
-                            })
+            for task_name, p_data in p_tasks_dict.items():
+                if isinstance(p_data, dict) and p_data.get("active", False) and p_data.get("date") == target_date:
+                    t_users = p_data.get("users", [])
+                    if not t_users:
+                        t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
+                    t_done = p_data.get("done", False)
+                    auto_time = tasks_database.get(task_name, 0.0)
+                    num_users = max(len(t_users), 1)
+                    hours_total = (auto_time * proj_qty) / 60
+                    hours_per_user = hours_total / num_users
+                    
+                    daily_tasks_raw.append({
+                        "type": "project",
+                        "p_key": p_key,
+                        "task_name": task_name,
+                        "Project": proj_name,
+                        "Υλικό": "Γενική Σύνθεση / Box",
+                        "Ποσότητα": proj_qty,
+                        "Εργασία": task_name,
+                        "Υπεύθυνος": ", ".join(t_users),
+                        "Υπεύθυνος_list": t_users,
+                        "Ώρες": round(hours_total, 2),  # ΣΥΝΟΛΙΚΕΣ ώρες (όχι per user)
+                        "Ώρες/άτομο": round(hours_per_user, 2),
+                        "num_users": num_users,
+                        "done": t_done,
+                        "status_proc": "READY"
+                    })
 
     if not procurement_df.empty:
         for idx, row in procurement_df.iterrows():
@@ -1485,30 +1491,51 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
                     num_users = max(len(t_users), 1)
                     hours_total = (auto_time * qty) / 60
                     hours_per_user = hours_total / num_users
-                    for user in t_users:
-                        daily_tasks_raw.append({
-                            "type": "item",
-                            "u_key": unique_item_key,
-                            "t_idx": t_idx,
-                            "Project": project_name,
-                            "Υλικό": material,
-                            "Ποσότητα": qty,
-                            "Εργασία": t_task,
-                            "Υπεύθυνος": user,
-                            "Ώρες": round(hours_per_user, 2),
-                            "done": t_done,
-                            "status_proc": proc_status
-                        })
+                    
+                    daily_tasks_raw.append({
+                        "type": "item",
+                        "u_key": unique_item_key,
+                        "t_idx": t_idx,
+                        "Project": project_name,
+                        "Υλικό": material,
+                        "Ποσότητα": qty,
+                        "Εργασία": t_task,
+                        "Υπεύθυνος": ", ".join(t_users),
+                        "Υπεύθυνος_list": t_users,
+                        "Ώρες": round(hours_total, 2),
+                        "Ώρες/άτομο": round(hours_per_user, 2),
+                        "num_users": num_users,
+                        "done": t_done,
+                        "status_proc": proc_status
+                    })
 
     available_projects = ["Όλα τα Projects"] + sorted(list(set(d["Project"] for d in daily_tasks_raw))) if daily_tasks_raw else ["Όλα τα Projects"]
-    available_users = ["Όλοι οι Τεχνίτες"] + sorted(list(set(d["Υπεύθυνος"] for d in daily_tasks_raw))) if daily_tasks_raw else ["Όλοι οι Τεχνίτες"]
+    available_users = ["Όλοι οι Τεχνίτες"]
+    if daily_tasks_raw:
+        all_users = set()
+        for d in daily_tasks_raw:
+            for u in d["Υπεύθυνος_list"]:
+                all_users.add(u)
+        available_users += sorted(list(all_users))
+    else:
+        available_users = ["Όλοι οι Τεχνίτες"]
+    
     available_statuses = ["Όλα τα Status"] + sorted(list(set(d["status_proc"] for d in daily_tasks_raw))) if daily_tasks_raw else ["Όλα τα Status"]
 
     selected_filter_proj = col_fp.selectbox("Φίλτρο Project:", available_projects)
     selected_filter_user = col_fu.selectbox("Φίλτρο Τεχνίτη:", available_users)
     selected_filter_status = col_fs.selectbox("Φίλτρο Procurement:", available_statuses)
 
-    daily_tasks = [d for d in daily_tasks_raw if (selected_filter_proj == "Όλα τα Projects" or d["Project"] == selected_filter_proj) and (selected_filter_user == "Όλοι οι Τεχνίτες" or d["Υπεύθυνος"] == selected_filter_user) and (selected_filter_status == "Όλα τα Status" or d["status_proc"] == selected_filter_status)]
+    # Φιλτράρουμε με βάση τη λίστα
+    daily_tasks = []
+    for d in daily_tasks_raw:
+        if selected_filter_proj != "Όλα τα Projects" and d["Project"] != selected_filter_proj:
+            continue
+        if selected_filter_user != "Όλοι οι Τεχνίτες" and selected_filter_user not in d["Υπεύθυνος_list"]:
+            continue
+        if selected_filter_status != "Όλα τα Status" and d["status_proc"] != selected_filter_status:
+            continue
+        daily_tasks.append(d)
 
     st.divider()
     if daily_tasks:
@@ -1531,8 +1558,9 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
         day_availability = availability_database.get(greek_day_name, {})
         user_hours = {}
         for d in daily_tasks:
-            u = d["Υπεύθυνος"]
-            user_hours[u] = user_hours.get(u, 0.0) + d["Ώρες"]
+            for u in d["Υπεύθυνος_list"]:
+                user_hours[u] = user_hours.get(u, 0.0) + d["Ώρες/άτομο"]
+        
         cols = st.columns(max(len(user_hours), 1))
         for i, (member_name, assigned_hrs) in enumerate(user_hours.items()):
             assigned_hrs = round(assigned_hrs, 2)
@@ -1559,8 +1587,13 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
             col_p.markdown(f"**{dt['Project']}**")
             col_mat.caption(f"{dt['Υλικό']} ({dt['Ποσότητα']} τμχ)")
             col_tsk.markdown(f"~~{dt['Εργασία']}~~" if is_done else f"**{dt['Εργασία']}**")
-            col_user.write(dt['Υπεύθυνος'])
-            col_hrs.write(f"{dt['Ώρες']}h")
+            col_user.caption(dt['Υπεύθυνος'])
+            
+            # Εμφάνιση ωρών: αν 1 άτομο → Ώρες, αν 2+ → Ώρες/άτομο + σύνολο
+            if dt['num_users'] > 1:
+                col_hrs.caption(f"{dt['Ώρες/άτομο']}h/άτομο")
+            else:
+                col_hrs.caption(f"{dt['Ώρες']}h")
             
             if dt['status_proc'] in ["OK STOCK", "RECEIVED", "READY"]:
                 col_st.success(f"{dt['status_proc']}")
