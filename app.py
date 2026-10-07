@@ -736,6 +736,19 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         else:
                             st.success(f"Υλικό Διαθέσιμο: {status}")
                         
+                        # Εμφάνιση Due Date και Αναμενόμενης Ποσότητας
+                        due_date = str(row["Αναμενόμενη Ημ. Παραλαβής"]) if "Αναμενόμενη Ημ. Παραλαβής" in row else "-"
+                        expected_qty = str(row["Αναμενόμενη Ποσότητα Παραλαβής"]) if "Αναμενόμενη Ποσότητα Παραλαβής" in row else "-"
+                        
+                        info_parts = []
+                        if due_date and due_date != "-" and due_date != "nan":
+                            info_parts.append(f"📅 Αναμενόμενη Παραλαβή: **{due_date}**")
+                        if expected_qty and expected_qty != "-" and expected_qty != "nan":
+                            info_parts.append(f"📦 Αναμενόμενη Ποσότητα: **{expected_qty}**")
+                        
+                        if info_parts:
+                            st.info(" | ".join(info_parts))
+                        
                         if unique_key not in st.session_state["tasks_store"]:
                             st.session_state["tasks_store"][unique_key] = []
                         
