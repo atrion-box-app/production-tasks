@@ -704,6 +704,21 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         status_bg = "background:#e8f5e9;color:#2e7d32;"
                     else:
                         status_bg = "background:#fff8e1;color:#f57c00;"
+
+                    # Παίρνουμε το due date από τη γραμμή
+                    row_due_date = str(row["Αναμενόμενη Ημ. Παραλαβής"]).strip() if "Αναμενόμενη Ημ. Παραλαβής" in row else ""
+                    if row_due_date in ["-", "nan", ""]:
+                        row_due_date = ""
+                    
+                    # Παίρνουμε και την αναμενόμενη ποσότητα
+                    row_expected_qty = str(row["Αναμενόμενη Ποσότητα Παραλαβής"]).strip() if "Αναμενόμενη Ποσότητα Παραλαβής" in row else ""
+                    if row_expected_qty in ["-", "nan", ""]:
+                        row_expected_qty = ""
+                    
+                    # Δημιουργούμε το badge του due date
+                    due_date_html = ""
+                    if row_due_date:
+                        due_date_html = f'<span style="background:#e3f2fd;color:#1565c0;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;margin-left:6px;">📅 {row_due_date}</span>'
                     
                     # Γραμμή υλικού
                     col_info, col_btn = st.columns([8, 1])
@@ -714,6 +729,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             <span style="font-weight:700;color:#333;min-width:70px;">{item_id}</span>
                             <span style="color:#333;flex:1;">{material[:50]}{'...' if len(material)>50 else ''}</span>
                             <span style="color:#666;min-width:60px;">{qty} τμχ</span>
+                            {due_date_html}
                             <span style="padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;{status_bg}">{status}</span>
                             {progress_html}
                         </div>
