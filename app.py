@@ -2049,7 +2049,13 @@ def main():
         st.session_state.page = page
         
         st.divider()
-        total_tasks = sum(len(tasks) for tasks in st.session_state.get("tasks_store", {}).values())
+        
+        # Total Tasks: μετράει μόνο τις ΠΡΑΓΜΑΤΙΚΕΣ εργασίες (όχι κενές)
+        total_tasks = 0
+        for u_key, task_list in st.session_state.get("tasks_store", {}).items():
+            for t in task_list:
+                if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
+                    total_tasks += 1
         st.metric("Total Tasks", total_tasks)
         
         active_count = 0
