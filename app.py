@@ -1826,6 +1826,7 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
     rep_completed = []
     rep_pending = []
 
+    # Project tasks (γενικές)
     for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
         if isinstance(p_tasks_dict, dict):
             proj_name = p_key.replace("proj_", "")
@@ -1842,13 +1843,22 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     if not t_users:
                         t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
                     num_users = max(len(t_users), 1)
-                    hrs = round((auto_time * proj_qty) / 60 / num_users, 2)
-                    for user in t_users:
-                        item_info = {"Project": proj_name, "Εργασία": task_name, "Υλικό / Είδος": "Γενική Σύνθεση / Box", "Υπεύθυνος": user, "Ώρες": hrs}
-                        if p_data.get("done", False):
-                            rep_completed.append(item_info)
-                        else:
-                            rep_pending.append(item_info)
+                    hrs_total = round((auto_time * proj_qty) / 60, 2)
+                    hrs_per_user = round(hrs_total / num_users, 2)
+                    
+                    item_info = {
+                        "Project": proj_name,
+                        "Εργασία": task_name,
+                        "Υλικό / Είδος": "Γενική Σύνθεση / Box",
+                        "Υπεύθυνος": ", ".join(t_users),
+                        "Ώρες": hrs_total,
+                        "Ώρες/άτομο": hrs_per_user,
+                        "num_users": num_users
+                    }
+                    if p_data.get("done", False):
+                        rep_completed.append(item_info)
+                    else:
+                        rep_pending.append(item_info)
 
     if not procurement_df.empty:
         for idx, row in procurement_df.iterrows():
@@ -1865,13 +1875,22 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     if not t_users:
                         t_users = [t_data.get("user", "- Χωρίς Ανάθεση -")]
                     num_users = max(len(t_users), 1)
-                    hrs = round((auto_time * qty) / 60 / num_users, 2)
-                    for user in t_users:
-                        item_info = {"Project": project_name, "Εργασία": t_data["task"], "Υλικό / Είδος": f"[{item_id}] {material}", "Υπεύθυνος": user, "Ώρες": hrs}
-                        if t_data.get("done", False):
-                            rep_completed.append(item_info)
-                        else:
-                            rep_pending.append(item_info)
+                    hrs_total = round((auto_time * qty) / 60, 2)
+                    hrs_per_user = round(hrs_total / num_users, 2)
+                    
+                    item_info = {
+                        "Project": project_name,
+                        "Εργασία": t_data["task"],
+                        "Υλικό / Είδος": f"[{item_id}] {material}",
+                        "Υπεύθυνος": ", ".join(t_users),
+                        "Ώρες": hrs_total,
+                        "Ώρες/άτομο": hrs_per_user,
+                        "num_users": num_users
+                    }
+                    if t_data.get("done", False):
+                        rep_completed.append(item_info)
+                    else:
+                        rep_pending.append(item_info)
 
     rc1, rc2, rc3 = st.columns(3)
     tot_done_hrs = sum(x["Ώρες"] for x in rep_completed)
@@ -1884,17 +1903,37 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
     st.divider()
     st.subheader("Ολοκληρωμένες Εργασίες")
     if rep_completed:
-        st.dataframe(pd.DataFrame(rep_completed), use_container_width=True, hide_index=True)
+        # Δημιουργούμε DataFrame με τις σωστές στήλες
+        display_data = []
+        for item in rep_completed:
+            display_data.append({
+                "Project": item["Project"],
+                "Εργασία": item["Εργασία"],
+                "Υλικό / Είδος": item["Υλικό / Είδος"],
+                "Υπεύθυνος": item["Υπεύθυνος"],
+                "Ώρες": item["Ώρες"],
+                "Ώρες/άτομο": item["Ώρες/άτομο"] if item["num_users"] > 1 else ""
+            })
+        st.dataframe(pd.DataFrame(display_data), use_container_width=True, hide_index=True)
     else:
         st.info("Δεν υπάρχουν ολοκληρωμένες εργασίες για αυτή την ημερομηνία.")
 
     st.divider()
     st.subheader("Εκκρεμότητες")
     if rep_pending:
-        st.dataframe(pd.DataFrame(rep_pending), use_container_width=True, hide_index=True)
+        display_data = []
+        for item in rep_pending:
+            display_data.append({
+                "Project": item["Project"],
+                "Εργασία": item["Εργασία"],
+                "Υλικό / Είδος": item["Υλικό / Είδος"],
+                "Υπεύθυνος": item["Υπεύθυνος"],
+                "Ώρες": item["Ώρες"],
+                "Ώρες/άτομο": item["Ώρες/άτομο"] if item["num_users"] > 1 else ""
+            })
+        st.dataframe(pd.DataFrame(display_data), use_container_width=True, hide_index=True)
     else:
         st.success("Όλες οι εργασίες έχουν ολοκληρωθεί!")
-
 
 # --- RENDER DATABASE ---
 def render_database(tasks_database, team_database, availability_database):
