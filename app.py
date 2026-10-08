@@ -707,7 +707,7 @@ def generate_printable_html(title, date_str, df_data):
     return html
 
 def generate_printable_html_two_sections(title, date_str, pending_df, completed_df):
-    """Report για τεχνίτη με checkbox για χειρόγραφη τσεκάριση."""
+    """Report για τεχνίτη με checkbox και απαλά χρώματα ανά ενότητα."""
     
     pending_count = len(pending_df)
     completed_count = len(completed_df)
@@ -727,8 +727,8 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
             pending_rows += "</tr>"
         
         pending_table = f"""
-        <div class="section">
-            <h2>Εκκρεμή ({pending_count})</h2>
+        <div class="section section-pending">
+            <h2 class="title-pending">Εκκρεμή ({pending_count})</h2>
             <table>
                 <thead>
                     <tr>{headers_html}</tr>
@@ -741,8 +741,8 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
         """
     else:
         pending_table = """
-        <div class="section">
-            <h2>Εκκρεμή</h2>
+        <div class="section section-pending">
+            <h2 class="title-pending">Εκκρεμή</h2>
             <p class="empty-message">Δεν υπάρχουν εκκρεμείς εργασίες.</p>
         </div>
         """
@@ -760,8 +760,8 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
             completed_rows += "</tr>"
         
         completed_table = f"""
-        <div class="section">
-            <h2>Ολοκληρωμένα ({completed_count})</h2>
+        <div class="section section-completed">
+            <h2 class="title-completed">Ολοκληρωμένα ({completed_count})</h2>
             <table>
                 <thead>
                     <tr>{headers_html}</tr>
@@ -811,20 +811,43 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 color: #666;
             }}
             .section {{
-                margin-bottom: 30px;
+                margin-bottom: 25px;
+                padding: 15px 18px;
+                border-radius: 6px;
             }}
-            h2 {{
+            /* Απαλό κίτρινο για τα Εκκρεμή */
+            .section-pending {{
+                background: #fffbf0;
+                border: 1px solid #f5e6c8;
+            }}
+            /* Απαλό πράσινο για τα Ολοκληρωμένα */
+            .section-completed {{
+                background: #f4faf5;
+                border: 1px solid #d4ead9;
+            }}
+            .title-pending {{
                 font-size: 15px;
-                color: #333;
+                color: #b8860b;
                 font-weight: 600;
                 margin-bottom: 10px;
                 padding-bottom: 5px;
-                border-bottom: 1px solid #eee;
+                border-bottom: 1px solid #f0dfb8;
+            }}
+            .title-completed {{
+                font-size: 15px;
+                color: #4a8a5c;
+                font-weight: 600;
+                margin-bottom: 10px;
+                padding-bottom: 5px;
+                border-bottom: 1px solid #cbe3d1;
             }}
             table {{
                 width: 100%;
                 border-collapse: collapse;
                 font-size: 12px;
+                background: white;
+                border-radius: 4px;
+                overflow: hidden;
             }}
             th {{
                 padding: 8px 10px;
@@ -899,6 +922,11 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 tr {{ break-inside: avoid; }}
                 .section {{ break-inside: avoid; }}
                 .checkbox-cell {{ font-size: 20px; padding: 6px 5px; }}
+                /* Διατήρηση απαλών χρωμάτων στην εκτύπωση */
+                .section-pending {{ background: #fffbf0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+                .section-completed {{ background: #f4faf5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+                .title-pending {{ color: #b8860b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+                .title-completed {{ color: #4a8a5c !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
             }}
         </style>
     </head>
