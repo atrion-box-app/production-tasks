@@ -707,42 +707,45 @@ def generate_printable_html(title, date_str, df_data):
     return html
 
 def generate_printable_html_two_sections(title, date_str, pending_df, completed_df):
-    """Report για τεχνίτη με checkbox και απαλά χρώματα ανά ενότητα."""
+    """Report για τεχνίτη με checkbox και σωστή στοίχιση στηλών."""
     
     pending_count = len(pending_df)
     completed_count = len(completed_df)
     total_count = pending_count + completed_count
     
-    # --- ΣΤΗΛΕΣ ΜΕ ΣΤΑΘΕΡΟ ΠΛΑΤΟΣ (για σωστή στοίχιση) ---
-    # Ορίζουμε τα πλάτη ως ποσοστά. Αν το pending_df έχει στήλη checkbox,
-    # τα υπόλοιπα μοιράζονται ανάλογα.
-    num_cols = len(pending_df.columns) if pending_count > 0 else (len(completed_df.columns) if completed_count > 0 else 0)
-    # Πλάτος για checkbox (μόνο στο pending)
-    checkbox_width = "5%"
-    # Υπόλοιπο 95% μοιράζεται στις στήλες δεδομένων
-    if num_cols > 0:
-        data_col_width = f"{95 / num_cols:.2f}%"
-    else:
-        data_col_width = "100%"
+    # --- ΣΤΑΘΕΡΑ ΠΛΑΤΗ ΑΝΑ ΣΤΗΛΗ (% του πίνακα) ---
+    # Αυτές οι αναλογίες εφαρμόζονται και στα δύο tables.
+    # Όταν υπάρχει checkbox (στο pending), "κλέβει" 4% από τα συνολικά.
+    COLUMN_WEIGHTS = {
+        "Project": 13,
+        "Υλικό / Είδος": 32,
+        "Ποσότητα": 8,
+        "Εργασία": 20,
+        "Ώρες": 7,
+        "Status Procurement": 20,
+    }
+    DEFAULT_WEIGHT = 15  # fallback για άγνωστες στήλες
     
-    # Δημιουργία <colgroup> για το pending table
-    pending_colgroup = ""
-    if pending_count > 0:
-        pending_colgroup = f'<colgroup><col style="width:{checkbox_width};">' + \
-            "".join([f'<col style="width:{data_col_width};">' for _ in pending_df.columns]) + \
-            '</colgroup>'
-    
-    # Δημιουργία <colgroup> για το completed table
-    completed_colgroup = ""
-    if completed_count > 0:
-        completed_col_width = f"{100 / num_cols:.2f}%" if num_cols > 0 else "100%"
-        completed_colgroup = '<colgroup>' + \
-            "".join([f'<col style="width:{completed_col_width};">' for _ in completed_df.columns]) + \
-            '</colgroup>'
+    def build_colgroup(columns, total_width=100.0, prepend_checkbox=False):
+        """Επιστρέφει <colgroup> με σταθερά πλάτη."""
+        checkbox_pct = 4.0 if prepend_checkbox else 0.0
+        data_total = total_width - checkbox_pct
+        
+        weights = [COLUMN_WEIGHTS.get(c, DEFAULT_WEIGHT) for c in columns]
+        weight_sum = sum(weights) if sum(weights) > 0 else 1
+        
+        cols_html = ""
+        if prepend_checkbox:
+            cols_html += f'<col style="width:{checkbox_pct:.2f}%;">'
+        for w in weights:
+            pct = (w / weight_sum) * data_total
+            cols_html += f'<col style="width:{pct:.2f}%;">'
+        return f"<colgroup>{cols_html}</colgroup>"
     
     # --- ΠΙΝΑΚΑΣ ΕΚΚΡΕΜΩΝ ---
     pending_table = ""
     if pending_count > 0:
+        colgroup_pending = build_colgroup(list(pending_df.columns), prepend_checkbox=True)
         headers_html = '<th class="checkbox-col">✓</th>' + "".join([f"<th>{col}</th>" for col in pending_df.columns])
         
         pending_rows = ""
@@ -757,7 +760,7 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
         <div class="section section-pending">
             <h2 class="title-pending">Εκκρεμή ({pending_count})</h2>
             <table class="report-table">
-                {pending_colgroup}
+                {colgroup_pending}
                 <thead>
                     <tr>{headers_html}</tr>
                 </thead>
@@ -778,6 +781,7 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
     # --- ΠΙΝΑΚΑΣ ΟΛΟΚΛΗΡΩΜΕΝΩΝ ---
     completed_table = ""
     if completed_count > 0:
+        colgroup_completed = build_colgroup(list(completed_df.columns), prepend_checkbox=False)
         headers_html = "".join([f"<th>{col}</th>" for col in completed_df.columns])
         
         completed_rows = ""
@@ -791,7 +795,7 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
         <div class="section section-completed">
             <h2 class="title-completed">Ολοκληρωμένα ({completed_count})</h2>
             <table class="report-table">
-                {completed_colgroup}
+                {colgroup_completed}
                 <thead>
                     <tr>{headers_html}</tr>
                 </thead>
@@ -844,12 +848,10 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 padding: 15px 18px;
                 border-radius: 6px;
             }}
-            /* Απαλό κίτρινο για τα Εκκρεμή */
             .section-pending {{
                 background: #fffbf0;
                 border: 1px solid #f5e6c8;
             }}
-            /* Απαλό πράσινο για τα Ολοκληρωμένα */
             .section-completed {{
                 background: #f4faf5;
                 border: 1px solid #d4ead9;
@@ -877,8 +879,7 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 background: white;
                 border-radius: 4px;
                 overflow: hidden;
-                table-layout: fixed;  /* ΚΛΕΙΔΙ: σταθερό layout */
-                word-wrap: break-word;
+                table-layout: fixed;
             }}
             table.report-table th {{
                 padding: 8px 6px;
@@ -903,13 +904,12 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
             }}
             table.report-table tr:hover {{ background: #fafafa; }}
             
-            /* Checkbox στήλη */
             th.checkbox-col {{
                 text-align: center !important;
             }}
             td.checkbox-cell {{
                 text-align: center;
-                font-size: 16px;
+                font-size: 15px;
                 color: #bbb;
                 padding: 8px 2px;
                 border-right: 1px solid #eee;
@@ -956,8 +956,7 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 table.report-table td {{ padding: 6px 4px; font-size: 10px; }}
                 tr {{ break-inside: avoid; }}
                 .section {{ break-inside: avoid; }}
-                td.checkbox-cell {{ font-size: 16px; padding: 6px 2px; }}
-                /* Διατήρηση απαλών χρωμάτων στην εκτύπωση */
+                td.checkbox-cell {{ font-size: 15px; padding: 6px 2px; }}
                 .section-pending {{ background: #fffbf0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
                 .section-completed {{ background: #f4faf5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
                 .title-pending {{ color: #b8860b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
