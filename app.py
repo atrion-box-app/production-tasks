@@ -707,104 +707,74 @@ def generate_printable_html(title, date_str, df_data):
     return html
 
 def generate_printable_html_two_sections(title, date_str, pending_df, completed_df):
-    """Report για τεχνίτη με checkbox και σωστή στοίχιση στηλών."""
+    """Ενιαίος πίνακας με δύο sections (Εκκρεμή + Ολοκληρωμένα) — απόλυτη ευθυγράμμιση στηλών."""
     
     pending_count = len(pending_df)
     completed_count = len(completed_df)
     total_count = pending_count + completed_count
     
-    # --- ΣΤΑΘΕΡΑ ΠΛΑΤΗ ΑΝΑ ΣΤΗΛΗ (% του πίνακα) ---
-    # Αυτές οι αναλογίες εφαρμόζονται και στα δύο tables.
-    # Όταν υπάρχει checkbox (στο pending), "κλέβει" 4% από τα συνολικά.
-    COLUMN_WEIGHTS = {
+    # Παίρνουμε τις στήλες από όποιο df έχει δεδομένα
+    if pending_count > 0:
+        columns = list(pending_df.columns)
+    elif completed_count > 0:
+        columns = list(completed_df.columns)
+    else:
+        columns = ["Project", "Υλικό / Είδος", "Ποσότητα", "Εργασία", "Ώρες", "Status Procurement"]
+    
+    # Σταθερά πλάτη: checkbox + 6 στήλες = 7 συνολικά
+    # 5% + (95% μοιρασμένο)
+    col_widths = {
         "Project": 13,
-        "Υλικό / Είδος": 32,
+        "Υλικό / Είδος": 30,
         "Ποσότητα": 8,
         "Εργασία": 20,
         "Ώρες": 7,
-        "Status Procurement": 20,
+        "Status Procurement": 17,
     }
-    DEFAULT_WEIGHT = 15  # fallback για άγνωστες στήλες
+    DEFAULT_W = 15
+    weights = [col_widths.get(c, DEFAULT_W) for c in columns]
+    weight_sum = sum(weights) if sum(weights) > 0 else 1
+    data_total = 95.0  # 5% για checkbox
     
-    def build_colgroup(columns, total_width=100.0, prepend_checkbox=False):
-        """Επιστρέφει <colgroup> με σταθερά πλάτη."""
-        checkbox_pct = 4.0 if prepend_checkbox else 0.0
-        data_total = total_width - checkbox_pct
-        
-        weights = [COLUMN_WEIGHTS.get(c, DEFAULT_WEIGHT) for c in columns]
-        weight_sum = sum(weights) if sum(weights) > 0 else 1
-        
-        cols_html = ""
-        if prepend_checkbox:
-            cols_html += f'<col style="width:{checkbox_pct:.2f}%;">'
-        for w in weights:
-            pct = (w / weight_sum) * data_total
-            cols_html += f'<col style="width:{pct:.2f}%;">'
-        return f"<colgroup>{cols_html}</colgroup>"
+    colgroup_html = '<colgroup><col style="width:5%;">'
+    for w in weights:
+        pct = (w / weight_sum) * data_total
+        colgroup_html += f'<col style="width:{pct:.2f}%;">'
+    colgroup_html += '</colgroup>'
     
-    # --- ΠΙΝΑΚΑΣ ΕΚΚΡΕΜΩΝ ---
-    pending_table = ""
+    # Header row
+    header_cells = '<th class="checkbox-col">✓</th>'
+    for col in columns:
+        header_cells += f'<th>{col}</th>'
+    
+    # --- ΧΤΙΖΟΥΜΕ ΤΟ ΕΝΙΑΙΟ BODY ---
+    body_rows = ""
+    
+    # 1) Section header: Εκκρεμή
+    body_rows += f'<tr class="section-row section-row-pending"><td colspan="{len(columns) + 1}">Εκκρεμή ({pending_count})</td></tr>'
+    
     if pending_count > 0:
-        colgroup_pending = build_colgroup(list(pending_df.columns), prepend_checkbox=True)
-        headers_html = '<th class="checkbox-col">✓</th>' + "".join([f"<th>{col}</th>" for col in pending_df.columns])
-        
-        pending_rows = ""
         for _, row in pending_df.iterrows():
-            pending_rows += "<tr>"
-            pending_rows += '<td class="checkbox-cell">☐</td>'
-            for col in pending_df.columns:
-                pending_rows += f"<td>{str(row[col])}</td>"
-            pending_rows += "</tr>"
-        
-        pending_table = f"""
-        <div class="section section-pending">
-            <h2 class="title-pending">Εκκρεμή ({pending_count})</h2>
-            <table class="report-table">
-                {colgroup_pending}
-                <thead>
-                    <tr>{headers_html}</tr>
-                </thead>
-                <tbody>
-                    {pending_rows}
-                </tbody>
-            </table>
-        </div>
-        """
+            body_rows += '<tr class="row-pending">'
+            body_rows += '<td class="checkbox-cell">☐</td>'
+            for col in columns:
+                body_rows += f'<td>{str(row[col])}</td>'
+            body_rows += '</tr>'
     else:
-        pending_table = """
-        <div class="section section-pending">
-            <h2 class="title-pending">Εκκρεμή</h2>
-            <p class="empty-message">Δεν υπάρχουν εκκρεμείς εργασίες.</p>
-        </div>
-        """
+        body_rows += f'<tr class="empty-row"><td colspan="{len(columns) + 1}">Δεν υπάρχουν εκκρεμείς εργασίες.</td></tr>'
     
-    # --- ΠΙΝΑΚΑΣ ΟΛΟΚΛΗΡΩΜΕΝΩΝ ---
-    completed_table = ""
+    # 2) Section header: Ολοκληρωμένα
+    body_rows += f'<tr class="section-row section-row-completed"><td colspan="{len(columns) + 1}">Ολοκληρωμένα ({completed_count})</td></tr>'
+    
     if completed_count > 0:
-        colgroup_completed = build_colgroup(list(completed_df.columns), prepend_checkbox=False)
-        headers_html = "".join([f"<th>{col}</th>" for col in completed_df.columns])
-        
-        completed_rows = ""
         for _, row in completed_df.iterrows():
-            completed_rows += "<tr>"
-            for col in completed_df.columns:
-                completed_rows += f"<td>{str(row[col])}</td>"
-            completed_rows += "</tr>"
-        
-        completed_table = f"""
-        <div class="section section-completed">
-            <h2 class="title-completed">Ολοκληρωμένα ({completed_count})</h2>
-            <table class="report-table">
-                {colgroup_completed}
-                <thead>
-                    <tr>{headers_html}</tr>
-                </thead>
-                <tbody>
-                    {completed_rows}
-                </tbody>
-            </table>
-        </div>
-        """
+            body_rows += '<tr class="row-completed">'
+            body_rows += '<td class="checkbox-cell empty-check">—</td>'
+            for col in columns:
+                body_rows += f'<td>{str(row[col])}</td>'
+            body_rows += '</tr>'
+    else:
+        body_rows += f'<tr class="empty-row"><td colspan="{len(columns) + 1}">Δεν υπάρχουν ολοκληρωμένες εργασίες.</td></tr>'
     
     html = f"""
     <!DOCTYPE html>
@@ -843,58 +813,30 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 font-size: 12px;
                 color: #666;
             }}
-            .section {{
-                margin-bottom: 25px;
-                padding: 15px 18px;
-                border-radius: 6px;
-            }}
-            .section-pending {{
-                background: #fffbf0;
-                border: 1px solid #f5e6c8;
-            }}
-            .section-completed {{
-                background: #f4faf5;
-                border: 1px solid #d4ead9;
-            }}
-            .title-pending {{
-                font-size: 15px;
-                color: #b8860b;
-                font-weight: 600;
-                margin-bottom: 10px;
-                padding-bottom: 5px;
-                border-bottom: 1px solid #f0dfb8;
-            }}
-            .title-completed {{
-                font-size: 15px;
-                color: #4a8a5c;
-                font-weight: 600;
-                margin-bottom: 10px;
-                padding-bottom: 5px;
-                border-bottom: 1px solid #cbe3d1;
-            }}
             table.report-table {{
                 width: 100%;
                 border-collapse: collapse;
                 font-size: 12px;
                 background: white;
-                border-radius: 4px;
+                border-radius: 6px;
                 overflow: hidden;
                 table-layout: fixed;
+                border: 1px solid #e0e0e0;
             }}
             table.report-table th {{
-                padding: 8px 6px;
+                padding: 10px 8px;
                 text-align: left;
                 font-weight: 600;
                 font-size: 10px;
                 color: #555;
-                border-bottom: 1px solid #ddd;
-                background: #fafafa;
+                border-bottom: 2px solid #ddd;
+                background: #f5f5f5;
                 text-transform: uppercase;
                 letter-spacing: 0.3px;
                 vertical-align: middle;
             }}
             table.report-table td {{
-                padding: 9px 6px;
+                padding: 10px 8px;
                 border-bottom: 1px solid #eee;
                 color: #333;
                 vertical-align: middle;
@@ -902,26 +844,58 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 word-wrap: break-word;
                 overflow-wrap: break-word;
             }}
-            table.report-table tr:hover {{ background: #fafafa; }}
             
+            /* Section header rows */
+            .section-row td {{
+                font-weight: 700;
+                font-size: 12px;
+                padding: 8px 10px;
+                letter-spacing: 0.5px;
+                text-transform: uppercase;
+                border-bottom: 1px solid rgba(0,0,0,0.08);
+            }}
+            .section-row-pending td {{
+                background: #fff3d6;
+                color: #b8860b;
+                border-top: 2px solid #f0dfb8;
+            }}
+            .section-row-completed td {{
+                background: #e6f4ea;
+                color: #3d7a4e;
+                border-top: 2px solid #cbe3d1;
+            }}
+            
+            /* Rows */
+            .row-pending td {{ background: #fffdf7; }}
+            .row-pending:hover td {{ background: #fff8e8; }}
+            .row-completed td {{ background: #fafdfb; }}
+            .row-completed:hover td {{ background: #f0f8f2; }}
+            
+            .empty-row td {{
+                padding: 15px;
+                text-align: center;
+                color: #999;
+                font-style: italic;
+                font-size: 11px;
+            }}
+            
+            /* Checkbox στήλη */
             th.checkbox-col {{
                 text-align: center !important;
             }}
             td.checkbox-cell {{
                 text-align: center;
-                font-size: 15px;
-                color: #bbb;
-                padding: 8px 2px;
-                border-right: 1px solid #eee;
+                font-size: 16px;
+                color: #999;
+                font-weight: 400;
+            }}
+            td.empty-check {{
+                color: #ddd;
+                font-size: 12px;
             }}
             
-            .empty-message {{
-                padding: 15px 0;
-                color: #888;
-                font-style: italic;
-            }}
             .footer {{
-                margin-top: 40px;
+                margin-top: 30px;
                 padding-top: 15px;
                 border-top: 1px solid #eee;
                 font-size: 10px;
@@ -944,23 +918,23 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 margin: 0 5px;
             }}
             .btn:hover {{ background: #555; }}
-            .btn-secondary {{
-                background: #999;
-            }}
+            .btn-secondary {{ background: #999; }}
             .btn-secondary:hover {{ background: #777; }}
+            
             @media print {{
                 body {{ padding: 15px; }}
                 .actions {{ display: none; }}
                 table.report-table {{ font-size: 10px; }}
-                table.report-table th {{ font-size: 9px; padding: 6px 4px; }}
-                table.report-table td {{ padding: 6px 4px; font-size: 10px; }}
-                tr {{ break-inside: avoid; }}
-                .section {{ break-inside: avoid; }}
-                td.checkbox-cell {{ font-size: 15px; padding: 6px 2px; }}
-                .section-pending {{ background: #fffbf0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-                .section-completed {{ background: #f4faf5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-                .title-pending {{ color: #b8860b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-                .title-completed {{ color: #4a8a5c !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+                table.report-table th {{ font-size: 9px; padding: 6px 5px; }}
+                table.report-table td {{ padding: 6px 5px; font-size: 10px; }}
+                tr {{ break-inside: avoid; page-break-inside: avoid; }}
+                .section-row {{ break-inside: avoid; }}
+                td.checkbox-cell {{ font-size: 14px; }}
+                /* Διατήρηση χρωμάτων στην εκτύπωση */
+                .section-row-pending td {{ background: #fff3d6 !important; color: #b8860b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+                .section-row-completed td {{ background: #e6f4ea !important; color: #3d7a4e !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+                .row-pending td {{ background: #fffdf7 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+                .row-completed td {{ background: #fafdfb !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
             }}
         </style>
     </head>
@@ -971,9 +945,15 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 <div class="meta">{date_str} &nbsp;•&nbsp; {total_count} εργασίες</div>
             </div>
             
-            {pending_table}
-            
-            {completed_table}
+            <table class="report-table">
+                {colgroup_html}
+                <thead>
+                    <tr>{header_cells}</tr>
+                </thead>
+                <tbody>
+                    {body_rows}
+                </tbody>
+            </table>
             
             <div class="footer">
                 <div>Production Tasks</div>
