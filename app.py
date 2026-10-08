@@ -707,7 +707,7 @@ def generate_printable_html(title, date_str, df_data):
     return html
 
 def generate_printable_html_two_sections(title, date_str, pending_df, completed_df):
-    """Δημιουργεί HTML report με 2 ενότητες: Εκκρεμή + Ολοκληρωμένα."""
+    """Δημιουργεί HTML report με 2 ενότητες: Εκκρεμή + Ολοκληρωμένα. Minimal styling."""
     
     pending_count = len(pending_df)
     completed_count = len(completed_df)
@@ -725,7 +725,7 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
         
         pending_table = f"""
         <div class="section">
-            <h2 class="section-title pending-title">⏳ ΕΚΚΡΕΜΗ ({pending_count})</h2>
+            <h2>Εκκρεμή ({pending_count})</h2>
             <table>
                 <thead>
                     <tr>{"".join([f"<th>{col}</th>" for col in pending_df.columns])}</tr>
@@ -739,8 +739,8 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
     else:
         pending_table = """
         <div class="section">
-            <h2 class="section-title success-title">🎉 Όλες οι εργασίες έχουν ολοκληρωθεί!</h2>
-            <p style="text-align:center;font-size:16px;color:#2e7d32;padding:20px;">Δεν υπάρχουν εκκρεμείς εργασίες.</p>
+            <h2>Εκκρεμή</h2>
+            <p class="empty-message">Δεν υπάρχουν εκκρεμείς εργασίες.</p>
         </div>
         """
     
@@ -756,7 +756,7 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
         
         completed_table = f"""
         <div class="section">
-            <h2 class="section-title completed-title">✅ ΟΛΟΚΛΗΡΩΜΕΝΑ ({completed_count})</h2>
+            <h2>Ολοκληρωμένα ({completed_count})</h2>
             <table>
                 <thead>
                     <tr>{"".join([f"<th>{col}</th>" for col in completed_df.columns])}</tr>
@@ -778,196 +778,102 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
         <style>
             * {{ box-sizing: border-box; margin: 0; padding: 0; }}
             body {{ 
-                font-family: 'Segoe UI', Arial, sans-serif; 
+                font-family: Arial, sans-serif; 
                 margin: 0; 
-                padding: 30px; 
-                color: #2c3e50; 
-                background: #f5f7fa;
+                padding: 40px; 
+                color: #333; 
+                background: white;
                 line-height: 1.5;
+                font-size: 14px;
             }}
             .container {{
-                max-width: 1200px;
+                max-width: 900px;
                 margin: 0 auto;
-                background: white;
-                padding: 40px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                border-radius: 8px;
             }}
             .header {{
-                border-bottom: 3px solid #1e88e5;
-                padding-bottom: 20px;
                 margin-bottom: 30px;
-            }}
-            .header-top {{
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 15px;
-            }}
-            .company-name {{
-                font-size: 24px;
-                font-weight: 700;
-                color: #1e88e5;
-                letter-spacing: 0.5px;
-            }}
-            .report-badge {{
-                background: #1e88e5;
-                color: white;
-                padding: 6px 14px;
-                border-radius: 20px;
-                font-size: 12px;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 1px;
+                padding-bottom: 15px;
+                border-bottom: 1px solid #ddd;
             }}
             h1 {{
-                font-size: 28px;
-                color: #2c3e50;
+                font-size: 22px;
+                color: #333;
                 font-weight: 600;
                 margin-bottom: 8px;
             }}
             .meta {{
-                display: flex;
-                gap: 25px;
                 font-size: 13px;
-                color: #7f8c8d;
-                margin-top: 10px;
-            }}
-            .meta span {{
-                display: flex;
-                align-items: center;
-                gap: 6px;
-            }}
-            .summary-cards {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-                gap: 15px;
-                margin: 30px 0;
-            }}
-            .summary-card {{
-                padding: 18px;
-                border-radius: 8px;
-                background: #f8f9fa;
-                border-left: 4px solid #95a5a6;
-                text-align: center;
-            }}
-            .summary-card.success {{
-                background: #e8f5e9;
-                border-left-color: #2e7d32;
-            }}
-            .summary-card.warning {{
-                background: #fff8e1;
-                border-left-color: #f57c00;
-            }}
-            .summary-card.info {{
-                background: #e3f2fd;
-                border-left-color: #1565c0;
-            }}
-            .summary-value {{
-                font-size: 26px;
-                font-weight: 700;
-                color: #2c3e50;
-                margin-bottom: 4px;
-            }}
-            .summary-card.success .summary-value {{ color: #2e7d32; }}
-            .summary-card.warning .summary-value {{ color: #f57c00; }}
-            .summary-card.info .summary-value {{ color: #1565c0; }}
-            .summary-label {{
-                font-size: 12px;
-                color: #7f8c8d;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
+                color: #666;
             }}
             .section {{
-                margin-bottom: 40px;
+                margin-bottom: 30px;
             }}
-            .section-title {{
-                font-size: 20px;
-                padding: 12px 18px;
-                border-radius: 6px;
-                margin-bottom: 15px;
-                font-weight: 700;
-                letter-spacing: 0.5px;
-            }}
-            .pending-title {{
-                background: #fff8e1;
-                color: #f57c00;
-                border-left: 5px solid #f57c00;
-            }}
-            .completed-title {{
-                background: #e8f5e9;
-                color: #2e7d32;
-                border-left: 5px solid #2e7d32;
-            }}
-            .success-title {{
-                background: #e8f5e9;
-                color: #2e7d32;
-                border-left: 5px solid #2e7d32;
-                text-align: center;
+            h2 {{
+                font-size: 16px;
+                color: #333;
+                font-weight: 600;
+                margin-bottom: 12px;
+                padding-bottom: 6px;
+                border-bottom: 1px solid #eee;
             }}
             table {{
                 width: 100%;
                 border-collapse: collapse;
                 font-size: 13px;
-                border-radius: 6px;
-                overflow: hidden;
-            }}
-            thead {{
-                background: #1e88e5;
-                color: white;
             }}
             th {{
-                padding: 12px 15px;
+                padding: 10px 12px;
                 text-align: left;
                 font-weight: 600;
                 font-size: 12px;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
+                color: #666;
+                border-bottom: 1px solid #ddd;
+                background: #fafafa;
             }}
             td {{
-                padding: 10px 15px;
-                border-bottom: 1px solid #ecf0f1;
-                color: #34495e;
+                padding: 10px 12px;
+                border-bottom: 1px solid #eee;
+                color: #333;
             }}
-            tr:nth-child(even) {{ background: #f8f9fa; }}
-            tr:hover {{ background: #e3f2fd; }}
+            tr:hover {{ background: #fafafa; }}
+            .empty-message {{
+                padding: 15px 0;
+                color: #888;
+                font-style: italic;
+            }}
             .footer {{
                 margin-top: 40px;
-                padding-top: 20px;
-                border-top: 1px solid #ecf0f1;
+                padding-top: 15px;
+                border-top: 1px solid #eee;
+                font-size: 11px;
+                color: #999;
                 display: flex;
                 justify-content: space-between;
-                font-size: 11px;
-                color: #95a5a6;
+            }}
+            .actions {{
+                margin-top: 30px;
+                text-align: center;
             }}
             .btn {{
-                display: inline-block;
-                padding: 12px 24px;
-                background: #1e88e5;
+                padding: 10px 20px;
+                background: #333;
                 color: white;
                 border: none;
-                border-radius: 6px;
-                font-size: 14px;
-                font-weight: 600;
+                border-radius: 4px;
+                font-size: 13px;
                 cursor: pointer;
-                text-decoration: none;
-                margin-top: 20px;
-                transition: background 0.2s;
+                margin: 0 5px;
             }}
-            .btn:hover {{ background: #1565c0; }}
+            .btn:hover {{ background: #555; }}
             .btn-secondary {{
-                background: #78909c;
-                margin-left: 10px;
+                background: #999;
             }}
-            .btn-secondary:hover {{ background: #546e7a; }}
+            .btn-secondary:hover {{ background: #777; }}
             @media print {{
-                body {{ background: white; padding: 0; }}
-                .container {{ box-shadow: none; padding: 20px; }}
-                .btn, .btn-secondary {{ display: none; }}
+                body {{ padding: 0; }}
+                .actions {{ display: none; }}
                 table {{ font-size: 11px; }}
-                th, td {{ padding: 6px 10px; }}
-                .summary-cards {{ break-inside: avoid; }}
+                th, td {{ padding: 6px 8px; }}
                 tr {{ break-inside: avoid; }}
                 .section {{ break-inside: avoid; }}
             }}
@@ -976,31 +882,8 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
     <body>
         <div class="container">
             <div class="header">
-                <div class="header-top">
-                    <div class="company-name">🏭 Production Tasks</div>
-                    <div class="report-badge">Report</div>
-                </div>
                 <h1>{title}</h1>
-                <div class="meta">
-                    <span>📅 <b>{date_str}</b></span>
-                    <span>📊 <b>{total_count}</b> εργασίες</span>
-                    <span>🕐 <b>{datetime.now().strftime('%d/%m/%Y %H:%M')}</b></span>
-                </div>
-            </div>
-            
-            <div class="summary-cards">
-                <div class="summary-card">
-                    <div class="summary-value">{total_count}</div>
-                    <div class="summary-label">Σύνολο</div>
-                </div>
-                <div class="summary-card warning">
-                    <div class="summary-value">{pending_count}</div>
-                    <div class="summary-label">⏳ Εκκρεμή</div>
-                </div>
-                <div class="summary-card success">
-                    <div class="summary-value">{completed_count}</div>
-                    <div class="summary-label">✅ Ολοκληρωμένα</div>
-                </div>
+                <div class="meta">{date_str} &nbsp;•&nbsp; {total_count} εργασίες</div>
             </div>
             
             {pending_table}
@@ -1008,13 +891,13 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
             {completed_table}
             
             <div class="footer">
-                <div>© Production Tasks App</div>
-                <div>Σελίδα 1</div>
+                <div>Production Tasks</div>
+                <div>{datetime.now().strftime('%d/%m/%Y %H:%M')}</div>
             </div>
             
-            <div style="text-align:center;">
-                <button onclick="window.print()" class="btn">🖨️ Εκτύπωση</button>
-                <button onclick="window.close()" class="btn btn-secondary">✕ Κλείσιμο</button>
+            <div class="actions">
+                <button onclick="window.print()" class="btn">Εκτύπωση</button>
+                <button onclick="window.close()" class="btn btn-secondary">Κλείσιμο</button>
             </div>
         </div>
     </body>
