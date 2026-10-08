@@ -706,6 +706,322 @@ def generate_printable_html(title, date_str, df_data):
     """
     return html
 
+def generate_printable_html_two_sections(title, date_str, pending_df, completed_df):
+    """Δημιουργεί HTML report με 2 ενότητες: Εκκρεμή + Ολοκληρωμένα."""
+    
+    pending_count = len(pending_df)
+    completed_count = len(completed_df)
+    total_count = pending_count + completed_count
+    
+    # --- ΠΙΝΑΚΑΣ ΕΚΚΡΕΜΩΝ ---
+    pending_table = ""
+    if pending_count > 0:
+        pending_rows = ""
+        for _, row in pending_df.iterrows():
+            pending_rows += "<tr>"
+            for col in pending_df.columns:
+                pending_rows += f"<td>{str(row[col])}</td>"
+            pending_rows += "</tr>"
+        
+        pending_table = f"""
+        <div class="section">
+            <h2 class="section-title pending-title">⏳ ΕΚΚΡΕΜΗ ({pending_count})</h2>
+            <table>
+                <thead>
+                    <tr>{"".join([f"<th>{col}</th>" for col in pending_df.columns])}</tr>
+                </thead>
+                <tbody>
+                    {pending_rows}
+                </tbody>
+            </table>
+        </div>
+        """
+    else:
+        pending_table = """
+        <div class="section">
+            <h2 class="section-title success-title">🎉 Όλες οι εργασίες έχουν ολοκληρωθεί!</h2>
+            <p style="text-align:center;font-size:16px;color:#2e7d32;padding:20px;">Δεν υπάρχουν εκκρεμείς εργασίες.</p>
+        </div>
+        """
+    
+    # --- ΠΙΝΑΚΑΣ ΟΛΟΚΛΗΡΩΜΕΝΩΝ ---
+    completed_table = ""
+    if completed_count > 0:
+        completed_rows = ""
+        for _, row in completed_df.iterrows():
+            completed_rows += "<tr>"
+            for col in completed_df.columns:
+                completed_rows += f"<td>{str(row[col])}</td>"
+            completed_rows += "</tr>"
+        
+        completed_table = f"""
+        <div class="section">
+            <h2 class="section-title completed-title">✅ ΟΛΟΚΛΗΡΩΜΕΝΑ ({completed_count})</h2>
+            <table>
+                <thead>
+                    <tr>{"".join([f"<th>{col}</th>" for col in completed_df.columns])}</tr>
+                </thead>
+                <tbody>
+                    {completed_rows}
+                </tbody>
+            </table>
+        </div>
+        """
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="el">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{title}</title>
+        <style>
+            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+            body {{ 
+                font-family: 'Segoe UI', Arial, sans-serif; 
+                margin: 0; 
+                padding: 30px; 
+                color: #2c3e50; 
+                background: #f5f7fa;
+                line-height: 1.5;
+            }}
+            .container {{
+                max-width: 1200px;
+                margin: 0 auto;
+                background: white;
+                padding: 40px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                border-radius: 8px;
+            }}
+            .header {{
+                border-bottom: 3px solid #1e88e5;
+                padding-bottom: 20px;
+                margin-bottom: 30px;
+            }}
+            .header-top {{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 15px;
+            }}
+            .company-name {{
+                font-size: 24px;
+                font-weight: 700;
+                color: #1e88e5;
+                letter-spacing: 0.5px;
+            }}
+            .report-badge {{
+                background: #1e88e5;
+                color: white;
+                padding: 6px 14px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }}
+            h1 {{
+                font-size: 28px;
+                color: #2c3e50;
+                font-weight: 600;
+                margin-bottom: 8px;
+            }}
+            .meta {{
+                display: flex;
+                gap: 25px;
+                font-size: 13px;
+                color: #7f8c8d;
+                margin-top: 10px;
+            }}
+            .meta span {{
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }}
+            .summary-cards {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 15px;
+                margin: 30px 0;
+            }}
+            .summary-card {{
+                padding: 18px;
+                border-radius: 8px;
+                background: #f8f9fa;
+                border-left: 4px solid #95a5a6;
+                text-align: center;
+            }}
+            .summary-card.success {{
+                background: #e8f5e9;
+                border-left-color: #2e7d32;
+            }}
+            .summary-card.warning {{
+                background: #fff8e1;
+                border-left-color: #f57c00;
+            }}
+            .summary-card.info {{
+                background: #e3f2fd;
+                border-left-color: #1565c0;
+            }}
+            .summary-value {{
+                font-size: 26px;
+                font-weight: 700;
+                color: #2c3e50;
+                margin-bottom: 4px;
+            }}
+            .summary-card.success .summary-value {{ color: #2e7d32; }}
+            .summary-card.warning .summary-value {{ color: #f57c00; }}
+            .summary-card.info .summary-value {{ color: #1565c0; }}
+            .summary-label {{
+                font-size: 12px;
+                color: #7f8c8d;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }}
+            .section {{
+                margin-bottom: 40px;
+            }}
+            .section-title {{
+                font-size: 20px;
+                padding: 12px 18px;
+                border-radius: 6px;
+                margin-bottom: 15px;
+                font-weight: 700;
+                letter-spacing: 0.5px;
+            }}
+            .pending-title {{
+                background: #fff8e1;
+                color: #f57c00;
+                border-left: 5px solid #f57c00;
+            }}
+            .completed-title {{
+                background: #e8f5e9;
+                color: #2e7d32;
+                border-left: 5px solid #2e7d32;
+            }}
+            .success-title {{
+                background: #e8f5e9;
+                color: #2e7d32;
+                border-left: 5px solid #2e7d32;
+                text-align: center;
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 13px;
+                border-radius: 6px;
+                overflow: hidden;
+            }}
+            thead {{
+                background: #1e88e5;
+                color: white;
+            }}
+            th {{
+                padding: 12px 15px;
+                text-align: left;
+                font-weight: 600;
+                font-size: 12px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }}
+            td {{
+                padding: 10px 15px;
+                border-bottom: 1px solid #ecf0f1;
+                color: #34495e;
+            }}
+            tr:nth-child(even) {{ background: #f8f9fa; }}
+            tr:hover {{ background: #e3f2fd; }}
+            .footer {{
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 1px solid #ecf0f1;
+                display: flex;
+                justify-content: space-between;
+                font-size: 11px;
+                color: #95a5a6;
+            }}
+            .btn {{
+                display: inline-block;
+                padding: 12px 24px;
+                background: #1e88e5;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: 600;
+                cursor: pointer;
+                text-decoration: none;
+                margin-top: 20px;
+                transition: background 0.2s;
+            }}
+            .btn:hover {{ background: #1565c0; }}
+            .btn-secondary {{
+                background: #78909c;
+                margin-left: 10px;
+            }}
+            .btn-secondary:hover {{ background: #546e7a; }}
+            @media print {{
+                body {{ background: white; padding: 0; }}
+                .container {{ box-shadow: none; padding: 20px; }}
+                .btn, .btn-secondary {{ display: none; }}
+                table {{ font-size: 11px; }}
+                th, td {{ padding: 6px 10px; }}
+                .summary-cards {{ break-inside: avoid; }}
+                tr {{ break-inside: avoid; }}
+                .section {{ break-inside: avoid; }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <div class="header-top">
+                    <div class="company-name">🏭 Production Tasks</div>
+                    <div class="report-badge">Report</div>
+                </div>
+                <h1>{title}</h1>
+                <div class="meta">
+                    <span>📅 <b>{date_str}</b></span>
+                    <span>📊 <b>{total_count}</b> εργασίες</span>
+                    <span>🕐 <b>{datetime.now().strftime('%d/%m/%Y %H:%M')}</b></span>
+                </div>
+            </div>
+            
+            <div class="summary-cards">
+                <div class="summary-card">
+                    <div class="summary-value">{total_count}</div>
+                    <div class="summary-label">Σύνολο</div>
+                </div>
+                <div class="summary-card warning">
+                    <div class="summary-value">{pending_count}</div>
+                    <div class="summary-label">⏳ Εκκρεμή</div>
+                </div>
+                <div class="summary-card success">
+                    <div class="summary-value">{completed_count}</div>
+                    <div class="summary-label">✅ Ολοκληρωμένα</div>
+                </div>
+            </div>
+            
+            {pending_table}
+            
+            {completed_table}
+            
+            <div class="footer">
+                <div>© Production Tasks App</div>
+                <div>Σελίδα 1</div>
+            </div>
+            
+            <div style="text-align:center;">
+                <button onclick="window.print()" class="btn">🖨️ Εκτύπωση</button>
+                <button onclick="window.close()" class="btn btn-secondary">✕ Κλείσιμο</button>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
 def export_to_excel(df, title):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -2068,7 +2384,23 @@ def render_technician(procurement_df, tasks_database, team_database, availabilit
         col_w_head, col_w_csv, col_w_pdf, col_w_excel = st.columns([0.4, 0.2, 0.2, 0.2])
         col_w_head.subheader(f"Πρόγραμμα για {selected_member} — {target_date.strftime('%d/%m/%Y')}")
         col_w_csv.download_button(label="CSV", data=w_csv_data, file_name=f"Schedule_{selected_member.replace(' ', '_')}_{target_date.strftime('%Y-%m-%d')}.csv", mime="text/csv", use_container_width=True)
-        w_printable_html = generate_printable_html(f"Πρόγραμμα Τεχνίτη: {selected_member}", target_date.strftime('%d/%m/%Y'), w_export_df)
+        # --- ΔΗΜΙΟΥΡΓΙΑ 2 DATAFRAMES (ΕΚΚΡΕΜΗ + ΟΛΟΚΛΗΡΩΜΕΝΑ) ---
+        pending_worker_tasks = [wt for wt in worker_tasks if not wt["done"]]
+        completed_worker_tasks = [wt for wt in worker_tasks if wt["done"]]
+        
+        if pending_worker_tasks:
+            pending_export_list = [{"Project": wt["project"], "Υλικό / Είδος": wt["item"], "Ποσότητα": wt["qty"], "Εργασία": wt["task"], "Ώρες": wt["hours"], "Status Procurement": wt["status_proc"]} for wt in pending_worker_tasks]
+            pending_export_df = pd.DataFrame(pending_export_list)
+        else:
+            pending_export_df = pd.DataFrame(columns=["Project", "Υλικό / Είδος", "Ποσότητα", "Εργασία", "Ώρες", "Status Procurement"])
+        
+        if completed_worker_tasks:
+            completed_export_list = [{"Project": wt["project"], "Υλικό / Είδος": wt["item"], "Ποσότητα": wt["qty"], "Εργασία": wt["task"], "Ώρες": wt["hours"], "Status Procurement": wt["status_proc"]} for wt in completed_worker_tasks]
+            completed_export_df = pd.DataFrame(completed_export_list)
+        else:
+            completed_export_df = pd.DataFrame(columns=["Project", "Υλικό / Είδος", "Ποσότητα", "Εργασία", "Ώρες", "Status Procurement"])
+        
+        w_printable_html = generate_printable_html_two_sections(f"Πρόγραμμα Τεχνίτη: {selected_member}", target_date.strftime('%d/%m/%Y'), pending_export_df, completed_export_df)
         col_w_pdf.download_button(label="PDF", data=w_printable_html, file_name=f"Schedule_{selected_member.replace(' ', '_')}_{target_date.strftime('%Y-%m-%d')}.html", mime="text/html", use_container_width=True)
         excel_data = export_to_excel(w_export_df, f"Schedule {selected_member}")
         col_w_excel.download_button(label="Excel", data=excel_data, file_name=f"Schedule_{selected_member.replace(' ', '_')}_{target_date.strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
