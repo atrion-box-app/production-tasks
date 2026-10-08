@@ -707,7 +707,7 @@ def generate_printable_html(title, date_str, df_data):
     return html
 
 def generate_printable_html_two_sections(title, date_str, pending_df, completed_df):
-    """Δημιουργεί HTML report με 2 ενότητες: Εκκρεμή + Ολοκληρωμένα. Minimal styling."""
+    """Report για τεχνίτη με checkbox για χειρόγραφη τσεκάριση."""
     
     pending_count = len(pending_df)
     completed_count = len(completed_df)
@@ -716,9 +716,12 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
     # --- ΠΙΝΑΚΑΣ ΕΚΚΡΕΜΩΝ ---
     pending_table = ""
     if pending_count > 0:
+        headers_html = '<th class="checkbox-col">✓</th>' + "".join([f"<th>{col}</th>" for col in pending_df.columns])
+        
         pending_rows = ""
         for _, row in pending_df.iterrows():
             pending_rows += "<tr>"
+            pending_rows += '<td class="checkbox-cell">☐</td>'
             for col in pending_df.columns:
                 pending_rows += f"<td>{str(row[col])}</td>"
             pending_rows += "</tr>"
@@ -728,7 +731,7 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
             <h2>Εκκρεμή ({pending_count})</h2>
             <table>
                 <thead>
-                    <tr>{"".join([f"<th>{col}</th>" for col in pending_df.columns])}</tr>
+                    <tr>{headers_html}</tr>
                 </thead>
                 <tbody>
                     {pending_rows}
@@ -747,6 +750,8 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
     # --- ΠΙΝΑΚΑΣ ΟΛΟΚΛΗΡΩΜΕΝΩΝ ---
     completed_table = ""
     if completed_count > 0:
+        headers_html = "".join([f"<th>{col}</th>" for col in completed_df.columns])
+        
         completed_rows = ""
         for _, row in completed_df.iterrows():
             completed_rows += "<tr>"
@@ -759,7 +764,7 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
             <h2>Ολοκληρωμένα ({completed_count})</h2>
             <table>
                 <thead>
-                    <tr>{"".join([f"<th>{col}</th>" for col in completed_df.columns])}</tr>
+                    <tr>{headers_html}</tr>
                 </thead>
                 <tbody>
                     {completed_rows}
@@ -787,55 +792,72 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 font-size: 14px;
             }}
             .container {{
-                max-width: 900px;
+                max-width: 1000px;
                 margin: 0 auto;
             }}
             .header {{
-                margin-bottom: 30px;
-                padding-bottom: 15px;
-                border-bottom: 1px solid #ddd;
+                margin-bottom: 25px;
+                padding-bottom: 12px;
+                border-bottom: 1px solid #ccc;
             }}
             h1 {{
-                font-size: 22px;
+                font-size: 20px;
                 color: #333;
                 font-weight: 600;
-                margin-bottom: 8px;
+                margin-bottom: 6px;
             }}
             .meta {{
-                font-size: 13px;
+                font-size: 12px;
                 color: #666;
             }}
             .section {{
                 margin-bottom: 30px;
             }}
             h2 {{
-                font-size: 16px;
+                font-size: 15px;
                 color: #333;
                 font-weight: 600;
-                margin-bottom: 12px;
-                padding-bottom: 6px;
+                margin-bottom: 10px;
+                padding-bottom: 5px;
                 border-bottom: 1px solid #eee;
             }}
             table {{
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 13px;
+                font-size: 12px;
             }}
             th {{
-                padding: 10px 12px;
+                padding: 8px 10px;
                 text-align: left;
                 font-weight: 600;
-                font-size: 12px;
-                color: #666;
+                font-size: 11px;
+                color: #555;
                 border-bottom: 1px solid #ddd;
                 background: #fafafa;
+                text-transform: uppercase;
+                letter-spacing: 0.3px;
             }}
             td {{
-                padding: 10px 12px;
+                padding: 10px;
                 border-bottom: 1px solid #eee;
                 color: #333;
+                vertical-align: middle;
             }}
             tr:hover {{ background: #fafafa; }}
+            
+            /* Checkbox στήλη */
+            .checkbox-col {{
+                width: 40px;
+                text-align: center !important;
+            }}
+            .checkbox-cell {{
+                text-align: center;
+                font-size: 18px;
+                color: #bbb;
+                padding: 8px 5px;
+                border-right: 1px solid #eee;
+            }}
+            
             .empty-message {{
                 padding: 15px 0;
                 color: #888;
@@ -845,7 +867,7 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 margin-top: 40px;
                 padding-top: 15px;
                 border-top: 1px solid #eee;
-                font-size: 11px;
+                font-size: 10px;
                 color: #999;
                 display: flex;
                 justify-content: space-between;
@@ -855,7 +877,7 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 text-align: center;
             }}
             .btn {{
-                padding: 10px 20px;
+                padding: 10px 24px;
                 background: #333;
                 color: white;
                 border: none;
@@ -870,12 +892,13 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
             }}
             .btn-secondary:hover {{ background: #777; }}
             @media print {{
-                body {{ padding: 0; }}
+                body {{ padding: 15px; }}
                 .actions {{ display: none; }}
                 table {{ font-size: 11px; }}
                 th, td {{ padding: 6px 8px; }}
                 tr {{ break-inside: avoid; }}
                 .section {{ break-inside: avoid; }}
+                .checkbox-cell {{ font-size: 20px; padding: 6px 5px; }}
             }}
         </style>
     </head>
