@@ -374,6 +374,19 @@ def save_all_assignments_to_sheet():
         return False
     
     try:
+        # *** ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ: Καθάρισμα stale entries από το tasks_store ***
+        # Αν το procurement_df άλλαξε (π.χ. νέα γραμμή), τα παλιά u_key είναι άκυρα.
+        if 'procurement_df' in st.session_state and not st.session_state.procurement_df.empty:
+            valid_u_keys = set()
+            for idx, row in st.session_state.procurement_df.iterrows():
+                item_id = str(row["ID"])
+                valid_u_keys.add(f"{item_id}_{idx}")
+            
+            stale_keys = [k for k in list(st.session_state.get("tasks_store", {}).keys()) if k not in valid_u_keys]
+            for k in stale_keys:
+                del st.session_state["tasks_store"][k]
+        # *** END ***
+    
         total_tasks = sum(len(tasks) for tasks in st.session_state.get("tasks_store", {}).values())
         total_proj = sum(
             len([t for t in p_dict.values() if isinstance(t, dict) and t.get("active", False)])
