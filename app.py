@@ -320,14 +320,20 @@ def load_assignments_from_sheet():
                 if strip_all_fields(u) and strip_all_fields(u) != "- Χωρίς Ανάθεση -"
             ]
             
-            assign_date_str = str(r.get("Assigned_Date", r.get("Assigned_Done", "")))
+            assign_date_str = str(r.get("Assigned_Date", r.get("Assigned_Done", ""))).strip()
             
             done = True if str(r.get("Status_Done", "")).upper() in ["TRUE", "1", "YES"] else False
             task_type = strip_all_fields(str(r.get("Task_Type", "")))
 
-            try:
-                assign_date = datetime.strptime(assign_date_str, "%Y-%m-%d").date()
-            except Exception:
+            assign_date = None
+            for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d", "%d.%m.%Y", "%Y-%m-%d %H:%M:%S"]:
+                try:
+                    assign_date = datetime.strptime(assign_date_str.split(" ")[0], fmt.split(" ")[0]).date()
+                    break
+                except:
+                    continue
+            
+            if assign_date is None:
                 assign_date = date.today()
 
             if task_type == "PROJECT":
