@@ -183,6 +183,24 @@ def clean_project_name(name):
     s = s.replace('**', '')
     return s.strip()
 
+
+def strip_all_fields(value):
+    """
+    Καθαρίζει ένα string από leading/trailing spaces, πολλαπλά spaces,
+    και μη-ορατούς χαρακτήρες (non-breaking space, tabs, κλπ).
+    Αν δεν είναι string, το επιστρέφει ως έχει (εκτός None → "").
+    """
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        return value
+    # Αντικαθιστά non-breaking spaces, tabs, newlines με κανονικό space
+    s = value.replace('\xa0', ' ').replace('\t', ' ').replace('\n', ' ').replace('\r', ' ')
+    # Συμπιέζει πολλαπλά spaces σε ένα
+    s = re.sub(r'\s+', ' ', s)
+    # Αφαιρεί leading/trailing
+    return s.strip()
+
 # --- DATA LOADING ---
 @st.cache_data(ttl=60, show_spinner=False)
 def load_all_data(version=0):
@@ -199,6 +217,9 @@ def load_all_data(version=0):
         # Καθαρισμός project names από markdown αστεράκια
         if "Project" in df_proc.columns:
             df_proc["Project"] = df_proc["Project"].apply(clean_project_name)
+        # Καθαρισμός ΟΛΩΝ των string columns από leading/trailing spaces
+        for col in df_proc.select_dtypes(include=['object']).columns:
+            df_proc[col] = df_proc[col].apply(strip_all_fields)
     except Exception:
         df_proc = pd.DataFrame()
 
@@ -280,17 +301,20 @@ def load_assignments_from_sheet():
         records = sheet.get_all_records()
         
         for r in records:
-            p_name = clean_project_name(r.get("Project", ""))
-            item_id = str(r.get("Item_ID", ""))
-            task_name = str(r.get("Task_Name", ""))
-            user_raw = str(r.get("Assigned_User", "- Χωρίς Ανάθεση -"))
+            p_name = clean_project_name(strip_all_fields(r.get("Project", "")))
+            item_id = strip_all_fields(str(r.get("Item_ID", "")))
+            task_name = strip_all_fields(str(r.get("Task_Name", "")))
+            user_raw = strip_all_fields(str(r.get("Assigned_User", "- Χωρίς Ανάθεση -")))
             user = user_raw
-            users_list = [u.strip() for u in user_raw.split(",") if u.strip() and u.strip() != "- Χωρίς Ανάθεση -"]
+            users_list = [
+                strip_all_fields(u) for u in user_raw.split(",")
+                if strip_all_fields(u) and strip_all_fields(u) != "- Χωρίς Ανάθεση -"
+            ]
             
             assign_date_str = str(r.get("Assigned_Date", r.get("Assigned_Done", "")))
             
             done = True if str(r.get("Status_Done", "")).upper() in ["TRUE", "1", "YES"] else False
-            task_type = str(r.get("Task_Type", ""))
+            task_type = strip_all_fields(str(r.get("Task_Type", "")))
 
             try:
                 assign_date = datetime.strptime(assign_date_str, "%Y-%m-%d").date()
@@ -302,7 +326,6 @@ def load_assignments_from_sheet():
                 if p_key not in assignments_proj:
                     assignments_proj[p_key] = {}
                 # Το dict overwrite κρατά μόνο την τελευταία εγγραφή για κάθε task_name
-                # Άρα αν υπάρχουν διπλότυπα στο sheet, εδώ κρατείται ένα
                 assignments_proj[p_key][task_name] = {
                     "active": True,
                     "done": done,
@@ -369,25 +392,33 @@ def save_all_assignments_to_sheet():
                 item_to_project[str(r["ID"])] = str(r["Project"])
 
         for u_key, t_list in st.session_state.get("tasks_store", {}).items():
-            item_id = u_key.split("_")[0]
-            proj_name = item_to_project.get(item_id, "-")
+            item_id = strip_all_fields(u_key.split("_")[0])
+            proj_name = strip_all_fields(item_to_project.get(item_id, "-"))
             for t in t_list:
                 if t.get("task") and t.get("task") != "- Επιλογή Εργασίας -":
                     task_users = t.get("users", [])
                     if not task_users:
                         task_users = [t.get("user", "- Χωρίς Ανάθεση -")]
                     
-                    users_str = ", ".join([str(u) for u in task_users if u and u != "- Χωρίς Ανάθεση -"])
+                    users_str = ", ".join([
+                        strip_all_fields(u) for u in task_users
+                        if strip_all_fields(u) and strip_all_fields(u) != "- Χωρίς Ανάθεση -"
+                    ])
                     if not users_str:
                         users_str = "- Χωρίς Ανάθεση -"
                     
                     rows.append([
-                        proj_name, item_id, t.get("task"), users_str, 
-                        str(t.get("date")), str(t.get("done")), "ITEM"
+                        proj_name, 
+                        item_id, 
+                        strip_all_fields(t.get("task")), 
+                        users_str, 
+                        str(t.get("date")), 
+                        str(t.get("done")), 
+                        "ITEM"
                     ])
 
         for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
-            proj_name = p_key.replace("proj_", "")
+            proj_name = strip_all_fields(p_key.replace("proj_", ""))
             if isinstance(p_dict, dict):
                 for t_name, p_data in p_dict.items():
                     if isinstance(p_data, dict) and p_data.get("active", False):
@@ -395,21 +426,28 @@ def save_all_assignments_to_sheet():
                         if not task_users:
                             task_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
                         
-                        users_str = ", ".join([str(u) for u in task_users if u and u != "- Χωρίς Ανάθεση -"])
+                        users_str = ", ".join([
+                            strip_all_fields(u) for u in task_users
+                            if strip_all_fields(u) and strip_all_fields(u) != "- Χωρίς Ανάθεση -"
+                        ])
                         if not users_str:
                             users_str = "- Χωρίς Ανάθεση -"
                         
                         rows.append([
-                            proj_name, "-", t_name, users_str, 
-                            str(p_data.get("date")), str(p_data.get("done")), "PROJECT"
+                            proj_name, 
+                            "-", 
+                            strip_all_fields(t_name), 
+                            users_str, 
+                            str(p_data.get("date")), 
+                            str(p_data.get("done")), 
+                            "PROJECT"
                         ])
 
         # --- DEDUPLICATION ---
-        # Αφαιρούμε τυχόν διπλότυπες γραμμές πριν το update
         seen = set()
         deduped_rows = [rows[0]]  # header
         for r in rows[1:]:
-            sig = tuple(str(x) for x in r)  # signature όλης της γραμμής
+            sig = tuple(str(x) for x in r)
             if sig not in seen:
                 seen.add(sig)
                 deduped_rows.append(r)
@@ -433,7 +471,6 @@ def save_all_assignments_to_sheet():
             "duplicates_removed": removed_count
         }
         st.session_state.audit_log.append(log_entry)
-        # Κρατάμε τα τελευταία 200 entries
         st.session_state.audit_log = st.session_state.audit_log[-200:]
         # --- END AUDIT LOG ---
         
@@ -467,13 +504,20 @@ def cleanup_duplicates_in_sheet():
             # Αγνοούμε εντελώς κενές γραμμές
             if not any(str(c).strip() for c in row):
                 continue
-            sig = tuple(str(c) for c in row)
+            # Καθαρίζουμε τα πεδία πριν το comparison για να πιάσουμε trailing spaces
+            normalized = []
+            for i, c in enumerate(row):
+                if i in (4, 5, 6):  # Assigned_Date, Status_Done, Task_Type
+                    normalized.append(str(c).strip())
+                else:
+                    normalized.append(strip_all_fields(str(c)))
+            sig = tuple(normalized)
             if sig not in seen:
                 seen.add(sig)
                 clean.append(row)
         
         removed = len(all_values) - len(clean)
-        total_before = len(all_values) - 1  # χωρίς header
+        total_before = len(all_values) - 1
         total_after = len(clean) - 1
         
         if removed == 0:
@@ -496,6 +540,65 @@ def cleanup_duplicates_in_sheet():
     
     except Exception as e:
         return False, 0, 0, f"Σφάλμα: {e}"
+
+
+def strip_spaces_in_sheet():
+    """
+    Καθαρίζει leading/trailing/διπλά spaces από όλα τα κελιά του Assignments.
+    Επιστρέφει (success: bool, changed: int, message: str)
+    """
+    gc, err = get_gspread_client()
+    if not gc:
+        return False, 0, f"Σφάλμα σύνδεσης: {err}"
+    
+    try:
+        sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
+        all_values = sheet.get_all_values()
+        
+        if len(all_values) <= 1:
+            return True, 0, "Το sheet είναι κενό."
+        
+        header = all_values[0]
+        clean_rows = [header]
+        changed = 0
+        
+        for row in all_values[1:]:
+            # Αγνοούμε εντελώς κενές γραμμές
+            if not any(str(c).strip() for c in row):
+                continue
+            
+            cleaned_row = []
+            for i, cell in enumerate(row):
+                if i == 4:  # Assigned_Date - κρατάμε ως έχει (μήπως έχει ώρα)
+                    cleaned_row.append(str(cell))
+                else:
+                    # Project, Item_ID, Task_Name, Assigned_User, Status_Done, Task_Type → strip
+                    cleaned_row.append(strip_all_fields(str(cell)))
+            
+            if cleaned_row != row:
+                changed += 1
+            clean_rows.append(cleaned_row)
+        
+        if changed == 0:
+            return True, 0, "Δεν βρέθηκαν κενά για καθαρισμό."
+        
+        sheet.clear()
+        sheet.update(range_name="A1", values=clean_rows)
+        
+        # Log
+        if "audit_log" not in st.session_state:
+            st.session_state.audit_log = []
+        st.session_state.audit_log.append({
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "user": st.session_state.get("username", "-"),
+            "action": "strip_spaces",
+            "changed": changed
+        })
+        
+        return True, changed, f"Καθαρίστηκαν κενά σε {changed} γραμμές."
+    
+    except Exception as e:
+        return False, 0, f"Σφάλμα: {e}"
 
 # --- EXPORT FUNCTIONS ---
 def generate_printable_html(title, date_str, df_data):
@@ -2736,6 +2839,27 @@ def render_settings():
                 success, removed, total, msg = cleanup_duplicates_in_sheet()
             if success:
                 if removed > 0:
+                    st.success(f"✅ {msg}")
+                    st.cache_data.clear()
+                else:
+                    st.info(f"ℹ️ {msg}")
+            else:
+                st.error(f"❌ {msg}")
+    
+    # --- ΝΕΟ: ΚΑΘΑΡΙΣΜΟΣ ΚΕΝΩΝ ΔΙΑΣΤΗΜΑΤΩΝ ---
+    st.divider()
+    st.subheader("🧼 Καθαρισμός Κενών Διαστήματων")
+    st.caption(
+        "Καθαρίζει leading/trailing/διπλά spaces από ΟΛΑ τα κελιά του φύλλου **Assignments**. "
+        "Χρήσιμο αν έχεις ύποπτα 'διπλότυπα' που διαφέρουν μόνο σε κρυφά κενά."
+    )
+    col_c1, col_c2 = st.columns([1, 3])
+    with col_c1:
+        if st.button("Καθαρισμός Spaces", use_container_width=True, type="secondary"):
+            with st.spinner("Καθαρισμός..."):
+                success, changed, msg = strip_spaces_in_sheet()
+            if success:
+                if changed > 0:
                     st.success(f"✅ {msg}")
                     st.cache_data.clear()
                 else:
