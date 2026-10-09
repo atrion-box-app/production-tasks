@@ -2255,7 +2255,10 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
                         "date": pending_date,
                         "details": changed_details
                     }
-                    # st.rerun()
+                    # *** ΛΥΣΗ Γ: μικρή καθυστέρηση για να προλάβει το Google Sheets API ***
+                    import time as _time
+                    _time.sleep(1.5)
+                    st.rerun()
     
     # Δείξε το τελευταίο αποτέλεσμα (αν υπάρχει)
     if "_bulk_last_result" in st.session_state:
