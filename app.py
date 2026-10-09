@@ -2255,7 +2255,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
                         "date": pending_date,
                         "details": changed_details
                     }
-                    st.rerun()
+                    # st.rerun()
     
     # Δείξε το τελευταίο αποτέλεσμα (αν υπάρχει)
     if "_bulk_last_result" in st.session_state:
