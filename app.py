@@ -403,6 +403,29 @@ def save_all_assignments_to_sheet():
                     return False
             except:
                 pass
+        # *** ΝΕΟ: Dedup στα tasks_store entries με ίδιο item_id ***
+        # Κρατάει ΜΟΝΟ το "τελευταίο" (μεγαλύτερο idx) για κάθε item_id.
+        # Έτσι αποφεύγονται διπλά entries με ίδιο item_id.
+        if 'procurement_df' in st.session_state and not st.session_state.procurement_df.empty:
+            # Χτίσε: item_id → μεγαλύτερο valid u_key
+            latest_u_key_per_item = {}
+            for idx, row in st.session_state.procurement_df.iterrows():
+                item_id = str(row["ID"])
+                u_key = f"{item_id}_{idx}"
+                # Το μεγαλύτερο idx κερδίζει (τελευταία εμφάνιση)
+                latest_u_key_per_item[item_id] = u_key
+            
+            # Κράτα ΜΟΝΟ τα latest keys
+            cleaned_store = {}
+            for u_key, tasks in st.session_state.get("tasks_store", {}).items():
+                parts = u_key.rsplit("_", 1)
+                item_id_key = parts[0] if len(parts) == 2 else u_key
+                if item_id_key in latest_u_key_per_item:
+                    if u_key == latest_u_key_per_item[item_id_key]:
+                        cleaned_store[u_key] = tasks
+            st.session_state["tasks_store"] = cleaned_store
+        # *** END ***
+
         
         sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
         rows = [["Project", "Item_ID", "Task_Name", "Assigned_User", "Assigned_Date", "Status_Done", "Task_Type"]]
@@ -2197,18 +2220,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
         if pending_keys and pending_date:
             changed = 0
             changed_details = []
-            # --- DEBUG ---
-            st.write(f"🐛 DEBUG: pending_keys = {pending_keys}")
-            st.write(f"🐛 DEBUG: pending_date = {pending_date}")
-            st.write(f"🐛 DEBUG: filtered_tasks count = {len(filtered_tasks)}")
-            matching = 0
-            for t in filtered_tasks:
-                chk_key = make_checkbox_key(t)
-                if chk_key in pending_keys:
-                    matching += 1
-                    st.write(f"🐛 MATCH: {chk_key} → task={t['Εργασία']}, date={t['Ημερομηνία']}")
-            st.write(f"🐛 DEBUG: matched {matching} tasks")
-            # --- END DEBUG ---
+
             for t in filtered_tasks:
                 chk_key = make_checkbox_key(t)
                 if chk_key in pending_keys:
