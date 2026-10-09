@@ -374,17 +374,36 @@ def save_all_assignments_to_sheet():
         return False
     
     try:
-        # *** ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ: Καθάρισμα stale entries από το tasks_store ***
-        # Αν το procurement_df άλλαξε (π.χ. νέα γραμμή), τα παλιά u_key είναι άκυρα.
+        # *** ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ: Re-map αντί για διαγραφή ***
+        # Τα stale keys δεν διαγράφονται — τα re-mapάρουμε σε νέα keys
+        # με βάση το item_id ώστε να μη χαθούν δεδομένα.
         if 'procurement_df' in st.session_state and not st.session_state.procurement_df.empty:
-            valid_u_keys = set()
+            # Χτίσε mapping: item_id → tasks (από ΟΛΑ τα keys, valid & stale)
+            item_to_tasks_from_store = {}
+            for u_key, tasks in st.session_state.get("tasks_store", {}).items():
+                parts = u_key.rsplit("_", 1)
+                item_id_key = parts[0] if len(parts) == 2 else u_key
+                if item_id_key not in item_to_tasks_from_store:
+                    item_to_tasks_from_store[item_id_key] = []
+                for t in tasks:
+                    sig = (t.get("task", ""), t.get("user", ""), str(t.get("date", "")))
+                    existing_sigs = {(x.get("task", ""), x.get("user", ""), str(x.get("date", ""))) for x in item_to_tasks_from_store[item_id_key]}
+                    if sig not in existing_sigs:
+                        item_to_tasks_from_store[item_id_key].append(t)
+            
+            # Χτίσε νέο store με τα σωστά indexes
+            new_store = {}
             for idx, row in st.session_state.procurement_df.iterrows():
                 item_id = str(row["ID"])
-                valid_u_keys.add(f"{item_id}_{idx}")
+                u_key = f"{item_id}_{idx}"
+                if u_key in new_store:
+                    continue
+                if item_id in item_to_tasks_from_store:
+                    new_store[u_key] = item_to_tasks_from_store[item_id]
+                else:
+                    new_store[u_key] = []
             
-            stale_keys = [k for k in list(st.session_state.get("tasks_store", {}).keys()) if k not in valid_u_keys]
-            for k in stale_keys:
-                del st.session_state["tasks_store"][k]
+            st.session_state["tasks_store"] = new_store
         # *** END ***
     
         total_tasks = sum(len(tasks) for tasks in st.session_state.get("tasks_store", {}).values())
