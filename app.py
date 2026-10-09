@@ -166,6 +166,23 @@ FIXED_PROJECT_TASKS = [
     "Φωτογράφιση"
 ]
 
+# --- HELPERS ---
+def clean_project_name(name):
+    """
+    Καθαρίζει το όνομα project από markdown αστεράκια (**) και extra spaces.
+    Χρησιμοποιείται για να αποφευχθούν προβλήματα με bold rendering στο Streamlit
+    και για να διασφαλιστεί ότι τα matching μεταξύ sheets γίνονται σωστά.
+    """
+    if name is None:
+        return ""
+    s = str(name).strip()
+    # Αφαιρεί ** από την αρχή και το τέλος (με ή χωρίς κενά)
+    s = re.sub(r'^\*+\s*', '', s)
+    s = re.sub(r'\s*\*+$', '', s)
+    # Αφαιρεί τυχόν υπόλοιπα ** στη μέση
+    s = s.replace('**', '')
+    return s.strip()
+
 # --- DATA LOADING ---
 @st.cache_data(ttl=60, show_spinner=False)
 def load_all_data(version=0):
@@ -179,6 +196,9 @@ def load_all_data(version=0):
             "Αναμενόμενη Ημ. Παραλαβής", "Αναμενόμενη Ποσότητα Παραλαβής", "Status Procurement"
         ]
         df_proc = df_proc.fillna("-")
+        # Καθαρισμός project names από markdown αστεράκια
+        if "Project" in df_proc.columns:
+            df_proc["Project"] = df_proc["Project"].apply(clean_project_name)
     except Exception:
         df_proc = pd.DataFrame()
 
@@ -194,6 +214,8 @@ def load_all_data(version=0):
             df_incoming["Shipping Status"] = df_incoming["Shipping Status"].astype(str).str.strip()
             df_incoming = df_incoming[df_incoming["Project"] != ""]
             df_incoming = df_incoming[df_incoming["Project"] != "nan"]
+            # Καθαρισμός project names από markdown αστεράκια
+            df_incoming["Project"] = df_incoming["Project"].apply(clean_project_name)
     except Exception as e:
         st.warning(f"Could not load Incoming Projects List: {e}")
 
@@ -258,7 +280,7 @@ def load_assignments_from_sheet():
         records = sheet.get_all_records()
         
         for r in records:
-            p_name = str(r.get("Project", ""))
+            p_name = clean_project_name(r.get("Project", ""))
             item_id = str(r.get("Item_ID", ""))
             task_name = str(r.get("Task_Name", ""))
             user_raw = str(r.get("Assigned_User", "- Χωρίς Ανάθεση -"))
@@ -279,6 +301,8 @@ def load_assignments_from_sheet():
                 p_key = f"proj_{p_name}"
                 if p_key not in assignments_proj:
                     assignments_proj[p_key] = {}
+                # Το dict overwrite κρατά μόνο την τελευταία εγγραφή για κάθε task_name
+                # Άρα αν υπάρχουν διπλότυπα στο sheet, εδώ κρατείται ένα
                 assignments_proj[p_key][task_name] = {
                     "active": True,
                     "done": done,
@@ -380,23 +404,105 @@ def save_all_assignments_to_sheet():
                             str(p_data.get("date")), str(p_data.get("done")), "PROJECT"
                         ])
 
+        # --- DEDUPLICATION ---
+        # Αφαιρούμε τυχόν διπλότυπες γραμμές πριν το update
+        seen = set()
+        deduped_rows = [rows[0]]  # header
+        for r in rows[1:]:
+            sig = tuple(str(x) for x in r)  # signature όλης της γραμμής
+            if sig not in seen:
+                seen.add(sig)
+                deduped_rows.append(r)
+        removed_count = len(rows) - len(deduped_rows)
+        rows = deduped_rows
+        # --- END DEDUPLICATION ---
+
         sheet.clear()
         sheet.update(range_name="A1", values=rows)
         st.session_state.last_save = datetime.now()
+        
+        # --- AUDIT LOG ---
+        if "audit_log" not in st.session_state:
+            st.session_state.audit_log = []
+        log_entry = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "user": st.session_state.get("username", "-"),
+            "action": "save",
+            "item_tasks": total_tasks,
+            "project_tasks": total_proj,
+            "duplicates_removed": removed_count
+        }
+        st.session_state.audit_log.append(log_entry)
+        # Κρατάμε τα τελευταία 200 entries
+        st.session_state.audit_log = st.session_state.audit_log[-200:]
+        # --- END AUDIT LOG ---
+        
         return True
         
     except Exception as e:
         st.error(f"Σφάλμα κατά την αποθήκευση: {e}")
         return False
 
+
+def cleanup_duplicates_in_sheet():
+    """
+    Καθαρίζει το Assignments sheet από διπλότυπες γραμμές.
+    Επιστρέφει (success: bool, removed: int, total: int, message: str)
+    """
+    gc, err = get_gspread_client()
+    if not gc:
+        return False, 0, 0, f"Σφάλμα σύνδεσης: {err}"
+    
+    try:
+        sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
+        all_values = sheet.get_all_values()
+        
+        if len(all_values) <= 1:
+            return True, 0, 0, "Το sheet είναι ήδη κενό (μόνο header)."
+        
+        header = all_values[0]
+        seen = set()
+        clean = [header]
+        for row in all_values[1:]:
+            # Αγνοούμε εντελώς κενές γραμμές
+            if not any(str(c).strip() for c in row):
+                continue
+            sig = tuple(str(c) for c in row)
+            if sig not in seen:
+                seen.add(sig)
+                clean.append(row)
+        
+        removed = len(all_values) - len(clean)
+        total_before = len(all_values) - 1  # χωρίς header
+        total_after = len(clean) - 1
+        
+        if removed == 0:
+            return True, 0, total_before, "Δεν βρέθηκαν διπλότυπα."
+        
+        sheet.clear()
+        sheet.update(range_name="A1", values=clean)
+        
+        # Log
+        if "audit_log" not in st.session_state:
+            st.session_state.audit_log = []
+        st.session_state.audit_log.append({
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "user": st.session_state.get("username", "-"),
+            "action": "cleanup_duplicates",
+            "removed": removed
+        })
+        
+        return True, removed, total_before, f"Καθαρίστηκαν {removed} διπλότυπα (από {total_before} → {total_after} γραμμές)."
+    
+    except Exception as e:
+        return False, 0, 0, f"Σφάλμα: {e}"
+
 # --- EXPORT FUNCTIONS ---
 def generate_printable_html(title, date_str, df_data):
     """Δημιουργεί ένα βελτιωμένο HTML report για εκτύπωση."""
     
-    # --- ΥΠΟΛΟΓΙΣΜΟΙ ΓΙΑ ΣΥΝΟΨΗ ---
     total_rows = len(df_data)
     
-    # Προσπαθούμε να βρούμε στήλες με συγκεκριμένα ονόματα
     completed_count = 0
     pending_count = 0
     total_hours = 0.0
@@ -414,7 +520,6 @@ def generate_printable_html(title, date_str, df_data):
         except:
             pass
     
-    # --- ΔΗΜΙΟΥΡΓΙΑ ΠΙΝΑΚΑ ---
     table_rows = ""
     for idx, row in df_data.iterrows():
         row_class = ""
@@ -423,7 +528,6 @@ def generate_printable_html(title, date_str, df_data):
             val = str(row[col])
             cell_class = ""
             
-            # Χρωματισμός για Status columns
             if val == "ΝΑΙ" or "✅" in val:
                 cell_class = ' class="status-done"'
             elif val == "ΟΧΙ" or "⏳" in val:
@@ -438,7 +542,6 @@ def generate_printable_html(title, date_str, df_data):
             table_rows += f"<td{cell_class}>{val}</td>"
         table_rows += "</tr>"
     
-    # --- SUMMARY CARDS ---
     summary_html = ""
     if completed_count > 0 or pending_count > 0:
         summary_html = f"""
@@ -462,7 +565,6 @@ def generate_printable_html(title, date_str, df_data):
         </div>
         """
     
-    # --- HTML ---
     html = f"""
     <!DOCTYPE html>
     <html lang="el">
@@ -713,7 +815,6 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
     completed_count = len(completed_df)
     total_count = pending_count + completed_count
     
-    # Παίρνουμε τις στήλες από όποιο df έχει δεδομένα
     if pending_count > 0:
         columns = list(pending_df.columns)
     elif completed_count > 0:
@@ -721,8 +822,6 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
     else:
         columns = ["Project", "Υλικό / Είδος", "Ποσότητα", "Εργασία", "Ώρες", "Status Procurement"]
     
-    # Σταθερά πλάτη: checkbox + 6 στήλες = 7 συνολικά
-    # 5% + (95% μοιρασμένο)
     col_widths = {
         "Project": 13,
         "Υλικό / Είδος": 30,
@@ -734,7 +833,7 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
     DEFAULT_W = 15
     weights = [col_widths.get(c, DEFAULT_W) for c in columns]
     weight_sum = sum(weights) if sum(weights) > 0 else 1
-    data_total = 95.0  # 5% για checkbox
+    data_total = 95.0
     
     colgroup_html = '<colgroup><col style="width:5%;">'
     for w in weights:
@@ -742,15 +841,12 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
         colgroup_html += f'<col style="width:{pct:.2f}%;">'
     colgroup_html += '</colgroup>'
     
-    # Header row
     header_cells = '<th class="checkbox-col">✓</th>'
     for col in columns:
         header_cells += f'<th>{col}</th>'
     
-    # --- ΧΤΙΖΟΥΜΕ ΤΟ ΕΝΙΑΙΟ BODY ---
     body_rows = ""
     
-    # 1) Section header: Εκκρεμή
     body_rows += f'<tr class="section-row section-row-pending"><td colspan="{len(columns) + 1}">Εκκρεμή ({pending_count})</td></tr>'
     
     if pending_count > 0:
@@ -763,7 +859,6 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
     else:
         body_rows += f'<tr class="empty-row"><td colspan="{len(columns) + 1}">Δεν υπάρχουν εκκρεμείς εργασίες.</td></tr>'
     
-    # 2) Section header: Ολοκληρωμένα
     body_rows += f'<tr class="section-row section-row-completed"><td colspan="{len(columns) + 1}">Ολοκληρωμένα ({completed_count})</td></tr>'
     
     if completed_count > 0:
@@ -845,7 +940,6 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 overflow-wrap: break-word;
             }}
             
-            /* Section header rows */
             .section-row td {{
                 font-weight: 700;
                 font-size: 12px;
@@ -865,7 +959,6 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 border-top: 2px solid #cbe3d1;
             }}
             
-            /* Rows */
             .row-pending td {{ background: #fffdf7; }}
             .row-pending:hover td {{ background: #fff8e8; }}
             .row-completed td {{ background: #fafdfb; }}
@@ -879,7 +972,6 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 font-size: 11px;
             }}
             
-            /* Checkbox στήλη */
             th.checkbox-col {{
                 text-align: center !important;
             }}
@@ -930,7 +1022,6 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
                 tr {{ break-inside: avoid; page-break-inside: avoid; }}
                 .section-row {{ break-inside: avoid; }}
                 td.checkbox-cell {{ font-size: 14px; }}
-                /* Διατήρηση χρωμάτων στην εκτύπωση */
                 .section-row-pending td {{ background: #fff3d6 !important; color: #b8860b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
                 .section-row-completed td {{ background: #e6f4ea !important; color: #3d7a4e !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
                 .row-pending td {{ background: #fffdf7 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
@@ -1032,10 +1123,6 @@ def update_proj_users(p_key, task_name, widget_key):
 
 # --- CHECK USER OVERLOAD ---
 def check_user_overload(target_date, availability_database):
-    """
-    Επιστρέφει dict με {user: {'assigned': X, 'max': Y, 'over': Z}} 
-    για όλους τους χρήστες που έχουν ΥΠΕΡΒΑΣΗ για τη συγκεκριμένη ημερομηνία.
-    """
     if not target_date:
         return {}
     
@@ -1046,7 +1133,6 @@ def check_user_overload(target_date, availability_database):
     
     user_hours = {}
     
-    # Item tasks
     for u_key, task_list in st.session_state.get("tasks_store", {}).items():
         for t in task_list:
             if t.get("task") and t["task"] != "- Επιλογή Εργασίας -" and t.get("date") == target_date:
@@ -1055,7 +1141,6 @@ def check_user_overload(target_date, availability_database):
                     t_users = [t.get("user", "- Χωρίς Ανάθεση -")]
                 num_users = max(len(t_users), 1)
                 
-                # Παίρνουμε qty από το αντίστοιχο item
                 qty = 1
                 try:
                     parts = u_key.split("_")
@@ -1074,7 +1159,6 @@ def check_user_overload(target_date, availability_database):
                     if user and user != "- Χωρίς Ανάθεση -":
                         user_hours[user] = user_hours.get(user, 0.0) + hrs_per_user
     
-    # Project tasks
     for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
         if isinstance(p_dict, dict):
             proj_name = p_key.replace("proj_", "")
@@ -1111,9 +1195,6 @@ def check_user_overload(target_date, availability_database):
 
 
 def render_overload_warnings(target_dates, availability_database):
-    """
-    Εμφανίζει warning banners για ΥΠΕΡΒΑΣΕΙΣ ωρών.
-    """
     if not target_dates:
         return
     
@@ -1244,9 +1325,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
     if "selected_material_expand" not in st.session_state:
         st.session_state.selected_material_expand = None
     
-    # =========================================================
-    # MODE 2: DETAILS VIEW (Drill-Down)
-    # =========================================================
     if st.session_state.selected_project_drill is not None:
         selected_project = st.session_state.selected_project_drill
         
@@ -1279,7 +1357,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         st.progress(proj_details['progress'] / 100)
         st.caption(f"**Κατάσταση:** {proj_details['status']}")
         
-        # --- ΕΛΕΓΧΟΣ ΥΠΕΡΒΑΣΗΣ ΩΡΩΝ ---
         filtered_df_check = procurement_df[procurement_df["Project"] == selected_project].copy()
         all_dates_check = set()
         for idx_chk, row_chk in filtered_df_check.iterrows():
@@ -1298,7 +1375,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         
         tab1, tab2 = st.tabs(["Υλικά", "Γενικές Εργασίες"])
         
-        # ==================== TAB 1: ΥΛΙΚΑ ====================
         with tab1:
             filtered_df = procurement_df[procurement_df["Project"] == selected_project].copy()
             
@@ -1501,7 +1577,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             st.session_state.selected_material_expand = None
                             st.rerun()
         
-        # ==================== TAB 2: ΓΕΝΙΚΕΣ ΕΡΓΑΣΙΕΣ ====================
         with tab2:
             st.markdown(f"### Γενικές Εργασίες — {selected_project}")
             st.caption("Ενεργοποίησε τις εργασίες που χρειάζονται και όρισε υπεύθυνο + ημερομηνία.")
@@ -1570,10 +1645,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                 st.error("Σφάλμα κατά την αποθήκευση")
         
         return
-    
-    # =========================================================
-    # MODE 1: GRID VIEW (default)
-    # =========================================================
     
     col_check, col_info = st.columns([1, 3])
     with col_check:
@@ -1675,7 +1746,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
 
     st.divider()
     
-    # --- ΕΛΕΓΧΟΣ ΥΠΕΡΒΑΣΗΣ ΩΡΩΝ ΓΙΑ ΟΛΑ ΤΑ ΕΝΕΡΓΑ PROJECTS ---
     all_dates_dashboard = set()
     for p_name_chk in projects_to_show:
         filtered_p_chk = procurement_df[procurement_df["Project"] == p_name_chk]
@@ -1979,7 +2049,6 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     
     filtered_tasks = sorted(filtered_tasks, key=lambda x: (x["done"], x["Ημερομηνία"]))
     
-    # --- ΕΛΕΓΧΟΣ ΥΠΕΡΒΑΣΗΣ ΩΡΩΝ ---
     all_dates_mv = set(t["Ημερομηνία"] for t in filtered_tasks if t.get("Ημερομηνία"))
     render_overload_warnings(all_dates_mv, availability_database)
     
@@ -2099,7 +2168,6 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
     greek_day_name = WEEKDAYS_GREEK.get(target_date.weekday(), "Δευτέρα")
     st.caption(f"Ημέρα εβδομάδας: **{greek_day_name}**")
 
-    # --- ΕΛΕΓΧΟΣ ΥΠΕΡΒΑΣΗΣ ΩΡΩΝ ---
     render_overload_warnings({target_date}, availability_database)
 
     daily_tasks_raw = []
@@ -2280,7 +2348,6 @@ def render_technician(procurement_df, tasks_database, team_database, availabilit
     selected_member = c_user.selectbox("Επιλέξτε Τεχνίτη:", team_database)
     st.divider()
 
-    # --- ΕΛΕΓΧΟΣ ΥΠΕΡΒΑΣΗΣ ΩΡΩΝ ---
     render_overload_warnings({target_date}, availability_database)
 
     worker_tasks = []
@@ -2332,7 +2399,6 @@ def render_technician(procurement_df, tasks_database, team_database, availabilit
         col_w_head, col_w_csv, col_w_pdf, col_w_excel = st.columns([0.4, 0.2, 0.2, 0.2])
         col_w_head.subheader(f"Πρόγραμμα για {selected_member} — {target_date.strftime('%d/%m/%Y')}")
         col_w_csv.download_button(label="CSV", data=w_csv_data, file_name=f"Schedule_{selected_member.replace(' ', '_')}_{target_date.strftime('%Y-%m-%d')}.csv", mime="text/csv", use_container_width=True)
-        # --- ΔΗΜΙΟΥΡΓΙΑ 2 DATAFRAMES (ΕΚΚΡΕΜΗ + ΟΛΟΚΛΗΡΩΜΕΝΑ) ---
         pending_worker_tasks = [wt for wt in worker_tasks if not wt["done"]]
         completed_worker_tasks = [wt for wt in worker_tasks if wt["done"]]
         
@@ -2656,9 +2722,33 @@ def render_settings():
             st.session_state.data_version = st.session_state.get("data_version", 0) + 1
             st.rerun()
     
+    # --- ΝΕΟ: ΚΑΘΑΡΙΣΜΟΣ ΔΙΠΛΟΤΥΠΩΝ ---
+    st.divider()
+    st.subheader("🧹 Καθαρισμός Διπλότυπων")
+    st.caption(
+        "Αφαιρεί διπλότυπες γραμμές από το φύλλο **Assignments** του Google Sheet. "
+        "Χρήσιμο αν έχουν δημιουργηθεί διπλότυπα από ταυτόχρονες αποθηκεύσεις."
+    )
+    col_d1, col_d2 = st.columns([1, 3])
+    with col_d1:
+        if st.button("Καθαρισμός Διπλότυπων", use_container_width=True, type="secondary"):
+            with st.spinner("Καθαρισμός..."):
+                success, removed, total, msg = cleanup_duplicates_in_sheet()
+            if success:
+                if removed > 0:
+                    st.success(f"✅ {msg}")
+                    st.cache_data.clear()
+                else:
+                    st.info(f"ℹ️ {msg}")
+            else:
+                st.error(f"❌ {msg}")
+    
+    st.divider()
     st.subheader("Audit Log")
     if "audit_log" in st.session_state and st.session_state.audit_log:
-        st.dataframe(pd.DataFrame(st.session_state.audit_log[-50:]), use_container_width=True, hide_index=True)
+        # Ταξινόμηση: νεότερα πρώτα
+        log_df = pd.DataFrame(st.session_state.audit_log[::-1])
+        st.dataframe(log_df, use_container_width=True, hide_index=True)
     else:
         st.info("Δεν υπάρχουν καταχωρήσεις.")
 
