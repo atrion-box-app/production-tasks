@@ -1538,14 +1538,62 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
     else:
         st.markdown("""
         <style>
-            .compact-card { background: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
-            .compact-card.active { border-left: 3px solid #2e7d32; }
-            .compact-card.shipped { border-left: 3px solid #c62828; opacity: 0.7; }
-            .compact-title { font-size: 12px; font-weight: 700; margin-bottom: 4px; min-height: 30px; }
-            .compact-status { font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 8px; display: inline-block; margin-bottom: 6px; }
-            .compact-progress-bg { background: #e0e0e0; border-radius: 4px; height: 5px; overflow: hidden; margin: 6px 0; }
-            .compact-progress-fill { height: 100%; border-radius: 4px; }
-            .compact-meta { font-size: 10px; color: #666; margin-top: 4px; display: flex; justify-content: space-between; }
+            .compact-card {
+                background: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 10px;
+                margin-bottom: 8px;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+                transition: transform 0.15s ease, box-shadow 0.15s ease;
+                height: 100%;
+            }
+            .compact-card:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+            }
+            .compact-card.active {
+                border-left: 3px solid #2e7d32;
+            }
+            .compact-card.shipped {
+                border-left: 3px solid #c62828;
+                opacity: 0.7;
+            }
+            .compact-title {
+                font-size: 12px;
+                font-weight: 700;
+                color: #1a1a1a;
+                margin-bottom: 4px;
+                line-height: 1.2;
+                word-wrap: break-word;
+                min-height: 30px;
+            }
+            .compact-status {
+                font-size: 9px;
+                font-weight: 600;
+                padding: 2px 6px;
+                border-radius: 8px;
+                display: inline-block;
+                margin-bottom: 6px;
+            }
+            .compact-progress-bg {
+                background: #e0e0e0;
+                border-radius: 4px;
+                height: 5px;
+                overflow: hidden;
+                margin: 6px 0;
+            }
+            .compact-progress-fill {
+                height: 100%;
+                border-radius: 4px;
+            }
+            .compact-meta {
+                font-size: 10px;
+                color: #666;
+                margin-top: 4px;
+                display: flex;
+                justify-content: space-between;
+            }
         </style>
         """, unsafe_allow_html=True)
         
