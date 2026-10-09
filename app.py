@@ -2992,6 +2992,7 @@ def main():
     
     sheet_item_assignments, sheet_proj_assignments = load_assignments_from_sheet()
     
+    # *** ΒΗΜΑ 1: Dedup στα υπάρχοντα tasks_store entries ***
     if "tasks_store" not in st.session_state:
         st.session_state["tasks_store"] = {}
     else:
@@ -3004,12 +3005,47 @@ def main():
                     seen.add(signature)
                     unique_tasks.append(t)
             st.session_state["tasks_store"][u_key] = unique_tasks
+    
+    # *** ΒΗΜΑ 2: Re-map παλιών u_key σε νέα με βάση το item_id ***
+    # Αυτό ΛΥΝΕΙ το bug των stale indexes χωρίς να χάσει δεδομένα.
     if procurement_df is not None and not procurement_df.empty:
+        old_store = st.session_state.get("tasks_store", {})
+        
+        # Χτίσε mapping: item_id → tasks (κρατώντας ΟΛΑ τα tasks ανεξαρτήτως παλιού u_key)
+        # Χρησιμοποιούμε rsplit("_", 1) γιατί το item_id μπορεί να έχει underscores
+        item_to_tasks = {}
+        for u_key, tasks in old_store.items():
+            parts = u_key.rsplit("_", 1)
+            item_id_key = parts[0] if len(parts) == 2 else u_key
+            
+            if item_id_key not in item_to_tasks:
+                item_to_tasks[item_id_key] = []
+            # Dedup κατά τη συγχώνευση
+            for t in tasks:
+                sig = (t.get("task", ""), t.get("user", ""), str(t.get("date", "")))
+                existing_sigs = {(x.get("task", ""), x.get("user", ""), str(x.get("date", ""))) for x in item_to_tasks[item_id_key]}
+                if sig not in existing_sigs:
+                    item_to_tasks[item_id_key].append(t)
+        
+        # Χτίσε νέο store με τα σωστά τρέχοντα indexes
+        new_store = {}
         for idx, row in procurement_df.iterrows():
             item_id = str(row["ID"])
             u_key = f"{item_id}_{idx}"
-            if u_key not in st.session_state["tasks_store"]:
-                st.session_state["tasks_store"][u_key] = sheet_item_assignments.get(item_id, [])
+            
+            if u_key in new_store:
+                continue
+            
+            # Έχουμε tasks από παλιά u_key με αυτό το item_id?
+            if item_id in item_to_tasks and len(item_to_tasks[item_id]) > 0:
+                # Κράτα τα παλιά tasks (με τις σωστές τιμές)
+                new_store[u_key] = item_to_tasks[item_id]
+            else:
+                # Πάρε από το sheet (fresh)
+                new_store[u_key] = sheet_item_assignments.get(item_id, [])
+        
+        st.session_state["tasks_store"] = new_store
+    # *** END ***
     
     if "project_tasks_store" not in st.session_state:
         st.session_state["project_tasks_store"] = sheet_proj_assignments
