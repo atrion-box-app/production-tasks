@@ -168,7 +168,6 @@ FIXED_PROJECT_TASKS = [
 
 # --- HELPERS ---
 def clean_project_name(name):
-    """Καθαρίζει το όνομα project από markdown αστεράκια (**) και extra spaces."""
     if name is None:
         return ""
     s = str(name).strip()
@@ -179,7 +178,6 @@ def clean_project_name(name):
 
 
 def strip_all_fields(value):
-    """Καθαρίζει ένα string από leading/trailing spaces, πολλαπλά spaces, και μη-ορατούς χαρακτήρες."""
     if value is None:
         return ""
     if not isinstance(value, str):
@@ -190,22 +188,13 @@ def strip_all_fields(value):
 
 
 def make_checkbox_key(task):
-    """
-    Δημιουργεί ένα ΣΤΑΘΕΡΟ key για το checkbox ενός task.
-    Χρησιμοποιεί ΜΟΝΟ το u_key/p_key + t_idx/task_name (χωρίς τη θέση στη λίστα),
-    ώστε να μην αλλάζει όταν αλλάζει η σειρά των tasks (π.χ. μετά από date change).
-    """
     if task["type"] == "item":
         return f"mv_chk_item_{task['u_key']}_{task['t_idx']}"
     else:
         return f"mv_chk_proj_{task['p_key']}_{task['task_name']}"
 
+
 def get_selected_checkbox_keys(all_tasks):
-    """
-    Επιστρέφει set με τα chk_keys που είναι ΤΩΡΑ τσεκαρισμένα,
-    διαβάζοντας από το session_state. Χρησιμοποιείται για να μην
-    χάνονται τα checkboxes όταν γίνεται rerun.
-    """
     selected = set()
     for t in all_tasks:
         chk_key = make_checkbox_key(t)
@@ -380,8 +369,6 @@ def save_all_assignments_to_sheet():
         return False
     
     try:
-        # *** ΚΑΘΑΡΙΣΜΑ stale keys ΜΟΝΟ — χωρίς re-map ***
-        # Κρατάει τα valid keys ως έχουν, διαγράφει τα stale (δεν τα re-map)
         if 'procurement_df' in st.session_state and not st.session_state.procurement_df.empty:
             valid_u_keys = set()
             for idx, row in st.session_state.procurement_df.iterrows():
@@ -391,7 +378,6 @@ def save_all_assignments_to_sheet():
             stale_keys = [k for k in list(st.session_state.get("tasks_store", {}).keys()) if k not in valid_u_keys]
             for k in stale_keys:
                 del st.session_state["tasks_store"][k]
-        # *** END ***
     
         total_tasks = sum(len(tasks) for tasks in st.session_state.get("tasks_store", {}).values())
         total_proj = sum(
@@ -409,19 +395,14 @@ def save_all_assignments_to_sheet():
                     return False
             except:
                 pass
-        # *** ΝΕΟ: Dedup στα tasks_store entries με ίδιο item_id ***
-        # Κρατάει ΜΟΝΟ το "τελευταίο" (μεγαλύτερο idx) για κάθε item_id.
-        # Έτσι αποφεύγονται διπλά entries με ίδιο item_id.
+
         if 'procurement_df' in st.session_state and not st.session_state.procurement_df.empty:
-            # Χτίσε: item_id → μεγαλύτερο valid u_key
             latest_u_key_per_item = {}
             for idx, row in st.session_state.procurement_df.iterrows():
                 item_id = str(row["ID"])
                 u_key = f"{item_id}_{idx}"
-                # Το μεγαλύτερο idx κερδίζει (τελευταία εμφάνιση)
                 latest_u_key_per_item[item_id] = u_key
             
-            # Κράτα ΜΟΝΟ τα latest keys
             cleaned_store = {}
             for u_key, tasks in st.session_state.get("tasks_store", {}).items():
                 parts = u_key.rsplit("_", 1)
@@ -430,9 +411,7 @@ def save_all_assignments_to_sheet():
                     if u_key == latest_u_key_per_item[item_id_key]:
                         cleaned_store[u_key] = tasks
             st.session_state["tasks_store"] = cleaned_store
-        # *** END ***
 
-        
         sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
         rows = [["Project", "Item_ID", "Task_Name", "Assigned_User", "Assigned_Date", "Status_Done", "Task_Type"]]
 
@@ -493,7 +472,6 @@ def save_all_assignments_to_sheet():
                             "PROJECT"
                         ])
 
-        # --- DEDUPLICATION ---
         seen = set()
         deduped_rows = [rows[0]]
         for r in rows[1:]:
@@ -504,15 +482,15 @@ def save_all_assignments_to_sheet():
         removed_count = len(rows) - len(deduped_rows)
         rows = deduped_rows
 
+        # *** ΔΙΟΡΘΩΣΗ: sleep πριν & μετά το update ***
         sheet.clear()
+        time.sleep(0.5)
         sheet.update(range_name="A1", values=rows)
+        time.sleep(0.5)
         st.session_state.last_save = datetime.now()
         
-        # --- ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ: ΚΑΘΑΡΙΣΜΟΣ CACHE ΜΕΤΑ ΑΠΟ ΚΑΘΕ SAVE ---
         load_assignments_from_sheet.clear()
-        # --- END ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ ---
         
-        # --- AUDIT LOG ---
         if "audit_log" not in st.session_state:
             st.session_state.audit_log = []
         log_entry = {
@@ -525,7 +503,6 @@ def save_all_assignments_to_sheet():
         }
         st.session_state.audit_log.append(log_entry)
         st.session_state.audit_log = st.session_state.audit_log[-200:]
-        # --- END AUDIT LOG ---
         
         return True
         
@@ -533,8 +510,8 @@ def save_all_assignments_to_sheet():
         st.error(f"Σφάλμα κατά την αποθήκευση: {e}")
         return False
 
+
 def cleanup_duplicates_in_sheet():
-    """Καθαρίζει το Assignments sheet από διπλότυπες γραμμές."""
     gc, err = get_gspread_client()
     if not gc:
         return False, 0, 0, f"Σφάλμα σύνδεσης: {err}"
@@ -571,7 +548,9 @@ def cleanup_duplicates_in_sheet():
             return True, 0, total_before, "Δεν βρέθηκαν διπλότυπα."
         
         sheet.clear()
+        time.sleep(0.5)
         sheet.update(range_name="A1", values=clean)
+        time.sleep(0.5)
         
         load_assignments_from_sheet.clear()
         
@@ -591,7 +570,6 @@ def cleanup_duplicates_in_sheet():
 
 
 def strip_spaces_in_sheet():
-    """Καθαρίζει spaces από όλα τα κελιά του Assignments."""
     gc, err = get_gspread_client()
     if not gc:
         return False, 0, f"Σφάλμα σύνδεσης: {err}"
@@ -626,7 +604,9 @@ def strip_spaces_in_sheet():
             return True, 0, "Δεν βρέθηκαν κενά για καθαρισμό."
         
         sheet.clear()
+        time.sleep(0.5)
         sheet.update(range_name="A1", values=clean_rows)
+        time.sleep(0.5)
         
         load_assignments_from_sheet.clear()
         
@@ -646,8 +626,6 @@ def strip_spaces_in_sheet():
 
 # --- EXPORT FUNCTIONS ---
 def generate_printable_html(title, date_str, df_data):
-    """Δημιουργεί ένα βελτιωμένο HTML report για εκτύπωση."""
-    
     total_rows = len(df_data)
     
     completed_count = 0
@@ -669,7 +647,6 @@ def generate_printable_html(title, date_str, df_data):
     
     table_rows = ""
     for idx, row in df_data.iterrows():
-        row_class = ""
         table_rows += "<tr>"
         for col in df_data.columns:
             val = str(row[col])
@@ -717,237 +694,38 @@ def generate_printable_html(title, date_str, df_data):
     <html lang="el">
     <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{title}</title>
         <style>
-            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-            body {{ 
-                font-family: 'Segoe UI', Arial, sans-serif; 
-                margin: 0; 
-                padding: 30px; 
-                color: #2c3e50; 
-                background: #f5f7fa;
-                line-height: 1.5;
-            }}
-            .container {{
-                max-width: 1200px;
-                margin: 0 auto;
-                background: white;
-                padding: 40px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                border-radius: 8px;
-            }}
-            .header {{
-                border-bottom: 3px solid #1e88e5;
-                padding-bottom: 20px;
-                margin-bottom: 30px;
-            }}
-            .header-top {{
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 15px;
-            }}
-            .company-name {{
-                font-size: 24px;
-                font-weight: 700;
-                color: #1e88e5;
-                letter-spacing: 0.5px;
-            }}
-            .report-badge {{
-                background: #1e88e5;
-                color: white;
-                padding: 6px 14px;
-                border-radius: 20px;
-                font-size: 12px;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-            }}
-            h1 {{
-                font-size: 28px;
-                color: #2c3e50;
-                font-weight: 600;
-                margin-bottom: 8px;
-            }}
-            .meta {{
-                display: flex;
-                gap: 25px;
-                font-size: 13px;
-                color: #7f8c8d;
-                margin-top: 10px;
-            }}
-            .meta span {{
-                display: flex;
-                align-items: center;
-                gap: 6px;
-            }}
-            .summary-cards {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-                gap: 15px;
-                margin: 30px 0;
-            }}
-            .summary-card {{
-                padding: 18px;
-                border-radius: 8px;
-                background: #f8f9fa;
-                border-left: 4px solid #95a5a6;
-                text-align: center;
-            }}
-            .summary-card.success {{
-                background: #e8f5e9;
-                border-left-color: #2e7d32;
-            }}
-            .summary-card.warning {{
-                background: #fff8e1;
-                border-left-color: #f57c00;
-            }}
-            .summary-card.info {{
-                background: #e3f2fd;
-                border-left-color: #1565c0;
-            }}
-            .summary-value {{
-                font-size: 26px;
-                font-weight: 700;
-                color: #2c3e50;
-                margin-bottom: 4px;
-            }}
-            .summary-card.success .summary-value {{ color: #2e7d32; }}
-            .summary-card.warning .summary-value {{ color: #f57c00; }}
-            .summary-card.info .summary-value {{ color: #1565c0; }}
-            .summary-label {{
-                font-size: 12px;
-                color: #7f8c8d;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 20px;
-                font-size: 13px;
-                border-radius: 6px;
-                overflow: hidden;
-            }}
-            thead {{
-                background: #1e88e5;
-                color: white;
-            }}
-            th {{
-                padding: 12px 15px;
-                text-align: left;
-                font-weight: 600;
-                font-size: 12px;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }}
-            td {{
-                padding: 10px 15px;
-                border-bottom: 1px solid #ecf0f1;
-                color: #34495e;
-            }}
-            tr:nth-child(even) {{ background: #f8f9fa; }}
-            tr:hover {{ background: #e3f2fd; }}
-            .status-done {{
-                color: #2e7d32;
-                font-weight: 700;
-                background: #e8f5e9;
-            }}
-            .status-pending {{
-                color: #d32f2f;
-                font-weight: 700;
-                background: #ffebee;
-            }}
-            .status-shipped {{
-                color: #c62828;
-                font-weight: 700;
-            }}
-            .status-active {{
-                color: #2e7d32;
-                font-weight: 700;
-            }}
-            .status-warning {{
-                color: #f57c00;
-                font-weight: 700;
-            }}
-            .footer {{
-                margin-top: 40px;
-                padding-top: 20px;
-                border-top: 1px solid #ecf0f1;
-                display: flex;
-                justify-content: space-between;
-                font-size: 11px;
-                color: #95a5a6;
-            }}
-            .btn {{
-                display: inline-block;
-                padding: 12px 24px;
-                background: #1e88e5;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                font-size: 14px;
-                font-weight: 600;
-                cursor: pointer;
-                text-decoration: none;
-                margin-top: 20px;
-                transition: background 0.2s;
-            }}
-            .btn:hover {{ background: #1565c0; }}
-            .btn-secondary {{
-                background: #78909c;
-                margin-left: 10px;
-            }}
-            .btn-secondary:hover {{ background: #546e7a; }}
-            @media print {{
-                body {{ background: white; padding: 0; }}
-                .container {{ box-shadow: none; padding: 20px; }}
-                .btn, .btn-secondary {{ display: none; }}
-                table {{ font-size: 11px; }}
-                th, td {{ padding: 6px 10px; }}
-                .summary-cards {{ break-inside: avoid; }}
-                tr {{ break-inside: avoid; }}
-            }}
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; background: #f5f7fa; }}
+            .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; }}
+            h1 {{ font-size: 28px; color: #2c3e50; margin-bottom: 20px; }}
+            .summary-cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 30px 0; }}
+            .summary-card {{ padding: 18px; border-radius: 8px; background: #f8f9fa; text-align: center; }}
+            .summary-card.success {{ background: #e8f5e9; }}
+            .summary-card.warning {{ background: #fff8e1; }}
+            .summary-card.info {{ background: #e3f2fd; }}
+            .summary-value {{ font-size: 26px; font-weight: 700; }}
+            .summary-label {{ font-size: 12px; color: #7f8c8d; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+            th {{ background: #1e88e5; color: white; padding: 12px 15px; text-align: left; }}
+            td {{ padding: 10px 15px; border-bottom: 1px solid #ecf0f1; }}
+            .status-done {{ color: #2e7d32; font-weight: 700; }}
+            .status-pending {{ color: #d32f2f; font-weight: 700; }}
+            .btn {{ padding: 12px 24px; background: #1e88e5; color: white; border: none; border-radius: 6px; cursor: pointer; margin: 20px 5px; }}
         </style>
     </head>
     <body>
         <div class="container">
-            <div class="header">
-                <div class="header-top">
-                    <div class="company-name">🏭 Production Tasks</div>
-                    <div class="report-badge">Report</div>
-                </div>
-                <h1>{title}</h1>
-                <div class="meta">
-                    <span>📅 <b>{date_str}</b></span>
-                    <span>📊 <b>{total_rows}</b> εγγραφές</span>
-                    <span>🕐 Δημιουργήθηκε: <b>{datetime.now().strftime('%d/%m/%Y %H:%M')}</b></span>
-                </div>
-            </div>
-            
+            <h1>{title}</h1>
+            <p>📅 {date_str} &nbsp;•&nbsp; 📊 {total_rows} εγγραφές</p>
             {summary_html}
-            
             <table>
-                <thead>
-                    <tr>
-                        {"".join([f"<th>{col}</th>" for col in df_data.columns])}
-                    </tr>
-                </thead>
-                <tbody>
-                    {table_rows}
-                </tbody>
+                <thead><tr>{"".join([f"<th>{col}</th>" for col in df_data.columns])}</tr></thead>
+                <tbody>{table_rows}</tbody>
             </table>
-            
-            <div class="footer">
-                <div>© Production Tasks App</div>
-                <div>Σελίδα 1</div>
-            </div>
-            
             <div style="text-align:center;">
                 <button onclick="window.print()" class="btn">🖨️ Εκτύπωση</button>
-                <button onclick="window.close()" class="btn btn-secondary">✕ Κλείσιμο</button>
+                <button onclick="window.close()" class="btn">✕ Κλείσιμο</button>
             </div>
         </div>
     </body>
@@ -956,8 +734,6 @@ def generate_printable_html(title, date_str, df_data):
     return html
 
 def generate_printable_html_two_sections(title, date_str, pending_df, completed_df):
-    """Ενιαίος πίνακας με δύο sections (Εκκρεμή + Ολοκληρωμένα) — απόλυτη ευθυγράμμιση στηλών."""
-    
     pending_count = len(pending_df)
     completed_count = len(completed_df)
     total_count = pending_count + completed_count
@@ -970,12 +746,8 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
         columns = ["Project", "Υλικό / Είδος", "Ποσότητα", "Εργασία", "Ώρες", "Status Procurement"]
     
     col_widths = {
-        "Project": 13,
-        "Υλικό / Είδος": 30,
-        "Ποσότητα": 8,
-        "Εργασία": 20,
-        "Ώρες": 7,
-        "Status Procurement": 17,
+        "Project": 13, "Υλικό / Είδος": 30, "Ποσότητα": 8,
+        "Εργασία": 20, "Ώρες": 7, "Status Procurement": 17,
     }
     DEFAULT_W = 15
     weights = [col_widths.get(c, DEFAULT_W) for c in columns]
@@ -993,7 +765,6 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
         header_cells += f'<th>{col}</th>'
     
     body_rows = ""
-    
     body_rows += f'<tr class="section-row section-row-pending"><td colspan="{len(columns) + 1}">Εκκρεμή ({pending_count})</td></tr>'
     
     if pending_count > 0:
@@ -1023,184 +794,36 @@ def generate_printable_html_two_sections(title, date_str, pending_df, completed_
     <html lang="el">
     <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{title}</title>
         <style>
-            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-            body {{ 
-                font-family: Arial, sans-serif; 
-                margin: 0; 
-                padding: 40px; 
-                color: #333; 
-                background: white;
-                line-height: 1.5;
-                font-size: 14px;
-            }}
-            .container {{
-                max-width: 1100px;
-                margin: 0 auto;
-            }}
-            .header {{
-                margin-bottom: 25px;
-                padding-bottom: 12px;
-                border-bottom: 1px solid #ccc;
-            }}
-            h1 {{
-                font-size: 20px;
-                color: #333;
-                font-weight: 600;
-                margin-bottom: 6px;
-            }}
-            .meta {{
-                font-size: 12px;
-                color: #666;
-            }}
-            table.report-table {{
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 12px;
-                background: white;
-                border-radius: 6px;
-                overflow: hidden;
-                table-layout: fixed;
-                border: 1px solid #e0e0e0;
-            }}
-            table.report-table th {{
-                padding: 10px 8px;
-                text-align: left;
-                font-weight: 600;
-                font-size: 10px;
-                color: #555;
-                border-bottom: 2px solid #ddd;
-                background: #f5f5f5;
-                text-transform: uppercase;
-                letter-spacing: 0.3px;
-                vertical-align: middle;
-            }}
-            table.report-table td {{
-                padding: 10px 8px;
-                border-bottom: 1px solid #eee;
-                color: #333;
-                vertical-align: middle;
-                font-size: 11.5px;
-                word-wrap: break-word;
-                overflow-wrap: break-word;
-            }}
-            
-            .section-row td {{
-                font-weight: 700;
-                font-size: 12px;
-                padding: 8px 10px;
-                letter-spacing: 0.5px;
-                text-transform: uppercase;
-                border-bottom: 1px solid rgba(0,0,0,0.08);
-            }}
-            .section-row-pending td {{
-                background: #fff3d6;
-                color: #b8860b;
-                border-top: 2px solid #f0dfb8;
-            }}
-            .section-row-completed td {{
-                background: #e6f4ea;
-                color: #3d7a4e;
-                border-top: 2px solid #cbe3d1;
-            }}
-            
+            body {{ font-family: Arial, sans-serif; padding: 40px; }}
+            .container {{ max-width: 1100px; margin: 0 auto; }}
+            h1 {{ font-size: 20px; margin-bottom: 6px; }}
+            table.report-table {{ width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }}
+            th {{ padding: 10px 8px; text-align: left; font-size: 10px; background: #f5f5f5; border-bottom: 2px solid #ddd; }}
+            td {{ padding: 10px 8px; border-bottom: 1px solid #eee; font-size: 11.5px; word-wrap: break-word; }}
+            .section-row-pending td {{ background: #fff3d6; color: #b8860b; font-weight: 700; text-transform: uppercase; padding: 8px 10px; }}
+            .section-row-completed td {{ background: #e6f4ea; color: #3d7a4e; font-weight: 700; text-transform: uppercase; padding: 8px 10px; }}
             .row-pending td {{ background: #fffdf7; }}
-            .row-pending:hover td {{ background: #fff8e8; }}
             .row-completed td {{ background: #fafdfb; }}
-            .row-completed:hover td {{ background: #f0f8f2; }}
-            
-            .empty-row td {{
-                padding: 15px;
-                text-align: center;
-                color: #999;
-                font-style: italic;
-                font-size: 11px;
-            }}
-            
-            th.checkbox-col {{
-                text-align: center !important;
-            }}
-            td.checkbox-cell {{
-                text-align: center;
-                font-size: 16px;
-                color: #999;
-                font-weight: 400;
-            }}
-            td.empty-check {{
-                color: #ddd;
-                font-size: 12px;
-            }}
-            
-            .footer {{
-                margin-top: 30px;
-                padding-top: 15px;
-                border-top: 1px solid #eee;
-                font-size: 10px;
-                color: #999;
-                display: flex;
-                justify-content: space-between;
-            }}
-            .actions {{
-                margin-top: 30px;
-                text-align: center;
-            }}
-            .btn {{
-                padding: 10px 24px;
-                background: #333;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                font-size: 13px;
-                cursor: pointer;
-                margin: 0 5px;
-            }}
-            .btn:hover {{ background: #555; }}
-            .btn-secondary {{ background: #999; }}
-            .btn-secondary:hover {{ background: #777; }}
-            
-            @media print {{
-                body {{ padding: 15px; }}
-                .actions {{ display: none; }}
-                table.report-table {{ font-size: 10px; }}
-                table.report-table th {{ font-size: 9px; padding: 6px 5px; }}
-                table.report-table td {{ padding: 6px 5px; font-size: 10px; }}
-                tr {{ break-inside: avoid; page-break-inside: avoid; }}
-                .section-row {{ break-inside: avoid; }}
-                td.checkbox-cell {{ font-size: 14px; }}
-                .section-row-pending td {{ background: #fff3d6 !important; color: #b8860b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-                .section-row-completed td {{ background: #e6f4ea !important; color: #3d7a4e !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-                .row-pending td {{ background: #fffdf7 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-                .row-completed td {{ background: #fafdfb !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-            }}
+            .empty-row td {{ padding: 15px; text-align: center; color: #999; font-style: italic; }}
+            th.checkbox-col, td.checkbox-cell {{ text-align: center; }}
+            .actions {{ margin-top: 30px; text-align: center; }}
+            .btn {{ padding: 10px 24px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 0 5px; }}
         </style>
     </head>
     <body>
         <div class="container">
-            <div class="header">
-                <h1>{title}</h1>
-                <div class="meta">{date_str} &nbsp;•&nbsp; {total_count} εργασίες</div>
-            </div>
-            
+            <h1>{title}</h1>
+            <p>{date_str} &nbsp;•&nbsp; {total_count} εργασίες</p>
             <table class="report-table">
                 {colgroup_html}
-                <thead>
-                    <tr>{header_cells}</tr>
-                </thead>
-                <tbody>
-                    {body_rows}
-                </tbody>
+                <thead><tr>{header_cells}</tr></thead>
+                <tbody>{body_rows}</tbody>
             </table>
-            
-            <div class="footer">
-                <div>Production Tasks</div>
-                <div>{datetime.now().strftime('%d/%m/%Y %H:%M')}</div>
-            </div>
-            
             <div class="actions">
                 <button onclick="window.print()" class="btn">Εκτύπωση</button>
-                <button onclick="window.close()" class="btn btn-secondary">Κλείσιμο</button>
+                <button onclick="window.close()" class="btn">Κλείσιμο</button>
             </div>
         </div>
     </body>
@@ -1459,7 +1082,7 @@ def get_project_details(project_name, procurement_df, tasks_database, incoming_d
         "project_tasks": project_tasks
     }
 
-# --- RENDER PROJECTS (MAIN PAGE) ---
+# --- RENDER PROJECTS ---
 def render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df):
     st.header("Projects")
     
@@ -1915,62 +1538,14 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
     else:
         st.markdown("""
         <style>
-            .compact-card {
-                background: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-                padding: 10px;
-                margin-bottom: 8px;
-                box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-                transition: transform 0.15s ease, box-shadow 0.15s ease;
-                height: 100%;
-            }
-            .compact-card:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 3px 8px rgba(0,0,0,0.1);
-            }
-            .compact-card.active {
-                border-left: 3px solid #2e7d32;
-            }
-            .compact-card.shipped {
-                border-left: 3px solid #c62828;
-                opacity: 0.7;
-            }
-            .compact-title {
-                font-size: 12px;
-                font-weight: 700;
-                color: #1a1a1a;
-                margin-bottom: 4px;
-                line-height: 1.2;
-                word-wrap: break-word;
-                min-height: 30px;
-            }
-            .compact-status {
-                font-size: 9px;
-                font-weight: 600;
-                padding: 2px 6px;
-                border-radius: 8px;
-                display: inline-block;
-                margin-bottom: 6px;
-            }
-            .compact-progress-bg {
-                background: #e0e0e0;
-                border-radius: 4px;
-                height: 5px;
-                overflow: hidden;
-                margin: 6px 0;
-            }
-            .compact-progress-fill {
-                height: 100%;
-                border-radius: 4px;
-            }
-            .compact-meta {
-                font-size: 10px;
-                color: #666;
-                margin-top: 4px;
-                display: flex;
-                justify-content: space-between;
-            }
+            .compact-card { background: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+            .compact-card.active { border-left: 3px solid #2e7d32; }
+            .compact-card.shipped { border-left: 3px solid #c62828; opacity: 0.7; }
+            .compact-title { font-size: 12px; font-weight: 700; margin-bottom: 4px; min-height: 30px; }
+            .compact-status { font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 8px; display: inline-block; margin-bottom: 6px; }
+            .compact-progress-bg { background: #e0e0e0; border-radius: 4px; height: 5px; overflow: hidden; margin: 6px 0; }
+            .compact-progress-fill { height: 100%; border-radius: 4px; }
+            .compact-meta { font-size: 10px; color: #666; margin-top: 4px; display: flex; justify-content: space-between; }
         </style>
         """, unsafe_allow_html=True)
         
@@ -2214,14 +1789,13 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     st.markdown("### Bulk Actions")
     
     # *** ΔΙΑΒΑΖΟΥΜΕ ΤΑ CHECKED ΑΠΟ ΤΟ SESSION_STATE ΠΡΙΝ RENDER-ΑΡΟΥΜΕ ΤΑ WIDGETS ***
-    # Αυτό είναι το κλειδί: το session_state έχει ΠΑΝΤΑ την τελευταία κατάσταση
-    # των checkboxes, ακόμα και αν το script rerun-άρει.
-    
-    # Πρώτα, έλεγξε αν υπάρχει pending "apply" από προηγούμενο rerun
     if st.session_state.get("_bulk_apply_pending", False):
-        # Πάρε τα αποθηκευμένα checked keys
         pending_keys = st.session_state.get("_bulk_apply_keys", set())
         pending_date = st.session_state.get("_bulk_apply_date", None)
+        
+        # *** Καθάρισε το παλιό μήνυμα πριν το νέο ***
+        if "_bulk_last_result" in st.session_state:
+            del st.session_state["_bulk_last_result"]
         
         if pending_keys and pending_date:
             changed = 0
@@ -2248,7 +1822,6 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
                         changed_details.append(f"{t['Project']} - {t['Εργασία']}: {old_date} → {pending_date}")
                     changed += 1
             
-            # Καθάρισε το pending flag
             st.session_state["_bulk_apply_pending"] = False
             st.session_state["_bulk_apply_keys"] = set()
             st.session_state["_bulk_apply_date"] = None
@@ -2256,7 +1829,6 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
             if changed > 0:
                 if save_all_assignments_to_sheet():
                     load_assignments_from_sheet.clear()
-                    # Καθάρισε τα checkboxes
                     for t in filtered_tasks:
                         chk_key = make_checkbox_key(t)
                         if chk_key in st.session_state:
@@ -2266,10 +1838,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
                         "date": pending_date,
                         "details": changed_details
                     }
-                    # *** ΛΥΣΗ Γ: μικρή καθυστέρηση για να προλάβει το Google Sheets API ***
-                    import time as _time
-                    _time.sleep(1.5)
-                    st.rerun()
+                    # *** ΧΩΡΙΣ st.rerun() — το επόμενο interaction θα φέρει τα νέα δεδομένα ***
     
     # Δείξε το τελευταίο αποτέλεσμα (αν υπάρχει)
     if "_bulk_last_result" in st.session_state:
@@ -2294,8 +1863,6 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
         st.write("")
         st.write("")
         if st.button("Εφαρμογή σε επιλεγμένες", use_container_width=True, key="mv_bulk_apply_btn"):
-            # *** ΔΙΑΒΑΖΟΥΜΕ ΤΑ CHECKBOXES ΤΩΡΑ ***
-            # Αυτή τη στιγμή, πριν το rerun, το session_state έχει τις σωστές τιμές
             selected_keys = set()
             for t in filtered_tasks:
                 chk_key = make_checkbox_key(t)
@@ -2303,7 +1870,6 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
                     selected_keys.add(chk_key)
             
             if selected_keys:
-                # Αποθήκευσε τα για το επόμενο rerun
                 st.session_state["_bulk_apply_pending"] = True
                 st.session_state["_bulk_apply_keys"] = selected_keys
                 st.session_state["_bulk_apply_date"] = bulk_date
@@ -2337,7 +1903,6 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     for i, t in enumerate(filtered_tasks):
         c0, c1, c2, c3, c4, c5, c6, c7 = st.columns([0.4, 1.5, 2, 1.8, 2.5, 1.3, 0.7, 0.5])
         
-        # *** ΔΙΟΡΘΩΣΗ: Σταθερό chk_key ***
         chk_key = make_checkbox_key(t)
         c0.checkbox("", key=chk_key)
         
@@ -2346,7 +1911,6 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
         c3.caption(t['Εργασία'][:20])
         c4.caption(t['Υπεύθυνος'])
         
-        # *** ΔΙΟΡΘΩΣΗ: Σταθερό date_key ***
         if t["type"] == "item":
             date_key = f"mv_date_item_{t['u_key']}_{t['t_idx']}"
         else:
@@ -2364,7 +1928,6 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
         
         c6.markdown(t['Status'])
         
-        # *** ΔΙΟΡΘΩΣΗ: Σταθερό delete_key ***
         if t["type"] == "item":
             del_key = f"mv_del_item_{t['u_key']}_{t['t_idx']}"
         else:
@@ -2960,10 +2523,7 @@ def render_settings():
     
     st.divider()
     st.subheader("🧹 Καθαρισμός Διπλότυπων")
-    st.caption(
-        "Αφαιρεί διπλότυπες γραμμές από το φύλλο **Assignments** του Google Sheet. "
-        "Χρήσιμο αν έχουν δημιουργηθεί διπλότυπα από ταυτόχρονες αποθηκεύσεις."
-    )
+    st.caption("Αφαιρεί διπλότυπες γραμμές από το φύλλο **Assignments**.")
     col_d1, col_d2 = st.columns([1, 3])
     with col_d1:
         if st.button("Καθαρισμός Διπλότυπων", use_container_width=True, type="secondary"):
@@ -2981,10 +2541,7 @@ def render_settings():
     
     st.divider()
     st.subheader("🧼 Καθαρισμός Κενών Διαστήματων")
-    st.caption(
-        "Καθαρίζει leading/trailing/διπλά spaces από ΟΛΑ τα κελιά του φύλλου **Assignments**. "
-        "Χρήσιμο αν έχεις ύποπτα 'διπλότυπα' που διαφέρουν μόνο σε κρυφά κενά."
-    )
+    st.caption("Καθαρίζει leading/trailing/διπλά spaces από το **Assignments**.")
     col_c1, col_c2 = st.columns([1, 3])
     with col_c1:
         if st.button("Καθαρισμός Spaces", use_container_width=True, type="secondary"):
@@ -3040,12 +2597,9 @@ def main():
             st.session_state["tasks_store"][u_key] = unique_tasks
     
     # *** ΒΗΜΑ 2: Re-map παλιών u_key σε νέα με βάση το item_id ***
-    # Αυτό ΛΥΝΕΙ το bug των stale indexes χωρίς να χάσει δεδομένα.
     if procurement_df is not None and not procurement_df.empty:
         old_store = st.session_state.get("tasks_store", {})
         
-        # Χτίσε mapping: item_id → tasks (κρατώντας ΟΛΑ τα tasks ανεξαρτήτως παλιού u_key)
-        # Χρησιμοποιούμε rsplit("_", 1) γιατί το item_id μπορεί να έχει underscores
         item_to_tasks = {}
         for u_key, tasks in old_store.items():
             parts = u_key.rsplit("_", 1)
@@ -3053,14 +2607,12 @@ def main():
             
             if item_id_key not in item_to_tasks:
                 item_to_tasks[item_id_key] = []
-            # Dedup κατά τη συγχώνευση
             for t in tasks:
                 sig = (t.get("task", ""), t.get("user", ""), str(t.get("date", "")))
                 existing_sigs = {(x.get("task", ""), x.get("user", ""), str(x.get("date", ""))) for x in item_to_tasks[item_id_key]}
                 if sig not in existing_sigs:
                     item_to_tasks[item_id_key].append(t)
         
-        # Χτίσε νέο store με τα σωστά τρέχοντα indexes
         new_store = {}
         for idx, row in procurement_df.iterrows():
             item_id = str(row["ID"])
@@ -3069,12 +2621,9 @@ def main():
             if u_key in new_store:
                 continue
             
-            # Έχουμε tasks από παλιά u_key με αυτό το item_id?
             if item_id in item_to_tasks and len(item_to_tasks[item_id]) > 0:
-                # Κράτα τα παλιά tasks (με τις σωστές τιμές)
                 new_store[u_key] = item_to_tasks[item_id]
             else:
-                # Πάρε από το sheet (fresh)
                 new_store[u_key] = sheet_item_assignments.get(item_id, [])
         
         st.session_state["tasks_store"] = new_store
@@ -3189,4 +2738,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main()                    
