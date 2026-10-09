@@ -2216,6 +2216,18 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
         if pending_keys and pending_date:
             changed = 0
             changed_details = []
+            # --- DEBUG ---
+            st.write(f"🐛 DEBUG: pending_keys = {pending_keys}")
+            st.write(f"🐛 DEBUG: pending_date = {pending_date}")
+            st.write(f"🐛 DEBUG: filtered_tasks count = {len(filtered_tasks)}")
+            matching = 0
+            for t in filtered_tasks:
+                chk_key = make_checkbox_key(t)
+                if chk_key in pending_keys:
+                    matching += 1
+                    st.write(f"🐛 MATCH: {chk_key} → task={t['Εργασία']}, date={t['Ημερομηνία']}")
+            st.write(f"🐛 DEBUG: matched {matching} tasks")
+            # --- END DEBUG ---
             for t in filtered_tasks:
                 chk_key = make_checkbox_key(t)
                 if chk_key in pending_keys:
