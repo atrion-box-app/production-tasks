@@ -200,6 +200,18 @@ def make_checkbox_key(task):
     else:
         return f"mv_chk_proj_{task['p_key']}_{task['task_name']}"
 
+def get_selected_checkbox_keys(all_tasks):
+    """
+    Επιστρέφει set με τα chk_keys που είναι ΤΩΡΑ τσεκαρισμένα,
+    διαβάζοντας από το session_state. Χρησιμοποιείται για να μην
+    χάνονται τα checkboxes όταν γίνεται rerun.
+    """
+    selected = set()
+    for t in all_tasks:
+        chk_key = make_checkbox_key(t)
+        if st.session_state.get(chk_key, False):
+            selected.add(chk_key)
+    return selected
 
 # --- DATA LOADING ---
 @st.cache_data(ttl=60, show_spinner=False)
@@ -2158,6 +2170,72 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     st.divider()
     
     st.markdown("### Bulk Actions")
+    
+    # *** ΔΙΑΒΑΖΟΥΜΕ ΤΑ CHECKED ΑΠΟ ΤΟ SESSION_STATE ΠΡΙΝ RENDER-ΑΡΟΥΜΕ ΤΑ WIDGETS ***
+    # Αυτό είναι το κλειδί: το session_state έχει ΠΑΝΤΑ την τελευταία κατάσταση
+    # των checkboxes, ακόμα και αν το script rerun-άρει.
+    
+    # Πρώτα, έλεγξε αν υπάρχει pending "apply" από προηγούμενο rerun
+    if st.session_state.get("_bulk_apply_pending", False):
+        # Πάρε τα αποθηκευμένα checked keys
+        pending_keys = st.session_state.get("_bulk_apply_keys", set())
+        pending_date = st.session_state.get("_bulk_apply_date", None)
+        
+        if pending_keys and pending_date:
+            changed = 0
+            changed_details = []
+            for t in filtered_tasks:
+                chk_key = make_checkbox_key(t)
+                if chk_key in pending_keys:
+                    if t["type"] == "item":
+                        if t["u_key"] not in st.session_state["tasks_store"]:
+                            continue
+                        if t["t_idx"] >= len(st.session_state["tasks_store"][t["u_key"]]):
+                            continue
+                        old_date = st.session_state["tasks_store"][t["u_key"]][t["t_idx"]].get("date")
+                        st.session_state["tasks_store"][t["u_key"]][t["t_idx"]]["date"] = pending_date
+                        changed_details.append(f"{t['Project']} - {t['Εργασία']}: {old_date} → {pending_date}")
+                    else:
+                        if t["p_key"] not in st.session_state["project_tasks_store"]:
+                            continue
+                        if t["task_name"] not in st.session_state["project_tasks_store"][t["p_key"]]:
+                            continue
+                        old_date = st.session_state["project_tasks_store"][t["p_key"]][t["task_name"]].get("date")
+                        st.session_state["project_tasks_store"][t["p_key"]][t["task_name"]]["date"] = pending_date
+                        changed_details.append(f"{t['Project']} - {t['Εργασία']}: {old_date} → {pending_date}")
+                    changed += 1
+            
+            # Καθάρισε το pending flag
+            st.session_state["_bulk_apply_pending"] = False
+            st.session_state["_bulk_apply_keys"] = set()
+            st.session_state["_bulk_apply_date"] = None
+            
+            if changed > 0:
+                if save_all_assignments_to_sheet():
+                    load_assignments_from_sheet.clear()
+                    # Καθάρισε τα checkboxes
+                    for t in filtered_tasks:
+                        chk_key = make_checkbox_key(t)
+                        if chk_key in st.session_state:
+                            st.session_state[chk_key] = False
+                    st.session_state["_bulk_last_result"] = {
+                        "changed": changed,
+                        "date": pending_date,
+                        "details": changed_details
+                    }
+                    st.rerun()
+    
+    # Δείξε το τελευταίο αποτέλεσμα (αν υπάρχει)
+    if "_bulk_last_result" in st.session_state:
+        result = st.session_state["_bulk_last_result"]
+        st.success(f"✅ Άλλαξε ημερομηνία σε **{result['changed']}** εργασίες → **{result['date'].strftime('%d/%m/%Y')}**")
+        with st.expander("Λεπτομέρειες αλλαγών"):
+            for detail in result["details"]:
+                st.write(f"• {detail}")
+        if st.button("Καθαρισμός μηνύματος", key="clear_bulk_msg"):
+            del st.session_state["_bulk_last_result"]
+            st.rerun()
+    
     col_b1, col_b2, col_b3 = st.columns([1, 1, 2])
     with col_b1:
         bulk_date = st.date_input(
@@ -2170,47 +2248,20 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
         st.write("")
         st.write("")
         if st.button("Εφαρμογή σε επιλεγμένες", use_container_width=True, key="mv_bulk_apply_btn"):
-            changed = 0
-            changed_details = []
-            # *** ΔΙΟΡΘΩΣΗ: Χρησιμοποιούμε make_checkbox_key για σταθερό key ***
+            # *** ΔΙΑΒΑΖΟΥΜΕ ΤΑ CHECKBOXES ΤΩΡΑ ***
+            # Αυτή τη στιγμή, πριν το rerun, το session_state έχει τις σωστές τιμές
+            selected_keys = set()
             for t in filtered_tasks:
                 chk_key = make_checkbox_key(t)
                 if st.session_state.get(chk_key, False):
-                    if t["type"] == "item":
-                        # *** ΑΣΦΑΛΕΙΑ: Έλεγχος ότι το u_key υπάρχει ***
-                        if t["u_key"] not in st.session_state["tasks_store"]:
-                            continue
-                        if t["t_idx"] >= len(st.session_state["tasks_store"][t["u_key"]]):
-                            continue
-                        old_date = st.session_state["tasks_store"][t["u_key"]][t["t_idx"]].get("date")
-                        st.session_state["tasks_store"][t["u_key"]][t["t_idx"]]["date"] = bulk_date
-                        changed_details.append(f"{t['Project']} - {t['Εργασία']}: {old_date} → {bulk_date}")
-                    else:
-                        # *** ΑΣΦΑΛΕΙΑ: Έλεγχος ότι το p_key & task_name υπάρχουν ***
-                        if t["p_key"] not in st.session_state["project_tasks_store"]:
-                            continue
-                        if t["task_name"] not in st.session_state["project_tasks_store"][t["p_key"]]:
-                            continue
-                        old_date = st.session_state["project_tasks_store"][t["p_key"]][t["task_name"]].get("date")
-                        st.session_state["project_tasks_store"][t["p_key"]][t["task_name"]]["date"] = bulk_date
-                        changed_details.append(f"{t['Project']} - {t['Εργασία']}: {old_date} → {bulk_date}")
-                    changed += 1
+                    selected_keys.add(chk_key)
             
-            if changed > 0:
-                if save_all_assignments_to_sheet():
-                    load_assignments_from_sheet.clear()
-                    # Clear the checkbox states
-                    for t in filtered_tasks:
-                        chk_key = make_checkbox_key(t)
-                        if chk_key in st.session_state:
-                            st.session_state[chk_key] = False
-                    st.success(f"✅ Άλλαξε ημερομηνία σε **{changed}** εργασίες → **{bulk_date.strftime('%d/%m/%Y')}**")
-                    with st.expander("Λεπτομέρειες αλλαγών"):
-                        for detail in changed_details:
-                            st.write(f"• {detail}")
-                    st.rerun()
-                else:
-                    st.error("❌ Σφάλμα κατά την αποθήκευση")
+            if selected_keys:
+                # Αποθήκευσε τα για το επόμενο rerun
+                st.session_state["_bulk_apply_pending"] = True
+                st.session_state["_bulk_apply_keys"] = selected_keys
+                st.session_state["_bulk_apply_date"] = bulk_date
+                st.rerun()
             else:
                 st.warning("⚠️ Δεν επιλέχθηκε καμία εργασία. Τσέκαρε τα checkboxes πρώτα.")
     
