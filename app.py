@@ -2170,26 +2170,47 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     st.markdown("### Bulk Actions")
     col_b1, col_b2, col_b3 = st.columns([1, 1, 2])
     with col_b1:
-        bulk_date = st.date_input("Νέα ημερομηνία:", value=date.today(), format="DD/MM/YYYY", key="mv_bulk_date")
+        bulk_date = st.date_input(
+            "Νέα ημερομηνία:",
+            value=date.today(),
+            format="DD/MM/YYYY",
+            key="mv_bulk_date"
+        )
     with col_b2:
         st.write("")
         st.write("")
-        if st.button("Εφαρμογή σε επιλεγμένες", use_container_width=True):
+        if st.button("Εφαρμογή σε επιλεγμένες", use_container_width=True, key="mv_bulk_apply_btn"):
             changed = 0
+            changed_details = []
             for t in filtered_tasks:
                 chk_key = f"mv_chk_{t.get('u_key', t.get('p_key'))}_{t.get('t_idx', t.get('task_name'))}"
                 if st.session_state.get(chk_key, False):
                     if t["type"] == "item":
+                        old_date = st.session_state["tasks_store"][t["u_key"]][t["t_idx"]].get("date")
                         st.session_state["tasks_store"][t["u_key"]][t["t_idx"]]["date"] = bulk_date
+                        changed_details.append(f"{t['Project']} - {t['Εργασία']}: {old_date} → {bulk_date}")
                     else:
+                        old_date = st.session_state["project_tasks_store"][t["p_key"]][t["task_name"]].get("date")
                         st.session_state["project_tasks_store"][t["p_key"]][t["task_name"]]["date"] = bulk_date
+                        changed_details.append(f"{t['Project']} - {t['Εργασία']}: {old_date} → {bulk_date}")
                     changed += 1
+            
             if changed > 0:
-                save_all_assignments_to_sheet()
-                st.success(f"Άλλαξε ημερομηνία σε {changed} εργασίες!")
-                st.rerun()
+                if save_all_assignments_to_sheet():
+                    # Force clear the checkbox states so they don't persist
+                    for t in filtered_tasks:
+                        chk_key = f"mv_chk_{t.get('u_key', t.get('p_key'))}_{t.get('t_idx', t.get('task_name'))}"
+                        if chk_key in st.session_state:
+                            st.session_state[chk_key] = False
+                    st.success(f"✅ Άλλαξε ημερομηνία σε **{changed}** εργασίες → **{bulk_date.strftime('%d/%m/%Y')}**")
+                    with st.expander("Λεπτομέρειες αλλαγών"):
+                        for detail in changed_details:
+                            st.write(f"• {detail}")
+                    st.rerun()
+                else:
+                    st.error("❌ Σφάλμα κατά την αποθήκευση")
             else:
-                st.warning("Δεν επιλέχθηκε καμία εργασία.")
+                st.warning("⚠️ Δεν επιλέχθηκε καμία εργασία. Τσέκαρε τα checkboxes πρώτα.")
     
     with col_b3:
         st.write("")
