@@ -170,16 +170,12 @@ FIXED_PROJECT_TASKS = [
 def clean_project_name(name):
     """
     Καθαρίζει το όνομα project από markdown αστεράκια (**) και extra spaces.
-    Χρησιμοποιείται για να αποφευχθούν προβλήματα με bold rendering στο Streamlit
-    και για να διασφαλιστεί ότι τα matching μεταξύ sheets γίνονται σωστά.
     """
     if name is None:
         return ""
     s = str(name).strip()
-    # Αφαιρεί ** από την αρχή και το τέλος (με ή χωρίς κενά)
     s = re.sub(r'^\*+\s*', '', s)
     s = re.sub(r'\s*\*+$', '', s)
-    # Αφαιρεί τυχόν υπόλοιπα ** στη μέση
     s = s.replace('**', '')
     return s.strip()
 
@@ -188,17 +184,13 @@ def strip_all_fields(value):
     """
     Καθαρίζει ένα string από leading/trailing spaces, πολλαπλά spaces,
     και μη-ορατούς χαρακτήρες (non-breaking space, tabs, κλπ).
-    Αν δεν είναι string, το επιστρέφει ως έχει (εκτός None → "").
     """
     if value is None:
         return ""
     if not isinstance(value, str):
         return value
-    # Αντικαθιστά non-breaking spaces, tabs, newlines με κανονικό space
     s = value.replace('\xa0', ' ').replace('\t', ' ').replace('\n', ' ').replace('\r', ' ')
-    # Συμπιέζει πολλαπλά spaces σε ένα
     s = re.sub(r'\s+', ' ', s)
-    # Αφαιρεί leading/trailing
     return s.strip()
 
 # --- DATA LOADING ---
@@ -214,10 +206,8 @@ def load_all_data(version=0):
             "Αναμενόμενη Ημ. Παραλαβής", "Αναμενόμενη Ποσότητα Παραλαβής", "Status Procurement"
         ]
         df_proc = df_proc.fillna("-")
-        # Καθαρισμός project names από markdown αστεράκια
         if "Project" in df_proc.columns:
             df_proc["Project"] = df_proc["Project"].apply(clean_project_name)
-        # Καθαρισμός ΟΛΩΝ των string columns από leading/trailing spaces
         for col in df_proc.select_dtypes(include=['object']).columns:
             df_proc[col] = df_proc[col].apply(strip_all_fields)
     except Exception:
@@ -235,7 +225,6 @@ def load_all_data(version=0):
             df_incoming["Shipping Status"] = df_incoming["Shipping Status"].astype(str).str.strip()
             df_incoming = df_incoming[df_incoming["Project"] != ""]
             df_incoming = df_incoming[df_incoming["Project"] != "nan"]
-            # Καθαρισμός project names από markdown αστεράκια
             df_incoming["Project"] = df_incoming["Project"].apply(clean_project_name)
     except Exception as e:
         st.warning(f"Could not load Incoming Projects List: {e}")
@@ -325,7 +314,6 @@ def load_assignments_from_sheet():
                 p_key = f"proj_{p_name}"
                 if p_key not in assignments_proj:
                     assignments_proj[p_key] = {}
-                # Το dict overwrite κρατά μόνο την τελευταία εγγραφή για κάθε task_name
                 assignments_proj[p_key][task_name] = {
                     "active": True,
                     "done": done,
@@ -445,7 +433,7 @@ def save_all_assignments_to_sheet():
 
         # --- DEDUPLICATION ---
         seen = set()
-        deduped_rows = [rows[0]]  # header
+        deduped_rows = [rows[0]]
         for r in rows[1:]:
             sig = tuple(str(x) for x in r)
             if sig not in seen:
@@ -453,11 +441,16 @@ def save_all_assignments_to_sheet():
                 deduped_rows.append(r)
         removed_count = len(rows) - len(deduped_rows)
         rows = deduped_rows
-        # --- END DEDUPLICATION ---
 
         sheet.clear()
         sheet.update(range_name="A1", values=rows)
         st.session_state.last_save = datetime.now()
+        
+        # --- ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ: ΚΑΘΑΡΙΣΜΟΣ CACHE ΜΕΤΑ ΑΠΟ ΚΑΘΕ SAVE ---
+        # Έτσι ώστε το επόμενο load_assignments_from_sheet() να φέρει ΦΡΕΣΚΑ δεδομένα
+        # από το sheet και όχι cached παλιά.
+        load_assignments_from_sheet.clear()
+        # --- END ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ ---
         
         # --- AUDIT LOG ---
         if "audit_log" not in st.session_state:
@@ -480,7 +473,6 @@ def save_all_assignments_to_sheet():
         st.error(f"Σφάλμα κατά την αποθήκευση: {e}")
         return False
 
-
 def cleanup_duplicates_in_sheet():
     """
     Καθαρίζει το Assignments sheet από διπλότυπες γραμμές.
@@ -501,13 +493,11 @@ def cleanup_duplicates_in_sheet():
         seen = set()
         clean = [header]
         for row in all_values[1:]:
-            # Αγνοούμε εντελώς κενές γραμμές
             if not any(str(c).strip() for c in row):
                 continue
-            # Καθαρίζουμε τα πεδία πριν το comparison για να πιάσουμε trailing spaces
             normalized = []
             for i, c in enumerate(row):
-                if i in (4, 5, 6):  # Assigned_Date, Status_Done, Task_Type
+                if i in (4, 5, 6):
                     normalized.append(str(c).strip())
                 else:
                     normalized.append(strip_all_fields(str(c)))
@@ -526,7 +516,10 @@ def cleanup_duplicates_in_sheet():
         sheet.clear()
         sheet.update(range_name="A1", values=clean)
         
-        # Log
+        # --- ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ: invalidate cache ---
+        load_assignments_from_sheet.clear()
+        # --- END ---
+        
         if "audit_log" not in st.session_state:
             st.session_state.audit_log = []
         st.session_state.audit_log.append({
@@ -563,16 +556,14 @@ def strip_spaces_in_sheet():
         changed = 0
         
         for row in all_values[1:]:
-            # Αγνοούμε εντελώς κενές γραμμές
             if not any(str(c).strip() for c in row):
                 continue
             
             cleaned_row = []
             for i, cell in enumerate(row):
-                if i == 4:  # Assigned_Date - κρατάμε ως έχει (μήπως έχει ώρα)
+                if i == 4:
                     cleaned_row.append(str(cell))
                 else:
-                    # Project, Item_ID, Task_Name, Assigned_User, Status_Done, Task_Type → strip
                     cleaned_row.append(strip_all_fields(str(cell)))
             
             if cleaned_row != row:
@@ -585,7 +576,10 @@ def strip_spaces_in_sheet():
         sheet.clear()
         sheet.update(range_name="A1", values=clean_rows)
         
-        # Log
+        # --- ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ: invalidate cache ---
+        load_assignments_from_sheet.clear()
+        # --- END ---
+        
         if "audit_log" not in st.session_state:
             st.session_state.audit_log = []
         st.session_state.audit_log.append({
@@ -2197,7 +2191,10 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
             
             if changed > 0:
                 if save_all_assignments_to_sheet():
-                    # Force clear the checkbox states so they don't persist
+                    # --- ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ: Force reload μετά από save ---
+                    load_assignments_from_sheet.clear()
+                    # --- END ---
+                    # Clear the checkbox states
                     for t in filtered_tasks:
                         chk_key = f"mv_chk_{t.get('u_key', t.get('p_key'))}_{t.get('t_idx', t.get('task_name'))}"
                         if chk_key in st.session_state:
@@ -2256,6 +2253,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
             else:
                 st.session_state["project_tasks_store"][t["p_key"]][t["task_name"]]["date"] = new_date
             save_all_assignments_to_sheet()
+            load_assignments_from_sheet.clear()
             st.rerun()
         
         c6.markdown(t['Status'])
@@ -2266,6 +2264,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
             else:
                 del st.session_state["project_tasks_store"][t["p_key"]][t["task_name"]]
             save_all_assignments_to_sheet()
+            load_assignments_from_sheet.clear()
             st.rerun()
     
     st.divider()
@@ -2843,10 +2842,10 @@ def render_settings():
     with col2:
         if st.button("Επαναφόρτωση", use_container_width=True):
             st.cache_data.clear()
+            load_assignments_from_sheet.clear()
             st.session_state.data_version = st.session_state.get("data_version", 0) + 1
             st.rerun()
     
-    # --- ΝΕΟ: ΚΑΘΑΡΙΣΜΟΣ ΔΙΠΛΟΤΥΠΩΝ ---
     st.divider()
     st.subheader("🧹 Καθαρισμός Διπλότυπων")
     st.caption(
@@ -2862,12 +2861,12 @@ def render_settings():
                 if removed > 0:
                     st.success(f"✅ {msg}")
                     st.cache_data.clear()
+                    load_assignments_from_sheet.clear()
                 else:
                     st.info(f"ℹ️ {msg}")
             else:
                 st.error(f"❌ {msg}")
     
-    # --- ΝΕΟ: ΚΑΘΑΡΙΣΜΟΣ ΚΕΝΩΝ ΔΙΑΣΤΗΜΑΤΩΝ ---
     st.divider()
     st.subheader("🧼 Καθαρισμός Κενών Διαστήματων")
     st.caption(
@@ -2883,6 +2882,7 @@ def render_settings():
                 if changed > 0:
                     st.success(f"✅ {msg}")
                     st.cache_data.clear()
+                    load_assignments_from_sheet.clear()
                 else:
                     st.info(f"ℹ️ {msg}")
             else:
@@ -2891,7 +2891,6 @@ def render_settings():
     st.divider()
     st.subheader("Audit Log")
     if "audit_log" in st.session_state and st.session_state.audit_log:
-        # Ταξινόμηση: νεότερα πρώτα
         log_df = pd.DataFrame(st.session_state.audit_log[::-1])
         st.dataframe(log_df, use_container_width=True, hide_index=True)
     else:
