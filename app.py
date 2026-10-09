@@ -1874,30 +1874,65 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
             st.session_state["_bulk_apply_keys"] = set()
             st.session_state["_bulk_apply_date"] = None
             
-            if changed > 0:
-                if save_all_assignments_to_sheet():
-                    load_assignments_from_sheet.clear()
-                    for t in filtered_tasks:
-                        chk_key = make_checkbox_key(t)
-                        if chk_key in st.session_state:
-                            st.session_state[chk_key] = False
-                    st.session_state["_bulk_last_result"] = {
-                        "changed": changed,
-                        "date": pending_date,
-                        "details": changed_details
-                    }
-                    # *** ΧΩΡΙΣ st.rerun() — το επόμενο interaction θα φέρει τα νέα δεδομένα ***
+        if changed > 0:
+            # *** ΜΟΝΟ αλλαγή στη μνήμη — ΧΩΡΙΣ auto-save ***
+            st.session_state["_bulk_last_result"] = {
+                "changed": changed,
+                "date": pending_date,
+                "details": changed_details,
+                "saved": False
+            }
+            # Καθάρισε τα checkboxes
+            for t in filtered_tasks:
+                chk_key = make_checkbox_key(t)
+                if chk_key in st.session_state:
+                    st.session_state[chk_key] = False
+            # *** END ***
     
     # Δείξε το τελευταίο αποτέλεσμα (αν υπάρχει)
     if "_bulk_last_result" in st.session_state:
         result = st.session_state["_bulk_last_result"]
-        st.success(f"✅ Άλλαξε ημερομηνία σε **{result['changed']}** εργασίες → **{result['date'].strftime('%d/%m/%Y')}**")
+        is_saved = result.get("saved", False)
+        
+        if is_saved:
+            st.success(f"✅ **ΑΠΟΘΗΚΕΥΤΗΚΕ** — Άλλαξε ημερομηνία σε **{result['changed']}** εργασίες → **{result['date'].strftime('%d/%m/%Y')}**")
+        else:
+            st.warning(f"⚠️ **ΑΛΛΑΓΕΣ ΣΤΗ ΜΝΗΜΗ** — {result['changed']} εργασίες → **{result['date'].strftime('%d/%m/%Y')}**. Πάτησε **💾 Αποθήκευση** για να σωθούν.")
+        
         with st.expander("Λεπτομέρειες αλλαγών"):
             for detail in result["details"]:
                 st.write(f"• {detail}")
-        if st.button("Καθαρισμός μηνύματος", key="clear_bulk_msg"):
-            del st.session_state["_bulk_last_result"]
-            st.rerun()
+        
+        col_msg1, col_msg2, col_msg3 = st.columns([1, 1, 1])
+        with col_msg1:
+            if not is_saved:
+                if st.button("💾 Αποθήκευση στο Sheet", key="bulk_save_btn", type="primary", use_container_width=True):
+                    with st.spinner("Αποθήκευση..."):
+                        if save_all_assignments_to_sheet():
+                            load_assignments_from_sheet.clear()
+                            st.session_state["_bulk_last_result"]["saved"] = True
+                            st.success("✅ Αποθηκεύτηκε στο Excel!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Σφάλμα κατά την αποθήκευση")
+        with col_msg2:
+            if st.button("🔄 Ανανέωση από Sheet", key="bulk_refresh_btn", use_container_width=True):
+                load_assignments_from_sheet.clear()
+                fresh_assignments, _ = load_assignments_from_sheet()
+                if 'procurement_df' in st.session_state and not st.session_state.procurement_df.empty:
+                    new_store = {}
+                    for idx, row in st.session_state.procurement_df.iterrows():
+                        item_id = str(row["ID"])
+                        u_key = f"{item_id}_{idx}"
+                        new_store[u_key] = fresh_assignments.get(item_id, [])
+                    st.session_state["tasks_store"] = new_store
+                if "_bulk_last_result" in st.session_state:
+                    del st.session_state["_bulk_last_result"]
+                st.rerun()
+        with col_msg3:
+            if st.button("✕ Καθαρισμός μηνύματος", key="clear_bulk_msg", use_container_width=True):
+                del st.session_state["_bulk_last_result"]
+                st.rerun()
     
     col_b1, col_b2, col_b3 = st.columns([1, 1, 2])
     with col_b1:
