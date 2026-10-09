@@ -168,9 +168,7 @@ FIXED_PROJECT_TASKS = [
 
 # --- HELPERS ---
 def clean_project_name(name):
-    """
-    Καθαρίζει το όνομα project από markdown αστεράκια (**) και extra spaces.
-    """
+    """Καθαρίζει το όνομα project από markdown αστεράκια (**) και extra spaces."""
     if name is None:
         return ""
     s = str(name).strip()
@@ -181,10 +179,7 @@ def clean_project_name(name):
 
 
 def strip_all_fields(value):
-    """
-    Καθαρίζει ένα string από leading/trailing spaces, πολλαπλά spaces,
-    και μη-ορατούς χαρακτήρες (non-breaking space, tabs, κλπ).
-    """
+    """Καθαρίζει ένα string από leading/trailing spaces, πολλαπλά spaces, και μη-ορατούς χαρακτήρες."""
     if value is None:
         return ""
     if not isinstance(value, str):
@@ -192,6 +187,19 @@ def strip_all_fields(value):
     s = value.replace('\xa0', ' ').replace('\t', ' ').replace('\n', ' ').replace('\r', ' ')
     s = re.sub(r'\s+', ' ', s)
     return s.strip()
+
+
+def make_checkbox_key(task):
+    """
+    Δημιουργεί ένα ΣΤΑΘΕΡΟ key για το checkbox ενός task.
+    Χρησιμοποιεί ΜΟΝΟ το u_key/p_key + t_idx/task_name (χωρίς τη θέση στη λίστα),
+    ώστε να μην αλλάζει όταν αλλάζει η σειρά των tasks (π.χ. μετά από date change).
+    """
+    if task["type"] == "item":
+        return f"mv_chk_item_{task['u_key']}_{task['t_idx']}"
+    else:
+        return f"mv_chk_proj_{task['p_key']}_{task['task_name']}"
+
 
 # --- DATA LOADING ---
 @st.cache_data(ttl=60, show_spinner=False)
@@ -447,8 +455,6 @@ def save_all_assignments_to_sheet():
         st.session_state.last_save = datetime.now()
         
         # --- ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ: ΚΑΘΑΡΙΣΜΟΣ CACHE ΜΕΤΑ ΑΠΟ ΚΑΘΕ SAVE ---
-        # Έτσι ώστε το επόμενο load_assignments_from_sheet() να φέρει ΦΡΕΣΚΑ δεδομένα
-        # από το sheet και όχι cached παλιά.
         load_assignments_from_sheet.clear()
         # --- END ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ ---
         
@@ -474,10 +480,7 @@ def save_all_assignments_to_sheet():
         return False
 
 def cleanup_duplicates_in_sheet():
-    """
-    Καθαρίζει το Assignments sheet από διπλότυπες γραμμές.
-    Επιστρέφει (success: bool, removed: int, total: int, message: str)
-    """
+    """Καθαρίζει το Assignments sheet από διπλότυπες γραμμές."""
     gc, err = get_gspread_client()
     if not gc:
         return False, 0, 0, f"Σφάλμα σύνδεσης: {err}"
@@ -516,9 +519,7 @@ def cleanup_duplicates_in_sheet():
         sheet.clear()
         sheet.update(range_name="A1", values=clean)
         
-        # --- ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ: invalidate cache ---
         load_assignments_from_sheet.clear()
-        # --- END ---
         
         if "audit_log" not in st.session_state:
             st.session_state.audit_log = []
@@ -536,10 +537,7 @@ def cleanup_duplicates_in_sheet():
 
 
 def strip_spaces_in_sheet():
-    """
-    Καθαρίζει leading/trailing/διπλά spaces από όλα τα κελιά του Assignments.
-    Επιστρέφει (success: bool, changed: int, message: str)
-    """
+    """Καθαρίζει spaces από όλα τα κελιά του Assignments."""
     gc, err = get_gspread_client()
     if not gc:
         return False, 0, f"Σφάλμα σύνδεσης: {err}"
@@ -576,9 +574,7 @@ def strip_spaces_in_sheet():
         sheet.clear()
         sheet.update(range_name="A1", values=clean_rows)
         
-        # --- ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ: invalidate cache ---
         load_assignments_from_sheet.clear()
-        # --- END ---
         
         if "audit_log" not in st.session_state:
             st.session_state.audit_log = []
@@ -2176,14 +2172,25 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
         if st.button("Εφαρμογή σε επιλεγμένες", use_container_width=True, key="mv_bulk_apply_btn"):
             changed = 0
             changed_details = []
+            # *** ΔΙΟΡΘΩΣΗ: Χρησιμοποιούμε make_checkbox_key για σταθερό key ***
             for t in filtered_tasks:
-                chk_key = f"mv_chk_{t.get('u_key', t.get('p_key'))}_{t.get('t_idx', t.get('task_name'))}"
+                chk_key = make_checkbox_key(t)
                 if st.session_state.get(chk_key, False):
                     if t["type"] == "item":
+                        # *** ΑΣΦΑΛΕΙΑ: Έλεγχος ότι το u_key υπάρχει ***
+                        if t["u_key"] not in st.session_state["tasks_store"]:
+                            continue
+                        if t["t_idx"] >= len(st.session_state["tasks_store"][t["u_key"]]):
+                            continue
                         old_date = st.session_state["tasks_store"][t["u_key"]][t["t_idx"]].get("date")
                         st.session_state["tasks_store"][t["u_key"]][t["t_idx"]]["date"] = bulk_date
                         changed_details.append(f"{t['Project']} - {t['Εργασία']}: {old_date} → {bulk_date}")
                     else:
+                        # *** ΑΣΦΑΛΕΙΑ: Έλεγχος ότι το p_key & task_name υπάρχουν ***
+                        if t["p_key"] not in st.session_state["project_tasks_store"]:
+                            continue
+                        if t["task_name"] not in st.session_state["project_tasks_store"][t["p_key"]]:
+                            continue
                         old_date = st.session_state["project_tasks_store"][t["p_key"]][t["task_name"]].get("date")
                         st.session_state["project_tasks_store"][t["p_key"]][t["task_name"]]["date"] = bulk_date
                         changed_details.append(f"{t['Project']} - {t['Εργασία']}: {old_date} → {bulk_date}")
@@ -2191,12 +2198,10 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
             
             if changed > 0:
                 if save_all_assignments_to_sheet():
-                    # --- ΚΡΙΣΙΜΗ ΔΙΟΡΘΩΣΗ: Force reload μετά από save ---
                     load_assignments_from_sheet.clear()
-                    # --- END ---
                     # Clear the checkbox states
                     for t in filtered_tasks:
-                        chk_key = f"mv_chk_{t.get('u_key', t.get('p_key'))}_{t.get('t_idx', t.get('task_name'))}"
+                        chk_key = make_checkbox_key(t)
                         if chk_key in st.session_state:
                             st.session_state[chk_key] = False
                     st.success(f"✅ Άλλαξε ημερομηνία σε **{changed}** εργασίες → **{bulk_date.strftime('%d/%m/%Y')}**")
@@ -2233,11 +2238,10 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     h7.markdown("**🗑️**")
     
     for i, t in enumerate(filtered_tasks):
-        row_id = f"mv_row_{i}_{t.get('u_key', t.get('p_key'))}_{t.get('t_idx', t.get('task_name'))}"
-        
         c0, c1, c2, c3, c4, c5, c6, c7 = st.columns([0.4, 1.5, 2, 1.8, 2.5, 1.3, 0.7, 0.5])
         
-        chk_key = f"mv_chk_{t.get('u_key', t.get('p_key'))}_{t.get('t_idx', t.get('task_name'))}"
+        # *** ΔΙΟΡΘΩΣΗ: Σταθερό chk_key ***
+        chk_key = make_checkbox_key(t)
         c0.checkbox("", key=chk_key)
         
         c1.caption(f"**{t['Project'][:18]}{'...' if len(t['Project'])>18 else ''}**")
@@ -2245,7 +2249,12 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
         c3.caption(t['Εργασία'][:20])
         c4.caption(t['Υπεύθυνος'])
         
-        date_key = f"mv_date_{t.get('u_key', t.get('p_key'))}_{t.get('t_idx', t.get('task_name'))}"
+        # *** ΔΙΟΡΘΩΣΗ: Σταθερό date_key ***
+        if t["type"] == "item":
+            date_key = f"mv_date_item_{t['u_key']}_{t['t_idx']}"
+        else:
+            date_key = f"mv_date_proj_{t['p_key']}_{t['task_name']}"
+        
         new_date = c5.date_input("", value=t['Ημερομηνία'], format="DD/MM/YYYY", key=date_key, label_visibility="collapsed")
         if new_date != t['Ημερομηνία']:
             if t["type"] == "item":
@@ -2258,7 +2267,13 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
         
         c6.markdown(t['Status'])
         
-        if c7.button("🗑️", key=f"mv_del_{t.get('u_key', t.get('p_key'))}_{t.get('t_idx', t.get('task_name'))}"):
+        # *** ΔΙΟΡΘΩΣΗ: Σταθερό delete_key ***
+        if t["type"] == "item":
+            del_key = f"mv_del_item_{t['u_key']}_{t['t_idx']}"
+        else:
+            del_key = f"mv_del_proj_{t['p_key']}_{t['task_name']}"
+        
+        if c7.button("🗑️", key=del_key):
             if t["type"] == "item":
                 st.session_state["tasks_store"][t["u_key"]].pop(t["t_idx"])
             else:
