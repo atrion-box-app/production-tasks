@@ -1916,13 +1916,6 @@ def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
         due_date = parse_date_safe(row.get("Αναμενόμενη Ημ. Παραλαβής", "-"))
         
         if date_mode == "Μόνο αυτή η μέρα":
-    
-    filtered_materials = []
-    
-    for idx, row in procurement_df.iterrows():
-        due_date = parse_date_safe(row.get("Αναμενόμενη Ημ. Παραλαβής", "-"))
-        
-        if date_mode == "Μόνο αυτή η μέρα":
             if due_date != target_date:
                 continue
         elif date_mode == "Επόμενες 7 μέρες":
