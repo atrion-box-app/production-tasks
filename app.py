@@ -96,15 +96,19 @@ def login_form():
                     st.error("Λάθος στοιχεία")
 
 def logout():
-    total_tasks_in_memory = sum(len(tasks) for tasks in st.session_state.get("tasks_store", {}).values())
-    total_proj_tasks_in_memory = sum(
-        len([t for t in p_dict.values() if isinstance(t, dict) and t.get("active", False)])
-        for p_dict in st.session_state.get("project_tasks_store", {}).values()
-        if isinstance(p_dict, dict)
-    )
-    
-    if total_tasks_in_memory > 0 or total_proj_tasks_in_memory > 0:
-        save_all_assignments_to_sheet()
+    # *** ΝΕΟ: Δεν κάνει auto-save στο logout — ρωτάει τον χρήστη ***
+    # Αν υπάρχουν unsaved changes, εμφανίζει warning
+    if st.session_state.get("_has_unsaved_changes", False):
+        st.warning("⚠️ Έχεις μη αποθηκευμένες αλλαγές! Πάτησε 'Αποθήκευση' πριν βγεις.")
+        # Δεν κάνει logout αυτόματα
+        if st.button("Logout χωρίς αποθήκευση"):
+            st.session_state.authenticated = False
+            st.session_state.username = None
+            st.session_state["_has_unsaved_changes"] = False
+            st.rerun()
+        if st.button("Ακύρωση"):
+            st.rerun()
+        return
     
     st.session_state.authenticated = False
     st.session_state.username = None
@@ -194,13 +198,9 @@ def make_checkbox_key(task):
         return f"mv_chk_proj_{task['p_key']}_{task['task_name']}"
 
 
-def get_selected_checkbox_keys(all_tasks):
-    selected = set()
-    for t in all_tasks:
-        chk_key = make_checkbox_key(t)
-        if st.session_state.get(chk_key, False):
-            selected.add(chk_key)
-    return selected
+def mark_unsaved_changes():
+    """Σημειώνει ότι υπάρχουν μη-αποθηκευμένες αλλαγές."""
+    st.session_state["_has_unsaved_changes"] = True
 
 # --- DATA LOADING ---
 @st.cache_data(ttl=60, show_spinner=False)
@@ -314,6 +314,7 @@ def load_assignments_from_sheet():
             done = True if str(r.get("Status_Done", "")).upper() in ["TRUE", "1", "YES"] else False
             task_type = strip_all_fields(str(r.get("Task_Type", "")))
 
+            # *** Multi-format date parsing ***
             assign_date = None
             for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d", "%d.%m.%Y", "%Y-%m-%d %H:%M:%S"]:
                 try:
@@ -482,12 +483,14 @@ def save_all_assignments_to_sheet():
         removed_count = len(rows) - len(deduped_rows)
         rows = deduped_rows
 
-        # *** ΔΙΟΡΘΩΣΗ: sleep πριν & μετά το update ***
         sheet.clear()
         time.sleep(0.5)
         sheet.update(range_name="A1", values=rows)
         time.sleep(0.5)
         st.session_state.last_save = datetime.now()
+        
+        # *** ΝΕΟ: Καθάρισε το flag unsaved ***
+        st.session_state["_has_unsaved_changes"] = False
         
         load_assignments_from_sheet.clear()
         
@@ -856,18 +859,18 @@ def check_notifications():
             notifications.append(f"{len(pending)} υλικά σε εκκρεμότητα procurement")
     return notifications
 
-# --- TOGGLE FUNCTIONS ---
+# --- TOGGLE FUNCTIONS (με mark unsaved) ---
 def toggle_project_task(p_key, task_name, chk_key):
     st.session_state["project_tasks_store"][p_key][task_name]["done"] = st.session_state[chk_key]
-    save_all_assignments_to_sheet()
+    mark_unsaved_changes()
 
 def toggle_item_task(u_key, t_idx, chk_key):
     st.session_state["tasks_store"][u_key][t_idx]["done"] = st.session_state[chk_key]
-    save_all_assignments_to_sheet()
+    mark_unsaved_changes()
 
 def update_item_field(u_key, t_idx, field, widget_key):
     st.session_state["tasks_store"][u_key][t_idx][field] = st.session_state[widget_key]
-    save_all_assignments_to_sheet()
+    mark_unsaved_changes()
 
 def update_item_users(u_key, t_idx, widget_key):
     selected = st.session_state[widget_key]
@@ -876,11 +879,11 @@ def update_item_users(u_key, t_idx, widget_key):
         st.session_state["tasks_store"][u_key][t_idx]["user"] = selected[0]
     else:
         st.session_state["tasks_store"][u_key][t_idx]["user"] = "- Χωρίς Ανάθεση -"
-    save_all_assignments_to_sheet()
+    mark_unsaved_changes()
 
 def update_proj_field(p_key, task_name, field, widget_key):
     st.session_state["project_tasks_store"][p_key][task_name][field] = st.session_state[widget_key]
-    save_all_assignments_to_sheet()
+    mark_unsaved_changes()
 
 def update_proj_users(p_key, task_name, widget_key):
     selected = st.session_state[widget_key]
@@ -889,7 +892,7 @@ def update_proj_users(p_key, task_name, widget_key):
         st.session_state["project_tasks_store"][p_key][task_name]["user"] = selected[0]
     else:
         st.session_state["project_tasks_store"][p_key][task_name]["user"] = "- Χωρίς Ανάθεση -"
-    save_all_assignments_to_sheet()
+    mark_unsaved_changes()
 
 # --- CHECK USER OVERLOAD ---
 def check_user_overload(target_date, availability_database):
@@ -1312,7 +1315,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 
                                 if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}"):
                                     st.session_state["tasks_store"][unique_key].pop(t_idx)
-                                    save_all_assignments_to_sheet()
+                                    mark_unsaved_changes()
                                     st.rerun()
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
@@ -1337,11 +1340,11 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 "users": [], 
                                 "date": auto_date
                             })
-                            save_all_assignments_to_sheet()
+                            mark_unsaved_changes()
                             st.rerun()
                         if len(item_tasks) > 0 and col_rem.button("Αφαίρεση", key=f"mat_rem_{unique_key}", use_container_width=True):
                             st.session_state["tasks_store"][unique_key].pop()
-                            save_all_assignments_to_sheet()
+                            mark_unsaved_changes()
                             st.rerun()
                         if col_close.button("Κλείσιμο", key=f"mat_close_{unique_key}", use_container_width=True):
                             st.session_state.selected_material_expand = None
@@ -1408,11 +1411,11 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         
         st.divider()
         col_save, _ = st.columns([1, 3])
-        if col_save.button("Αποθήκευση Αλλαγών", use_container_width=True, type="primary", key="save_project"):
+        if col_save.button("💾 Αποθήκευση Αλλαγών", use_container_width=True, type="primary", key="save_project"):
             if save_all_assignments_to_sheet():
-                st.success("Όλες οι αναθέσεις αποθηκεύτηκαν.")
+                st.success("✅ Όλες οι αναθέσεις αποθηκεύτηκαν.")
             else:
-                st.error("Σφάλμα κατά την αποθήκευση")
+                st.error("❌ Σφάλμα κατά την αποθήκευση")
         
         return
     
@@ -1538,62 +1541,14 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
     else:
         st.markdown("""
         <style>
-            .compact-card {
-                background: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-                padding: 10px;
-                margin-bottom: 8px;
-                box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-                transition: transform 0.15s ease, box-shadow 0.15s ease;
-                height: 100%;
-            }
-            .compact-card:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 3px 8px rgba(0,0,0,0.1);
-            }
-            .compact-card.active {
-                border-left: 3px solid #2e7d32;
-            }
-            .compact-card.shipped {
-                border-left: 3px solid #c62828;
-                opacity: 0.7;
-            }
-            .compact-title {
-                font-size: 12px;
-                font-weight: 700;
-                color: #1a1a1a;
-                margin-bottom: 4px;
-                line-height: 1.2;
-                word-wrap: break-word;
-                min-height: 30px;
-            }
-            .compact-status {
-                font-size: 9px;
-                font-weight: 600;
-                padding: 2px 6px;
-                border-radius: 8px;
-                display: inline-block;
-                margin-bottom: 6px;
-            }
-            .compact-progress-bg {
-                background: #e0e0e0;
-                border-radius: 4px;
-                height: 5px;
-                overflow: hidden;
-                margin: 6px 0;
-            }
-            .compact-progress-fill {
-                height: 100%;
-                border-radius: 4px;
-            }
-            .compact-meta {
-                font-size: 10px;
-                color: #666;
-                margin-top: 4px;
-                display: flex;
-                justify-content: space-between;
-            }
+            .compact-card { background: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+            .compact-card.active { border-left: 3px solid #2e7d32; }
+            .compact-card.shipped { border-left: 3px solid #c62828; opacity: 0.7; }
+            .compact-title { font-size: 12px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; min-height: 30px; }
+            .compact-status { font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 8px; display: inline-block; margin-bottom: 6px; }
+            .compact-progress-bg { background: #e0e0e0; border-radius: 4px; height: 5px; overflow: hidden; margin: 6px 0; }
+            .compact-progress-fill { height: 100%; border-radius: 4px; }
+            .compact-meta { font-size: 10px; color: #666; margin-top: 4px; display: flex; justify-content: space-between; }
         </style>
         """, unsafe_allow_html=True)
         
@@ -1832,16 +1787,25 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     m2.metric("Εκκρεμείς", pending)
     m3.metric("Ολοκληρωμένες", completed)
     
+    # *** WARNING για unsaved changes ***
+    if st.session_state.get("_has_unsaved_changes", False):
+        col_warn1, col_warn2 = st.columns([3, 1])
+        with col_warn1:
+            st.warning("⚠️ **Έχεις μη αποθηκευμένες αλλαγές.** Πάτησε **💾 Αποθήκευση** για να σωθούν στο Excel.")
+        with col_warn2:
+            if st.button("💾 Αποθήκευση τώρα", key="save_now_top", type="primary", use_container_width=True):
+                if save_all_assignments_to_sheet():
+                    st.success("✅ Αποθηκεύτηκε!")
+                    st.rerun()
+    
     st.divider()
     
     st.markdown("### Bulk Actions")
     
-    # *** ΔΙΑΒΑΖΟΥΜΕ ΤΑ CHECKED ΑΠΟ ΤΟ SESSION_STATE ΠΡΙΝ RENDER-ΑΡΟΥΜΕ ΤΑ WIDGETS ***
     if st.session_state.get("_bulk_apply_pending", False):
         pending_keys = st.session_state.get("_bulk_apply_keys", set())
         pending_date = st.session_state.get("_bulk_apply_date", None)
         
-        # *** Καθάρισε το παλιό μήνυμα πριν το νέο ***
         if "_bulk_last_result" in st.session_state:
             del st.session_state["_bulk_last_result"]
         
@@ -1874,20 +1838,21 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
             st.session_state["_bulk_apply_keys"] = set()
             st.session_state["_bulk_apply_date"] = None
             
-        if changed > 0:
-            # *** ΜΟΝΟ αλλαγή στη μνήμη — ΧΩΡΙΣ auto-save ***
-            st.session_state["_bulk_last_result"] = {
-                "changed": changed,
-                "date": pending_date,
-                "details": changed_details,
-                "saved": False
-            }
-            # Καθάρισε τα checkboxes
-            for t in filtered_tasks:
-                chk_key = make_checkbox_key(t)
-                if chk_key in st.session_state:
-                    st.session_state[chk_key] = False
-            # *** END ***
+            if changed > 0:
+                st.session_state["_bulk_last_result"] = {
+                    "changed": changed,
+                    "date": pending_date,
+                    "details": changed_details,
+                    "saved": False
+                }
+                # Μαρκάρουμε ότι υπάρχουν unsaved changes
+                mark_unsaved_changes()
+                
+                # Καθάρισε τα checkboxes
+                for t in filtered_tasks:
+                    chk_key = make_checkbox_key(t)
+                    if chk_key in st.session_state:
+                        st.session_state[chk_key] = False
     
     # Δείξε το τελευταίο αποτέλεσμα (αν υπάρχει)
     if "_bulk_last_result" in st.session_state:
@@ -1903,7 +1868,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
             for detail in result["details"]:
                 st.write(f"• {detail}")
         
-        col_msg1, col_msg2, col_msg3 = st.columns([1, 1, 1])
+        col_msg1, col_msg2 = st.columns([1, 1])
         with col_msg1:
             if not is_saved:
                 if st.button("💾 Αποθήκευση στο Sheet", key="bulk_save_btn", type="primary", use_container_width=True):
@@ -1916,20 +1881,6 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
                         else:
                             st.error("❌ Σφάλμα κατά την αποθήκευση")
         with col_msg2:
-            if st.button("🔄 Ανανέωση από Sheet", key="bulk_refresh_btn", use_container_width=True):
-                load_assignments_from_sheet.clear()
-                fresh_assignments, _ = load_assignments_from_sheet()
-                if 'procurement_df' in st.session_state and not st.session_state.procurement_df.empty:
-                    new_store = {}
-                    for idx, row in st.session_state.procurement_df.iterrows():
-                        item_id = str(row["ID"])
-                        u_key = f"{item_id}_{idx}"
-                        new_store[u_key] = fresh_assignments.get(item_id, [])
-                    st.session_state["tasks_store"] = new_store
-                if "_bulk_last_result" in st.session_state:
-                    del st.session_state["_bulk_last_result"]
-                st.rerun()
-        with col_msg3:
             if st.button("✕ Καθαρισμός μηνύματος", key="clear_bulk_msg", use_container_width=True):
                 del st.session_state["_bulk_last_result"]
                 st.rerun()
@@ -2005,8 +1956,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
                 st.session_state["tasks_store"][t["u_key"]][t["t_idx"]]["date"] = new_date
             else:
                 st.session_state["project_tasks_store"][t["p_key"]][t["task_name"]]["date"] = new_date
-            save_all_assignments_to_sheet()
-            load_assignments_from_sheet.clear()
+            mark_unsaved_changes()
             st.rerun()
         
         c6.markdown(t['Status'])
@@ -2021,8 +1971,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
                 st.session_state["tasks_store"][t["u_key"]].pop(t["t_idx"])
             else:
                 del st.session_state["project_tasks_store"][t["p_key"]][t["task_name"]]
-            save_all_assignments_to_sheet()
-            load_assignments_from_sheet.clear()
+            mark_unsaved_changes()
             st.rerun()
     
     st.divider()
@@ -2594,11 +2543,11 @@ def render_settings():
     st.subheader("Αποθήκευση")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("Αποθήκευση", use_container_width=True):
+        if st.button("💾 Αποθήκευση", use_container_width=True):
             if save_all_assignments_to_sheet():
-                st.success("Αποθηκεύτηκε!")
+                st.success("✅ Αποθηκεύτηκε!")
     with col2:
-        if st.button("Επαναφόρτωση", use_container_width=True):
+        if st.button("🔄 Επαναφόρτωση", use_container_width=True):
             st.cache_data.clear()
             load_assignments_from_sheet.clear()
             st.session_state.data_version = st.session_state.get("data_version", 0) + 1
@@ -2718,6 +2667,8 @@ def main():
         st.session_state.audit_log = []
     if "last_save" not in st.session_state:
         st.session_state.last_save = datetime.now()
+    if "_has_unsaved_changes" not in st.session_state:
+        st.session_state["_has_unsaved_changes"] = False
 
     with st.sidebar:
         st.markdown("""
@@ -2728,6 +2679,15 @@ def main():
         st.markdown(f"👋 Welcome, **{st.session_state.username}**!")
         
         st.divider()
+        
+        # *** WARNING για unsaved changes στο sidebar ***
+        if st.session_state.get("_has_unsaved_changes", False):
+            st.warning("⚠️ **Μη αποθηκευμένες αλλαγές!**")
+            if st.button("💾 Αποθήκευση τώρα", key="sidebar_save", type="primary", use_container_width=True):
+                if save_all_assignments_to_sheet():
+                    st.success("✅ Αποθηκεύτηκε!")
+                    st.rerun()
+            st.divider()
         
         notifications = check_notifications()
         if notifications:
@@ -2788,17 +2748,9 @@ def main():
         if st.button("Logout", use_container_width=True):
             logout()
 
-    if (datetime.now() - st.session_state.last_save).seconds > 120:
-        total_tasks_in_memory = sum(len(tasks) for tasks in st.session_state.get("tasks_store", {}).values())
-        total_proj_tasks_in_memory = sum(
-            len([t for t in p_dict.values() if isinstance(t, dict) and t.get("active", False)])
-            for p_dict in st.session_state.get("project_tasks_store", {}).values()
-            if isinstance(p_dict, dict)
-        )
-        
-        if total_tasks_in_memory > 0 or total_proj_tasks_in_memory > 0:
-            if save_all_assignments_to_sheet():
-                st.session_state.last_save = datetime.now()
+    # *** ΒΓΑΛΑΜΕ ΤΟ AUTO-SAVE — ΜΟΝΟ MANUAL SAVE ΤΩΡΑ ***
+    # Το auto-save προκαλούσε διαγραφή δεδομένων όταν το session ήταν κενό.
+    # Ο χρήστης αποφασίζει πότε θα σώσει (κουμπί "💾 Αποθήκευση").
 
     page = st.session_state.page
     
@@ -2821,4 +2773,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()                    
+    main()
