@@ -2581,7 +2581,7 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
         legend_html = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">'
         for p, colors in project_colors.items():
             legend_html += (
-                f'<span style="background:{colors["bg"]};border-left:3px solid {colors["border"]};'
+                f'<span style="background:{colors["bg"]};color:#333333;border-left:3px solid {colors["border"]};'
                 f'padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;">{p[:25]}</span>'
             )
         legend_html += '</div>'
@@ -2613,7 +2613,7 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
     header_cols = st.columns(7)
     for i, h in enumerate(day_headers):
         header_cols[i].markdown(
-            f'<div style="text-align:center;font-weight:700;padding:6px;background:#f5f5f5;border-radius:4px;font-size:12px;">{h}</div>',
+            f'<div style="text-align:center;font-weight:700;padding:6px;background:#f5f5f5;color:#333333;border-radius:4px;font-size:12px;">{h}</div>',
             unsafe_allow_html=True
         )
     
@@ -2663,7 +2663,7 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
                     border = "1px solid #e0e0e0"
                 
                 # Cell content
-                day_label = f"<div style='font-size:12px;font-weight:700;color:{'#e65100' if is_today else '#333'};'>{cell_date.day}</div>"
+                day_label = f"<div style='font-size:12px;font-weight:700;color:{'#e65100' if is_today else '#333333'};'>{cell_date.day}</div>"
                 
                 # Tasks
                 tasks_html = ""
@@ -2674,31 +2674,30 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
                             done_style = "opacity:0.5;text-decoration:line-through;" if t["done"] else ""
                             task_label = t["task"][:20] + ("..." if len(t["task"]) > 20 else "")
                             tasks_html += (
-                                f'<div style="background:{colors["bg"]};border-left:3px solid {colors["border"]};'
+                                f'<div style="background:{colors["bg"]};color:#333333;border-left:3px solid {colors["border"]};'
                                 f'padding:2px 4px;border-radius:3px;font-size:9px;margin-top:2px;{done_style}">'
                                 f'{task_label}'
                                 f'</div>'
                             )
                     else:
-                        # Πολλά tasks → δείξε μετρητή + 2 πρώτα
                         for t in day_tasks[:2]:
                             colors = project_colors.get(t["project"], {"bg": "#f5f5f5", "border": "#999"})
                             done_style = "opacity:0.5;text-decoration:line-through;" if t["done"] else ""
                             task_label = t["task"][:18] + ("..." if len(t["task"]) > 18 else "")
                             tasks_html += (
-                                f'<div style="background:{colors["bg"]};border-left:3px solid {colors["border"]};'
+                                f'<div style="background:{colors["bg"]};color:#333333;border-left:3px solid {colors["border"]};'
                                 f'padding:2px 4px;border-radius:3px;font-size:9px;margin-top:2px;{done_style}">'
                                 f'{task_label}'
                                 f'</div>'
                             )
                         tasks_html += (
-                            f'<div style="font-size:9px;color:#666;font-weight:700;margin-top:2px;text-align:center;">'
+                            f'<div style="font-size:9px;color:#555555;font-weight:700;margin-top:2px;text-align:center;">'
                             f'+{len(day_tasks) - 2} ακόμη'
                             f'</div>'
                         )
                 
                 cell_html = (
-                    f'<div style="background:{cell_bg};border:{border};border-radius:6px;padding:4px;min-height:100px;">'
+                    f'<div style="background:{cell_bg};color:#333333;border:{border};border-radius:6px;padding:4px;min-height:100px;">'
                     f'{day_label}'
                     f'{tasks_html}'
                     f'</div>'
@@ -2803,7 +2802,7 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
     for i, (p, colors) in enumerate(list(project_colors.items())[:20]):
         col_idx = i % 5
         legend_cols[col_idx].markdown(
-            f'<div style="background:{colors["bg"]};border-left:3px solid {colors["border"]};'
+            f'<div style="background:{colors["bg"]};color:#333333;border-left:3px solid {colors["border"]};'
             f'padding:4px 8px;border-radius:4px;font-size:11px;margin-bottom:4px;">{p[:25]}</div>',
             unsafe_allow_html=True
         )
