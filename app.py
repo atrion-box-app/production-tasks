@@ -3956,96 +3956,64 @@ def main():
         test_clickable_cell()
 
 def test_clickable_cell():
-    st.header("🧪 Test Clickable Cell")
-    st.caption("Αν δουλέψει, θα δεις το click να αλλάζει το μήνυμα")
+    st.header("🧪 Test Clickable Cell v2")
+    st.caption("Streamlit button styled σαν cell")
     
-    # State
     if "test_clicks" not in st.session_state:
         st.session_state["test_clicks"] = []
     
-    # CSS για το trick
     st.markdown("""
     <style>
-        .clickable-cell-wrapper {
-            position: relative;
-            width: 100%;
-            height: 100px;
+        div[data-testid="stButton"] > button {
+            background: white !important;
+            color: #333 !important;
+            border: 2px solid #e0e0e0 !important;
+            border-radius: 8px !important;
+            padding: 15px !important;
+            min-height: 100px !important;
+            text-align: left !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            line-height: 1.4 !important;
+            white-space: pre-line !important;
+            transition: all 0.2s !important;
         }
-        .clickable-cell-wrapper .stButton {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            z-index: 10 !important;
-            margin: 0 !important;
-            padding: 0 !important;
+        div[data-testid="stButton"] > button:hover {
+            background: #e3f2fd !important;
+            border-color: #1565c0 !important;
+            transform: translateY(-2px);
         }
-        .clickable-cell-wrapper .stButton > button {
-            width: 100% !important;
-            height: 100% !important;
-            opacity: 0 !important;
-            background: transparent !important;
-            border: none !important;
-            cursor: pointer !important;
-            padding: 0 !important;
-            margin: 0 !important;
-        }
-        .clickable-cell-wrapper .stButton > button:hover {
-            opacity: 0 !important;
-        }
-        .clickable-cell-content {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: white;
-            border: 2px solid #1565c0;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #333;
-            font-weight: 700;
-            font-size: 18px;
-            z-index: 1;
+        div[data-testid="stButton"] > button:focus {
+            box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.3) !important;
         }
     </style>
     """, unsafe_allow_html=True)
     
-    # 3 cells σε 3 columns
     cols = st.columns(3)
     
-    for i, label in enumerate(["Cell A", "Cell B", "Cell C"]):
+    labels = ["Cell A", "Cell B", "Cell C"]
+    contents = [
+        "12\n\n⏳ Έλεγχος\n⏳ Κόψιμο\n+3 ακόμη",
+        "13\n\n(κενή μέρα)",
+        "14\n\n✅ Συναρμολόγηση\n⏳ Φωτογράφιση",
+    ]
+    
+    for i, (label, content) in enumerate(zip(labels, contents)):
         with cols[i]:
-            # Render content
-            st.markdown(
-                f'<div class="clickable-cell-wrapper">'
-                f'<div class="clickable-cell-content">'
-                f'{label}<br><span style="font-size:12px;color:#666;">Clicks: {st.session_state["test_clicks"].count(label)}</span>'
-                f'</div>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
+            clicks = st.session_state["test_clicks"].count(label)
+            display = f"{content}\n\nClicks: {clicks}"
             
-            # Render invisible button ON TOP
-            if st.button(
-                f"hidden_{i}",
-                key=f"test_btn_{i}",
-                help=f"Click {label}",
-            ):
+            if st.button(display, key=f"test_btn_{i}", use_container_width=True):
                 st.session_state["test_clicks"].append(label)
-                st.success(f"✅ Πάτησες: **{label}**")
+                st.toast(f"✅ Πάτησες: {label}", icon="✅")
                 st.rerun()
     
     st.divider()
     st.markdown(f"**Σύνολο clicks:** {len(st.session_state['test_clicks'])}")
     st.write(st.session_state["test_clicks"])
     
-    if st.button("🔄 Reset"):
+    if st.button("🔄 Reset", key="test_reset"):
         st.session_state["test_clicks"] = []
         st.rerun()
-
 if __name__ == "__main__":
     main()
