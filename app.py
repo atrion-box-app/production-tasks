@@ -1629,13 +1629,19 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     # ... (ίδιο με το προηγούμενο ΜΕΡΟΣ 3)
     pass  # placeholder - θα το βάλεις όπως είναι
 
-def render_weekly_view(procurement_df, tasks_database, team_database, target_date):
+def render_weekly_view(procurement_df, tasks_database, team_database, target_date, status_filter="Όλα", num_weeks=1):
     """
-    Δείχνει grid με 7 μέρες x projects.
-    Κάθε κελί: πόσα υλικά παραλαμβάνονται εκείνη τη μέρα για εκείνο το project.
+    Δείχνει grid με 5-10 μέρες x projects.
+    Features:
+    - Highlight σήμερα
+    - Πλοήγηση εβδομάδων
+    - 1 ή 2 εβδομάδες
+    - Click σε κελί για drill-down
+    - Totals row με %
+    - Color coding ανά priority/status
     """
     st.markdown("### 📅 Εβδομαδιαία Προβολή")
-    st.caption("Grid: μέρες x projects — πόσα υλικά παραλαμβάνονται κάθε μέρα")
+    st.caption(f"Grid: μέρες x projects — πόσα υλικά παραλαμβάνονται κάθε μέρα")
     
     def parse_date_safe(date_str):
         s = str(date_str).strip()
@@ -1648,19 +1654,75 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
                 continue
         return None
     
+    # *** Highlight σήμερα ***
+    today = date.today()
+    
+    # *** Πλοήγηση εβδομάδων ***
+    if "week_offset" not in st.session_state:
+        st.session_state["week_offset"] = 0
+    
+    col_nav1, col_nav2, col_nav3, col_nav4 = st.columns([1, 1, 2, 1])
+    
+    with col_nav1:
+        if st.button("⬅️ Προηγούμενη", use_container_width=True, key="week_prev"):
+            st.session_state["week_offset"] -= 1
+            st.rerun()
+    with col_nav2:
+        if st.button("Επόμενη ➡️", use_container_width=True, key="week_next"):
+            st.session_state["week_offset"] += 1
+            st.rerun()
+    with col_nav3:
+        if st.button("🏠 Τρέχουσα εβδομάδα", use_container_width=True, key="week_home"):
+            st.session_state["week_offset"] = 0
+            st.rerun()
+    with col_nav4:
+        st.write("")
+    
     # Υπολόγισε τη Δευτέρα της εβδομάδας
-    monday = target_date - timedelta(days=target_date.weekday())
-    week_days = [monday + timedelta(days=i) for i in range(5)]  # Δευ-Παρ (5 μέρες)
+    base_monday = target_date - timedelta(days=target_date.weekday())
+    monday = base_monday + timedelta(days=st.session_state["week_offset"] * 7)
     
-    st.markdown(f"**Εβδομάδα: {monday.strftime('%d/%m/%Y')} — {week_days[-1].strftime('%d/%m/%Y')}**")
+    # 5 ή 10 μέρες
+    days_count = num_weeks * 5
+    week_days = [monday + timedelta(days=i) for i in range(days_count)]
     
-    # Μάζεψε όλα τα υλικά ανά (project, μέρα)
-    matrix = {}  # {project: {date: [materials]}}
+    # *** Range ***
+    week_end = week_days[-1]
+    st.markdown(f"**Εβδομάδα: {monday.strftime('%d/%m/%Y')} — {week_end.strftime('%d/%m/%Y')}** ({days_count} μέρες)")
+    
+    # *** Φιλτράρουμε με το status ***
+    def status_matches(proc_status):
+        s = str(proc_status).strip().upper()
+        is_ready = s in ["OK STOCK", "RECEIVED", "READY"]
+        if status_filter == "Σε εκκρεμότητα":
+            return not is_ready
+        elif status_filter == "Έτοιμα (OK STOCK/RECEIVED/READY)":
+            return is_ready
+        return True  # Όλα
+    
+    # *** Color coding ανά status ***
+    def get_status_color(proc_status):
+        s = str(proc_status).strip().upper()
+        if s in ["OK STOCK", "RECEIVED", "READY"]:
+            return "#e8f5e9", "#2e7d32"  # πράσινο
+        elif s == "ORDERED":
+            return "#fff8e1", "#f57c00"  # κίτρινο
+        elif s in ["PENDING", "WAITING"]:
+            return "#ffebee", "#c62828"  # κόκκινο
+        return "#e3f2fd", "#1565c0"  # μπλε default
+    
+    # *** Μάζεψε υλικά ***
+    matrix = {}
     all_projects = set()
+    material_details = {}  # {u_key: {...}}
     
     for idx, row in procurement_df.iterrows():
         due_date = parse_date_safe(row.get("Αναμενόμενη Ημ. Παραλαβής", "-"))
         if due_date is None or due_date not in week_days:
+            continue
+        
+        proc_status = str(row.get("Status Procurement", ""))
+        if not status_matches(proc_status):
             continue
         
         project = str(row["Project"])
@@ -1671,19 +1733,23 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
         if due_date not in matrix[project]:
             matrix[project][due_date] = []
         
-        matrix[project][due_date].append({
+        material_data = {
             "idx": idx,
             "item_id": str(row["ID"]),
             "material": str(row["Υλικό / Προϊόν"]),
             "qty": int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1,
-            "status": str(row["Status Procurement"]),
-        })
+            "status": proc_status,
+        }
+        matrix[project][due_date].append(material_data)
+        
+        u_key = f"{material_data['item_id']}_{idx}"
+        material_details[u_key] = {**material_data, "project": project, "due_date": due_date}
     
     if not all_projects:
-        st.info("Δεν υπάρχουν παραλαβές αυτή την εβδομάδα.")
+        st.info("Δεν υπάρχουν παραλαβές αυτή την εβδομάδα με τα τρέχοντα φίλτρα.")
         return
     
-    # Στατιστικά
+    # *** Στατιστικά ***
     total_materials = sum(len(mats) for proj in matrix.values() for mats in proj.values())
     active_days = sum(1 for d in week_days if any(d in matrix.get(p, {}) for p in all_projects))
     
@@ -1694,120 +1760,264 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
     
     st.divider()
     
-    # --- Φτιάξε το grid ---
-    # Header: Project | Δευ | Τρι | Τετ | Πεμ | Παρ | Σύνολο
-    sorted_projects = sorted(all_projects)
+    # *** Drill-down state ***
+    if "weekly_drilldown_cell" not in st.session_state:
+        st.session_state["weekly_drilldown_cell"] = None
     
-    # Header row
-    header_cols = st.columns([3, 1, 1, 1, 1, 1, 1])
+    # *** Header ***
+    num_cols = len(week_days)
+    col_ratios = [3] + [1] * num_cols + [1]
+    header_cols = st.columns(col_ratios)
     header_cols[0].markdown("**Project**")
+    
     for i, day in enumerate(week_days):
         day_name = WEEKDAYS_SHORT_GREEK.get(day.weekday(), "?")
+        is_today = (day == today)
+        day_label = f"**{day_name}**"
+        if is_today:
+            day_label = f"🔔 **{day_name}**"
         header_cols[i + 1].markdown(
-            f"**{day_name}**<br><span style='font-size:11px;color:#666;'>{day.strftime('%d/%m')}</span>",
+            f"{day_label}<br><span style='font-size:11px;color:#666;'>{day.strftime('%d/%m')}</span>",
             unsafe_allow_html=True
         )
-    header_cols[6].markdown("**Σύνολο**")
+    header_cols[-1].markdown("**Σύνολο**")
     
-    # Rows για κάθε project
+    # *** Rows ***
     day_totals = {d: 0 for d in week_days}
     project_totals = {}
     
-    for proj in sorted_projects:
-        row_cols = st.columns([3, 1, 1, 1, 1, 1, 1])
-        
-        # Project name
+    for proj in sorted(all_projects):
+        row_cols = st.columns(col_ratios)
         proj_total = sum(len(matrix[proj].get(d, [])) for d in week_days)
         project_totals[proj] = proj_total
         
         row_cols[0].markdown(f"**{proj[:25]}{'...' if len(proj) > 25 else ''}**")
         
-        # Κάθε μέρα
         for i, day in enumerate(week_days):
             materials = matrix[proj].get(day, [])
             count = len(materials)
+            is_today = (day == today)
+            cell_key = f"{proj}_{day.strftime('%Y-%m-%d')}"
             
-            if count == 0:
-                # Κενό κελί
-                row_cols[i + 1].markdown(
-                    '<div style="text-align:center;color:#ccc;padding:8px;">—</div>',
-                    unsafe_allow_html=True
-                )
-            else:
-                # Πόσα tasks έχουν οριστεί
-                tasks_count = 0
-                for m in materials:
-                    u_key = f"{m['item_id']}_{m['idx']}"
-                    item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
-                    tasks_count += sum(1 for t in item_tasks if t.get("task") and t["task"] != "- Επιλογή Εργασίας -")
-                
-                # Χρώμα ανάλογα με το πόσα υλικά
-                if count >= 3:
-                    bg = "#ffebee"
-                    color = "#c62828"
-                elif count == 2:
-                    bg = "#fff8e1"
-                    color = "#f57c00"
+            with row_cols[i + 1]:
+                if count == 0:
+                    # Κενό κελί
+                    bg = "#fafafa"
+                    if is_today:
+                        bg = "#fff8e1"
+                    st.markdown(
+                        f'<div style="text-align:center;color:#ccc;padding:8px;background:{bg};border-radius:6px;border:1px dashed #e0e0e0;">—</div>',
+                        unsafe_allow_html=True
+                    )
                 else:
-                    bg = "#e8f5e9"
-                    color = "#2e7d32"
-                
-                # Show tooltip με τα IDs
-                ids_str = ", ".join([m['item_id'] for m in materials[:3]])
-                if len(materials) > 3:
-                    ids_str += f" +{len(materials)-3}"
-                
-                cell_html = (
-                    f'<div style="background:{bg};color:{color};padding:8px;border-radius:6px;text-align:center;font-weight:700;">'
-                    f'{count} υλικό{"α" if count != 1 else ""}'
-                    f'<div style="font-size:10px;font-weight:400;margin-top:2px;color:#666;">{ids_str}</div>'
-                    f'</div>'
-                )
-                row_cols[i + 1].markdown(cell_html, unsafe_allow_html=True)
+                    # Πόσα tasks & done
+                    tasks_count = 0
+                    done_count = 0
+                    for m in materials:
+                        u_key = f"{m['item_id']}_{m['idx']}"
+                        item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
+                        active = [t for t in item_tasks if t.get("task") and t["task"] != "- Επιλογή Εργασίας -"]
+                        tasks_count += len(active)
+                        done_count += sum(1 for t in active if t.get("done", False))
+                    
+                    # Πάρε χρώμα από το **πρώτο** υλικό (ή χειρότερο)
+                    statuses = [m["status"] for m in materials]
+                    worst_status = statuses[0]
+                    for s in statuses:
+                        s_up = str(s).upper()
+                        if s_up in ["PENDING", "WAITING"]:
+                            worst_status = s
+                            break
+                        elif s_up == "ORDERED":
+                            worst_status = s
+                    
+                    bg, color = get_status_color(worst_status)
+                    
+                    if is_today:
+                        border = "3px solid #ff9800"
+                    else:
+                        border = "1px solid #e0e0e0"
+                    
+                    is_selected = st.session_state["weekly_drilldown_cell"] == cell_key
+                    if is_selected:
+                        border = "3px solid #1565c0"
+                    
+                    ids_str = ", ".join([m['item_id'] for m in materials[:2]])
+                    if len(materials) > 2:
+                        ids_str += f" +{len(materials)-2}"
+                    
+                    cell_html = (
+                        f'<div style="background:{bg};color:{color};padding:8px;border-radius:6px;'
+                        f'text-align:center;font-weight:700;border:{border};">'
+                        f'{count} υλικό{"α" if count != 1 else ""}'
+                        f'<div style="font-size:10px;font-weight:400;margin-top:2px;color:#666;">{ids_str}</div>'
+                        f'</div>'
+                    )
+                    st.markdown(cell_html, unsafe_allow_html=True)
+                    
+                    # *** Click για drill-down ***
+                    if st.button("👁️", key=f"drill_{cell_key}", use_container_width=True):
+                        if is_selected:
+                            st.session_state["weekly_drilldown_cell"] = None
+                        else:
+                            st.session_state["weekly_drilldown_cell"] = cell_key
+                        st.rerun()
             
             day_totals[day] += count
         
         # Σύνολο γραμμής
-        row_cols[6].markdown(
-            f'<div style="text-align:center;font-weight:700;padding:8px;">{proj_total}</div>',
+        row_cols[-1].markdown(
+            f'<div style="text-align:center;font-weight:700;padding:8px;background:#e3f2fd;color:#1565c0;border-radius:6px;">{proj_total}</div>',
             unsafe_allow_html=True
         )
     
-    # --- Σύνολο ημέρας ---
+    # *** Totals row ***
     st.markdown("---")
-    total_cols = st.columns([3, 1, 1, 1, 1, 1, 1])
-    
-    with total_cols[0]:
-        st.markdown("**Σύνολο Ημέρας**")
+    total_cols = st.columns(col_ratios)
+    total_cols[0].markdown("**Σύνολο Ημέρας**")
     
     for i, day in enumerate(week_days):
         count = day_totals[day]
+        is_today = (day == today)
         with total_cols[i + 1]:
             if count > 0:
-                st.markdown(
-                    f'<div style="text-align:center;font-weight:700;padding:8px;background:#e3f2fd;color:#1565c0;border-radius:6px;font-size:16px;">{count}</div>',
-                    unsafe_allow_html=True
-                )
+                bg = "#2e7d32"
+                color = "white"
             else:
-                st.markdown(
-                    f'<div style="text-align:center;font-weight:700;padding:8px;background:#f5f5f5;color:#999;border-radius:6px;font-size:16px;">0</div>',
-                    unsafe_allow_html=True
-                )
+                bg = "#f5f5f5"
+                color = "#999"
+            if is_today:
+                border = "3px solid #ff9800"
+            else:
+                border = "none"
+            st.markdown(
+                f'<div style="text-align:center;font-weight:700;padding:8px;background:{bg};color:{color};border-radius:6px;font-size:16px;border:{border};">{count}</div>',
+                unsafe_allow_html=True
+            )
     
-    with total_cols[6]:
-        st.markdown(
-            f'<div style="text-align:center;font-weight:700;padding:8px;background:#2e7d32;color:white;border-radius:6px;font-size:16px;">{sum(day_totals.values())}</div>',
-            unsafe_allow_html=True
-        )
+    grand_total = sum(day_totals.values())
+    total_cols[-1].markdown(
+        f'<div style="text-align:center;font-weight:700;padding:8px;background:#1565c0;color:white;border-radius:6px;font-size:16px;">{grand_total}</div>',
+        unsafe_allow_html=True
+    )
     
+    # *** Ποσοστό πληρότητας ***
+    st.markdown("#### 📊 Ποσοστό Πληρότητας (Tasks)")
+    
+    completeness_data = []
+    for day in week_days:
+        day_materials = []
+        for proj in all_projects:
+            for m in matrix[proj].get(day, []):
+                day_materials.append(m)
+        
+        if not day_materials:
+            continue
+        
+        total_tasks = 0
+        done_tasks = 0
+        for m in day_materials:
+            u_key = f"{m['item_id']}_{m['idx']}"
+            item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
+            active = [t for t in item_tasks if t.get("task") and t["task"] != "- Επιλογή Εργασίας -"]
+            total_tasks += len(active)
+            done_tasks += sum(1 for t in active if t.get("done", False))
+        
+        pct = int((done_tasks / total_tasks) * 100) if total_tasks > 0 else 0
+        completeness_data.append({
+            "day": day,
+            "day_name": WEEKDAYS_GREEK.get(day.weekday(), "?"),
+            "materials": len(day_materials),
+            "tasks": total_tasks,
+            "done": done_tasks,
+            "pct": pct,
+        })
+    
+    for item in completeness_data:
+        col1, col2, col3 = st.columns([2, 3, 1])
+        with col1:
+            st.markdown(f"**{item['day_name']} {item['day'].strftime('%d/%m')}**")
+        with col2:
+            pct = item["pct"]
+            if pct == 100:
+                bar_color = "#2e7d32"
+            elif pct >= 50:
+                bar_color = "#1e88e5"
+            elif pct > 0:
+                bar_color = "#ff9800"
+            else:
+                bar_color = "#e0e0e0"
+            st.markdown(
+                f'<div style="background:#e0e0e0;border-radius:4px;height:20px;overflow:hidden;">'
+                f'<div style="width:{pct}%;height:100%;background:{bar_color};"></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        with col3:
+            st.markdown(f"**{item['done']}/{item['tasks']}** ({pct}%)")
+    
+    # *** Drill-down: Λεπτομέρειες επιλεγμένου κελιού ***
+    if st.session_state["weekly_drilldown_cell"] is not None:
+        selected = st.session_state["weekly_drilldown_cell"]
+        # Parse: "project_YYYY-MM-DD"
+        parts = selected.rsplit("_", 1)
+        if len(parts) == 2:
+            proj_name = parts[0]
+            day_str = parts[1]
+            try:
+                day = datetime.strptime(day_str, "%Y-%m-%d").date()
+                materials = matrix.get(proj_name, {}).get(day, [])
+                
+                st.divider()
+                st.markdown(f"### 🔍 Λεπτομέρειες: **{proj_name}** — **{day.strftime('%d/%m/%Y')}**")
+                
+                if not materials:
+                    st.info("Δεν υπάρχουν υλικά σε αυτό το κελί.")
+                else:
+                    for m in materials:
+                        unique_key = f"{m['item_id']}_{m['idx']}"
+                        item_tasks = st.session_state.get("tasks_store", {}).get(unique_key, [])
+                        active_tasks = [t for t in item_tasks if t.get("task") and t["task"] != "- Επιλογή Εργασίας -"]
+                        done_tasks = sum(1 for t in active_tasks if t.get("done", False))
+                        
+                        with st.container(border=True):
+                            col_info, col_btn = st.columns([9, 1])
+                            
+                            with col_info:
+                                bg, color = get_status_color(m["status"])
+                                if len(active_tasks) == 0:
+                                    tasks_html = '<span style="background:#ffebee;color:#c62828;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">⚠️ Χωρίς task</span>'
+                                elif done_tasks == len(active_tasks):
+                                    tasks_html = f'<span style="background:#e8f5e9;color:#2e7d32;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">✅ {done_tasks}/{len(active_tasks)}</span>'
+                                else:
+                                    tasks_html = f'<span style="background:#fff8e1;color:#f57c00;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">⏳ {done_tasks}/{len(active_tasks)}</span>'
+                                
+                                st.markdown(
+                                    f'<div style="display:flex;align-items:center;gap:10px;font-size:13px;">'
+                                    f'<span style="font-weight:700;min-width:70px;color:#333;">{m["item_id"]}</span>'
+                                    f'<span style="flex:1;color:#333;">{m["material"][:60]}</span>'
+                                    f'<span style="color:#666;font-size:11px;">{m["qty"]} τμχ</span>'
+                                    f'<span style="{bg}color:{color};padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;">{m["status"]}</span>'
+                                    f'{tasks_html}'
+                                    f'</div>',
+                                    unsafe_allow_html=True
+                                )
+                            
+                            with col_btn:
+                                if st.button("➕", key=f"drill_add_{unique_key}", help="Προσθήκη/Επεξεργασία tasks"):
+                                    st.session_state["incoming_selected_item"] = unique_key
+                                    st.session_state["page"] = "📦 Παραλαβές"
+                                    st.rerun()
+            except Exception as e:
+                st.warning(f"Could not parse drill-down: {e}")
+    
+    # *** Λεπτομέρειες ανά μέρα ***
     st.divider()
-    
-    # --- Λεπτομέρειες ανά μέρα ---
     st.markdown("### 📋 Λεπτομέρειες ανά μέρα")
     
     for day in week_days:
         day_materials = []
-        for proj in sorted_projects:
+        for proj in sorted(all_projects):
             for m in matrix[proj].get(day, []):
                 day_materials.append({**m, "project": proj})
         
@@ -1815,20 +2025,20 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
             continue
         
         day_name = WEEKDAYS_GREEK.get(day.weekday(), "?")
-        with st.expander(f"**{day_name} {day.strftime('%d/%m/%Y')}** — {len(day_materials)} υλικά", expanded=False):
+        is_today = (day == today)
+        day_label = f"**{day_name} {day.strftime('%d/%m/%Y')}** — {len(day_materials)} υλικά"
+        if is_today:
+            day_label = "🔔 " + day_label + " (Σήμερα)"
+        
+        with st.expander(day_label, expanded=False):
             for m in day_materials:
                 unique_key = f"{m['item_id']}_{m['idx']}"
                 item_tasks = st.session_state.get("tasks_store", {}).get(unique_key, [])
                 active_tasks = [t for t in item_tasks if t.get("task") and t["task"] != "- Επιλογή Εργασίας -"]
                 done_tasks = sum(1 for t in active_tasks if t.get("done", False))
                 
-                # Status badge
-                if m["status"].upper() in ["OK STOCK", "RECEIVED", "READY"]:
-                    status_bg = "background:#e8f5e9;color:#2e7d32;"
-                else:
-                    status_bg = "background:#fff8e1;color:#f57c00;"
+                bg, color = get_status_color(m["status"])
                 
-                # Tasks badge
                 if len(active_tasks) == 0:
                     tasks_html = '<span style="background:#ffebee;color:#c62828;padding:2px 6px;border-radius:6px;font-size:10px;font-weight:600;">⚠️ Χωρίς task</span>'
                 elif done_tasks == len(active_tasks):
@@ -1842,16 +2052,16 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
                     f'<span style="flex:1;min-width:200px;color:#333;">{m["material"][:50]}{"..." if len(m["material"])>50 else ""}</span>'
                     f'<span style="color:#666;font-size:11px;min-width:60px;text-align:right;">{m["qty"]} τμχ</span>'
                     f'<span style="color:#666;font-size:11px;min-width:120px;">{m["project"][:20]}</span>'
-                    f'<span style="{status_bg}padding:2px 6px;border-radius:6px;font-size:10px;font-weight:600;min-width:70px;text-align:center;">{m["status"]}</span>'
+                    f'<span style="{bg}color:{color};padding:2px 6px;border-radius:6px;font-size:10px;font-weight:600;min-width:70px;text-align:center;">{m["status"]}</span>'
                     f'<span style="min-width:50px;text-align:right;">{tasks_html}</span>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
     
-    # --- Export ---
+    # *** Export ***
     st.divider()
     export_data = []
-    for proj in sorted_projects:
+    for proj in sorted(all_projects):
         for day in week_days:
             for m in matrix[proj].get(day, []):
                 unique_key = f"{m['item_id']}_{m['idx']}"
@@ -1879,7 +2089,6 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
             mime="text/csv",
             use_container_width=True
         )
-
 # --- RENDER INCOMING (ΠΑΡΑΛΑΒΕΣ) — ΝΕΟ ---
 def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
     st.header("📦 Παραλαβές")
@@ -1918,7 +2127,15 @@ def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
 
     # *** ΝΕΟ: Αν είναι weekly view, δείξε το grid και σταμάτα ***
     if date_mode == "📅 Εβδομαδιαία προβολή (Grid)":
-        render_weekly_view(procurement_df, tasks_database, team_database, target_date)
+        # Πέρασε το status filter στο weekly view
+        render_weekly_view(
+            procurement_df, 
+            tasks_database, 
+            team_database, 
+            target_date,
+            status_filter=status_filter,
+            num_weeks=2
+        )
         return
     # *** END ***
     
