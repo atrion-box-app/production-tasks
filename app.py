@@ -1776,17 +1776,29 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
     # --- Σύνολο ημέρας ---
     st.markdown("---")
     total_cols = st.columns([3, 1, 1, 1, 1, 1, 1])
-    total_cols[0].markdown("**Σύνολο Ημέρας**")
+    
+    with total_cols[0]:
+        st.markdown("**Σύνολο Ημέρας**")
+    
     for i, day in enumerate(week_days):
         count = day_totals[day]
-        total_cols[i + 1].markdown(
-            f'<div style="text-align:center;font-weight:700;padding:8px;background:#f5f5f5;border-radius:6px;">{count}</div>',
+        with total_cols[i + 1]:
+            if count > 0:
+                st.markdown(
+                    f'<div style="text-align:center;font-weight:700;padding:8px;background:#e3f2fd;color:#1565c0;border-radius:6px;font-size:16px;">{count}</div>',
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    f'<div style="text-align:center;font-weight:700;padding:8px;background:#f5f5f5;color:#999;border-radius:6px;font-size:16px;">0</div>',
+                    unsafe_allow_html=True
+                )
+    
+    with total_cols[6]:
+        st.markdown(
+            f'<div style="text-align:center;font-weight:700;padding:8px;background:#2e7d32;color:white;border-radius:6px;font-size:16px;">{sum(day_totals.values())}</div>',
             unsafe_allow_html=True
         )
-    total_cols[6].markdown(
-        f'<div style="text-align:center;font-weight:700;padding:8px;background:#e3f2fd;border-radius:6px;">{sum(day_totals.values())}</div>',
-        unsafe_allow_html=True
-    )
     
     st.divider()
     
@@ -1825,13 +1837,13 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
                     tasks_html = f'<span style="background:#fff8e1;color:#f57c00;padding:2px 6px;border-radius:6px;font-size:10px;font-weight:600;">⏳ {done_tasks}/{len(active_tasks)}</span>'
                 
                 st.markdown(
-                    f'<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#fafafa;border-radius:6px;margin-bottom:4px;font-size:12px;">'
-                    f'<span style="font-weight:700;min-width:60px;">{m["item_id"]}</span>'
-                    f'<span style="flex:1;">{m["material"][:50]}{"..." if len(m["material"])>50 else ""}</span>'
-                    f'<span style="color:#666;font-size:11px;">{m["qty"]} τμχ</span>'
-                    f'<span style="color:#666;font-size:11px;">{m["project"][:20]}</span>'
-                    f'<span style="{status_bg}padding:2px 6px;border-radius:6px;font-size:10px;font-weight:600;">{m["status"]}</span>'
-                    f'{tasks_html}'
+                    f'<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#fafafa;border-radius:6px;margin-bottom:4px;font-size:12px;">'
+                    f'<span style="font-weight:700;min-width:70px;color:#333;">{m["item_id"]}</span>'
+                    f'<span style="flex:1;min-width:200px;color:#333;">{m["material"][:50]}{"..." if len(m["material"])>50 else ""}</span>'
+                    f'<span style="color:#666;font-size:11px;min-width:60px;text-align:right;">{m["qty"]} τμχ</span>'
+                    f'<span style="color:#666;font-size:11px;min-width:120px;">{m["project"][:20]}</span>'
+                    f'<span style="{status_bg}padding:2px 6px;border-radius:6px;font-size:10px;font-weight:600;min-width:70px;text-align:center;">{m["status"]}</span>'
+                    f'<span style="min-width:50px;text-align:right;">{tasks_html}</span>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
