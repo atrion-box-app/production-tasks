@@ -1760,9 +1760,6 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
     
     st.divider()
     
-    # *** Drill-down state ***
-    if "weekly_drilldown_cell" not in st.session_state:
-        st.session_state["weekly_drilldown_cell"] = None
     
     # *** Header ***
     num_cols = len(week_days)
@@ -1838,10 +1835,6 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
                     else:
                         border = "1px solid #e0e0e0"
                     
-                    is_selected = st.session_state["weekly_drilldown_cell"] == cell_key
-                    if is_selected:
-                        border = "3px solid #1565c0"
-                    
                     ids_str = ", ".join([m['item_id'] for m in materials[:2]])
                     if len(materials) > 2:
                         ids_str += f" +{len(materials)-2}"
@@ -1854,14 +1847,6 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
                         f'</div>'
                     )
                     st.markdown(cell_html, unsafe_allow_html=True)
-                    
-                    # *** Click για drill-down ***
-                    if st.button("👁️", key=f"drill_{cell_key}", use_container_width=True):
-                        if is_selected:
-                            st.session_state["weekly_drilldown_cell"] = None
-                        else:
-                            st.session_state["weekly_drilldown_cell"] = cell_key
-                        st.rerun()
             
             day_totals[day] += count
         
@@ -1956,60 +1941,6 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
         with col3:
             st.markdown(f"**{item['done']}/{item['tasks']}** ({pct}%)")
     
-    # *** Drill-down: Λεπτομέρειες επιλεγμένου κελιού ***
-    if st.session_state["weekly_drilldown_cell"] is not None:
-        selected = st.session_state["weekly_drilldown_cell"]
-        # Parse: "project_YYYY-MM-DD"
-        parts = selected.rsplit("_", 1)
-        if len(parts) == 2:
-            proj_name = parts[0]
-            day_str = parts[1]
-            try:
-                day = datetime.strptime(day_str, "%Y-%m-%d").date()
-                materials = matrix.get(proj_name, {}).get(day, [])
-                
-                st.divider()
-                st.markdown(f"### 🔍 Λεπτομέρειες: **{proj_name}** — **{day.strftime('%d/%m/%Y')}**")
-                
-                if not materials:
-                    st.info("Δεν υπάρχουν υλικά σε αυτό το κελί.")
-                else:
-                    for m in materials:
-                        unique_key = f"{m['item_id']}_{m['idx']}"
-                        item_tasks = st.session_state.get("tasks_store", {}).get(unique_key, [])
-                        active_tasks = [t for t in item_tasks if t.get("task") and t["task"] != "- Επιλογή Εργασίας -"]
-                        done_tasks = sum(1 for t in active_tasks if t.get("done", False))
-                        
-                        with st.container(border=True):
-                            col_info, col_btn = st.columns([9, 1])
-                            
-                            with col_info:
-                                bg, color = get_status_color(m["status"])
-                                if len(active_tasks) == 0:
-                                    tasks_html = '<span style="background:#ffebee;color:#c62828;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">⚠️ Χωρίς task</span>'
-                                elif done_tasks == len(active_tasks):
-                                    tasks_html = f'<span style="background:#e8f5e9;color:#2e7d32;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">✅ {done_tasks}/{len(active_tasks)}</span>'
-                                else:
-                                    tasks_html = f'<span style="background:#fff8e1;color:#f57c00;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">⏳ {done_tasks}/{len(active_tasks)}</span>'
-                                
-                                st.markdown(
-                                    f'<div style="display:flex;align-items:center;gap:10px;font-size:13px;">'
-                                    f'<span style="font-weight:700;min-width:70px;color:#333;">{m["item_id"]}</span>'
-                                    f'<span style="flex:1;color:#333;">{m["material"][:60]}</span>'
-                                    f'<span style="color:#666;font-size:11px;">{m["qty"]} τμχ</span>'
-                                    f'<span style="{bg}color:{color};padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;">{m["status"]}</span>'
-                                    f'{tasks_html}'
-                                    f'</div>',
-                                    unsafe_allow_html=True
-                                )
-                            
-                            with col_btn:
-                                if st.button("➕", key=f"drill_add_{unique_key}", help="Προσθήκη/Επεξεργασία tasks"):
-                                    st.session_state["incoming_selected_item"] = unique_key
-                                    st.session_state["page"] = "📦 Παραλαβές"
-                                    st.rerun()
-            except Exception as e:
-                st.warning(f"Could not parse drill-down: {e}")
     
     # *** Λεπτομέρειες ανά μέρα ***
     st.divider()
