@@ -2060,12 +2060,10 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
             box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.3) !important;
             outline: none !important;
         }
-        /* Highlight για σήμερα */
         .today-cell div[data-testid="stButton"] > button {
             background: #fff8e1 !important;
             border: 2px solid #ff9800 !important;
         }
-        /* Highlight για επιλεγμένο task mode */
         .move-mode div[data-testid="stButton"] > button {
             background: #e3f2fd !important;
             border: 2px dashed #1565c0 !important;
@@ -2075,12 +2073,10 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
             background: #bbdefb !important;
             border-style: solid !important;
         }
-        /* κενές μέρες */
         .empty-cell div[data-testid="stButton"] > button {
             background: #fafafa !important;
             color: #999 !important;
         }
-        /* άλλος μήνας */
         .other-month div[data-testid="stButton"] > button {
             opacity: 0.4 !important;
         }
