@@ -1745,6 +1745,58 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     with col_f4:
         search_term = st.text_input("Αναζήτηση:", placeholder="Project, υλικό, εργασία...", key="mv_search")
     
+    # *** ΝΕΟ: Date range + Sort ***
+    col_d1, col_d2, col_d3, col_sort = st.columns([1, 1, 1, 1])
+    
+    # Βρες min/max dates για defaults
+    all_dates = [t["Ημερομηνία"] for t in all_tasks if t.get("Ημερομηνία")]
+    if all_dates:
+        min_date = min(all_dates)
+        max_date = max(all_dates)
+    else:
+        min_date = date.today() - timedelta(days=30)
+        max_date = date.today() + timedelta(days=30)
+    
+    with col_d1:
+        date_from = st.date_input("Από:", value=min_date, format="DD/MM/YYYY", key="mv_date_from")
+    with col_d2:
+        date_to = st.date_input("Έως:", value=max_date, format="DD/MM/YYYY", key="mv_date_to")
+    with col_d3:
+        quick_filter = st.selectbox(
+            "Quick:",
+            ["Όλες", "Σήμερα", "Εβδομάδα", "Μήνας", "Επόμενες 7", "Επόμενες 30"],
+            key="mv_quick_date"
+        )
+    with col_sort:
+        sort_by = st.selectbox(
+            "Sort:",
+            ["Ημερομηνία ↑", "Ημερομηνία ↓", "Project", "Εργασία", "Status"],
+            key="mv_sort"
+        )
+    
+    # *** Εφαρμογή Quick filter ***
+    today_mv = date.today()
+    if quick_filter == "Σήμερα":
+        date_from = today_mv
+        date_to = today_mv
+    elif quick_filter == "Εβδομάδα":
+        monday = today_mv - timedelta(days=today_mv.weekday())
+        sunday = monday + timedelta(days=6)
+        date_from = monday
+        date_to = sunday
+    elif quick_filter == "Μήνας":
+        date_from = date(today_mv.year, today_mv.month, 1)
+        if today_mv.month == 12:
+            date_to = date(today_mv.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            date_to = date(today_mv.year, today_mv.month + 1, 1) - timedelta(days=1)
+    elif quick_filter == "Επόμενες 7":
+        date_from = today_mv
+        date_to = today_mv + timedelta(days=7)
+    elif quick_filter == "Επόμενες 30":
+        date_from = today_mv
+        date_to = today_mv + timedelta(days=30)
+    
     filtered_tasks = all_tasks.copy()
     
     if status_filter == "⏳ Εκκρεμείς":
@@ -1766,7 +1818,20 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
             search_lower in str(t["Εργασία"]).lower()
         ]
     
-    filtered_tasks = sorted(filtered_tasks, key=lambda x: (x["done"], x["Ημερομηνία"]))
+    # *** ΝΕΟ: Date range filter ***
+    filtered_tasks = [t for t in filtered_tasks if date_from <= t["Ημερομηνία"] <= date_to]
+    
+    # *** ΝΕΟ: Sorting ***
+    if sort_by == "Ημερομηνία ↑":
+        filtered_tasks = sorted(filtered_tasks, key=lambda x: (x["done"], x["Ημερομηνία"]))
+    elif sort_by == "Ημερομηνία ↓":
+        filtered_tasks = sorted(filtered_tasks, key=lambda x: (x["done"], -x["Ημερομηνία"].toordinal()))
+    elif sort_by == "Project":
+        filtered_tasks = sorted(filtered_tasks, key=lambda x: (x["done"], x["Project"], x["Ημερομηνία"]))
+    elif sort_by == "Εργασία":
+        filtered_tasks = sorted(filtered_tasks, key=lambda x: (x["done"], x["Εργασία"], x["Ημερομηνία"]))
+    elif sort_by == "Status":
+        filtered_tasks = sorted(filtered_tasks, key=lambda x: (x["done"], x["Ημερομηνία"]))
     
     all_dates_mv = set(t["Ημερομηνία"] for t in filtered_tasks if t.get("Ημερομηνία"))
     render_overload_warnings(all_dates_mv, availability_database)
@@ -3237,433 +3302,6 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
             use_container_width=True
         )
 
-
-# --- RENDER CALENDAR V3 (Compact + Timeline) ---
-def render_calendar_view(procurement_df, tasks_database, team_database, availability_database):
-    """Ημερολόγιο: compact grid + timeline με πλήρεις πληροφορίες."""
-    st.header("📅 Calendar View")
-    st.caption("Πατάς 📌 σε task για επιλογή, μετά πατάς μέρα στο calendar για μετακίνηση")
-    
-    if procurement_df.empty:
-        st.warning("No procurement data available.")
-        return
-    
-    # CSS
-    css_text = (
-        "<style>"
-        ".compact-cal-cell button {"
-        "background: white;"
-        "color: #333333;"
-        "border: 1px solid #e0e0e0;"
-        "border-radius: 6px;"
-        "padding: 6px;"
-        "min-height: 70px;"
-        "text-align: left;"
-        "font-size: 10px;"
-        "font-weight: 500;"
-        "line-height: 1.2;"
-        "white-space: pre-line;"
-        "width: 100%;"
-        "}"
-        ".compact-cal-cell button:hover {"
-        "background: #f5f7fa;"
-        "border-color: #1565c0;"
-        "}"
-        ".today-cal-cell button {"
-        "background: #fff8e1;"
-        "border: 2px solid #ff9800;"
-        "}"
-        ".empty-cal-cell button {"
-        "background: #fafafa;"
-        "color: #999999;"
-        "}"
-        ".other-month-cal-cell button {"
-        "opacity: 0.35;"
-        "}"
-        ".move-mode-cal-cell button {"
-        "background: #e3f2fd;"
-        "border: 2px dashed #1565c0;"
-        "}"
-        ".move-mode-cal-cell button:hover {"
-        "background: #bbdefb;"
-        "border-style: solid;"
-        "}"
-        "</style>"
-    )
-    st.markdown(css_text, unsafe_allow_html=True)
-    
-    today = date.today()
-    
-    # State
-    if "cal_month" not in st.session_state:
-        st.session_state["cal_month"] = date(today.year, today.month, 1)
-    if "cal_selected_task" not in st.session_state:
-        st.session_state["cal_selected_task"] = None
-    
-    selected_month = st.session_state["cal_month"]
-    
-    # --- Nav + Τίτλος ---
-    col_nav1, col_nav2, col_nav3, col_title = st.columns([0.5, 0.5, 0.5, 5])
-    
-    with col_nav1:
-        if st.button("⬅️", key="cal_prev", use_container_width=True, help="Προηγούμενος"):
-            prev = selected_month - timedelta(days=1)
-            st.session_state["cal_month"] = date(prev.year, prev.month, 1)
-            st.session_state["cal_selected_task"] = None
-            st.rerun()
-    
-    with col_nav2:
-        if st.button("🏠", key="cal_home", use_container_width=True, help="Τρέχων μήνας"):
-            st.session_state["cal_month"] = date(today.year, today.month, 1)
-            st.session_state["cal_selected_task"] = None
-            st.rerun()
-    
-    with col_nav3:
-        if st.button("➡️", key="cal_next", use_container_width=True, help="Επόμενος"):
-            if selected_month.month == 12:
-                next_m = date(selected_month.year + 1, 1, 1)
-            else:
-                next_m = date(selected_month.year, selected_month.month + 1, 1)
-            st.session_state["cal_month"] = next_m
-            st.session_state["cal_selected_task"] = None
-            st.rerun()
-    
-    with col_title:
-        greek_months = {
-            1: "Ιανουάριος", 2: "Φεβρουάριος", 3: "Μάρτιος", 4: "Απρίλιος",
-            5: "Μάιος", 6: "Ιούνιος", 7: "Ιούλιος", 8: "Αύγουστος",
-            9: "Σεπτέμβριος", 10: "Οκτώβριος", 11: "Νοέμβριος", 12: "Δεκέμβριος"
-        }
-        month_name = greek_months.get(selected_month.month, "?")
-        st.markdown(f"### 📅 {month_name} {selected_month.year}")
-    
-    # --- Filters ---
-    col_f1, col_f2, col_f3 = st.columns([1, 1, 1])
-    
-    all_projects = set()
-    all_users = set()
-    
-    for _, row in procurement_df.iterrows():
-        p = str(row["Project"])
-        if p and p != "-":
-            all_projects.add(p)
-    
-    for u_key, task_list in st.session_state.get("tasks_store", {}).items():
-        for t in task_list:
-            if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
-                users = t.get("users", [])
-                if not users:
-                    users = [t.get("user", "- Χωρίς Ανάθεση -")]
-                for u in users:
-                    if u and u != "- Χωρίς Ανάθεση -":
-                        all_users.add(u)
-    
-    for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
-        if isinstance(p_dict, dict):
-            for t_name, p_data in p_dict.items():
-                if isinstance(p_data, dict) and p_data.get("active", False):
-                    users = p_data.get("users", [])
-                    if not users:
-                        users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
-                    for u in users:
-                        if u and u != "- Χωρίς Ανάθεση -":
-                            all_users.add(u)
-    
-    with col_f1:
-        filter_project = st.selectbox("Project:", ["Όλα"] + sorted(list(all_projects)), key="cal_v3_filter_proj")
-    with col_f2:
-        filter_user = st.selectbox("Τεχνίτης:", ["Όλοι"] + sorted(list(all_users)), key="cal_v3_filter_user")
-    with col_f3:
-        filter_status = st.selectbox("Status:", ["Όλα", "⏳ Εκκρεμή", "✅ Ολοκληρωμένα"], key="cal_v3_filter_status")
-    
-    # --- Collect tasks ---
-    all_tasks = []
-    
-    for u_key, task_list in st.session_state.get("tasks_store", {}).items():
-        parts = u_key.rsplit("_", 1)
-        item_id = parts[0]
-        idx_part = int(parts[1]) if len(parts) == 2 and parts[1].isdigit() else 0
-        
-        proj_name = "-"
-        material_name = "-"
-        qty_val = 1
-        if not procurement_df.empty and idx_part < len(procurement_df):
-            try:
-                proc_row = procurement_df.iloc[idx_part]
-                if str(proc_row["ID"]) == item_id:
-                    proj_name = str(proc_row["Project"])
-                    material_name = str(proc_row["Υλικό / Προϊόν"])
-                    qty_val = int(proc_row["Ποσότητα"]) if str(proc_row["Ποσότητα"]).isdigit() else 1
-            except:
-                pass
-        
-        for t_idx, t in enumerate(task_list):
-            if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
-                t_date = t.get("date", today)
-                if not isinstance(t_date, date):
-                    t_date = today
-                
-                t_users = t.get("users", [])
-                if not t_users:
-                    t_users = [t.get("user", "- Χωρίς Ανάθεση -")]
-                
-                if filter_project != "Όλα" and proj_name != filter_project:
-                    continue
-                if filter_user != "Όλοι":
-                    if filter_user not in t_users:
-                        continue
-                if filter_status == "⏳ Εκκρεμή" and t.get("done", False):
-                    continue
-                if filter_status == "✅ Ολοκληρωμένα" and not t.get("done", False):
-                    continue
-                
-                all_tasks.append({
-                    "type": "item",
-                    "u_key": u_key,
-                    "t_idx": t_idx,
-                    "task": t["task"],
-                    "date": t_date,
-                    "done": t.get("done", False),
-                    "users": t_users,
-                    "project": proj_name,
-                    "material": material_name,
-                    "item_id": item_id,
-                    "qty": qty_val,
-                })
-    
-    for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
-        if isinstance(p_dict, dict):
-            proj_name = p_key.replace("proj_", "")
-            proj_qty = 1
-            p_items = procurement_df[procurement_df["Project"] == proj_name]
-            for _, r in p_items.iterrows():
-                if str(r["Ποσότητα"]).isdigit():
-                    proj_qty = max(proj_qty, int(r["Ποσότητα"]))
-            
-            for t_name, p_data in p_dict.items():
-                if isinstance(p_data, dict) and p_data.get("active", False):
-                    t_date = p_data.get("date", today)
-                    if not isinstance(t_date, date):
-                        t_date = today
-                    
-                    t_users = p_data.get("users", [])
-                    if not t_users:
-                        t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
-                    
-                    if filter_project != "Όλα" and proj_name != filter_project:
-                        continue
-                    if filter_user != "Όλοι":
-                        if filter_user not in t_users:
-                            continue
-                    if filter_status == "⏳ Εκκρεμή" and p_data.get("done", False):
-                        continue
-                    if filter_status == "✅ Ολοκληρωμένα" and not p_data.get("done", False):
-                        continue
-                    
-                    all_tasks.append({
-                        "type": "project",
-                        "p_key": p_key,
-                        "task_name": t_name,
-                        "task": t_name,
-                        "date": t_date,
-                        "done": p_data.get("done", False),
-                        "users": t_users,
-                        "project": proj_name,
-                        "material": "Γενική Σύνθεση",
-                        "item_id": "-",
-                        "qty": proj_qty,
-                    })
-    
-    # --- Stats ---
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Σύνολο", len(all_tasks))
-    c2.metric("✅ Done", sum(1 for t in all_tasks if t["done"]))
-    c3.metric("⏳ Εκκρεμή", sum(1 for t in all_tasks if not t["done"]))
-    c4.metric("Projects", len(set(t["project"] for t in all_tasks if t["project"] != "-")))
-    
-    # --- Selected warning ---
-    if st.session_state["cal_selected_task"] is not None:
-        sel = st.session_state["cal_selected_task"]
-        sel_label = sel.get("task_label", "task")
-        
-        col_warn, col_cancel = st.columns([5, 1])
-        with col_warn:
-            st.warning(f"📌 **Επιλεγμένο**: `{sel_label}` — Πάτα σε **μέρα** στο calendar για μετακίνηση")
-        with col_cancel:
-            st.write("")
-            if st.button("✕ Ακύρωση", key="cal_v3_cancel", use_container_width=True):
-                st.session_state["cal_selected_task"] = None
-                st.rerun()
-    
-    st.divider()
-    
-    # --- Header days ---
-    day_names = ["Δευ", "Τρι", "Τετ", "Πεμ", "Παρ", "Σαβ", "Κυρ"]
-    header_cols = st.columns(7)
-    for i, name in enumerate(day_names):
-        with header_cols[i]:
-            st.markdown(
-                f'<div style="text-align:center;font-weight:700;padding:6px;background:#f5f5f5;color:#333333;border-radius:4px;font-size:13px;">{name}</div>',
-                unsafe_allow_html=True
-            )
-    
-    # --- Grid ---
-    first_of_month = selected_month
-    first_weekday = first_of_month.weekday()
-    
-    if first_of_month.month == 12:
-        next_month = date(first_of_month.year + 1, 1, 1)
-    else:
-        next_month = date(first_of_month.year, first_of_month.month + 1, 1)
-    
-    start_date = first_of_month - timedelta(days=first_weekday)
-    calendar_days = [start_date + timedelta(days=i) for i in range(42)]
-    
-    has_selected_task = st.session_state["cal_selected_task"] is not None
-    
-    for week_idx in range(6):
-        week_cols = st.columns(7)
-        
-        for day_idx in range(7):
-            cell_idx = week_idx * 7 + day_idx
-            cell_date = calendar_days[cell_idx]
-            
-            with week_cols[day_idx]:
-                day_tasks = [t for t in all_tasks if t["date"] == cell_date]
-                
-                is_today = (cell_date == today)
-                is_current_month = (cell_date.month == selected_month.month)
-                
-                # Label
-                lines = [str(cell_date.day)]
-                
-                if day_tasks:
-                    lines.append(f"{len(day_tasks)} tasks")
-                    # Δείξε 1 task name
-                    first_task = day_tasks[0]["task"][:15]
-                    if len(day_tasks) > 1:
-                        lines.append(f"{first_task}...")
-                    else:
-                        lines.append(first_task)
-                else:
-                    lines.append("—")
-                
-                btn_label = "\n".join(lines)
-                
-                cell_classes = ["compact-cal-cell"]
-                if is_today:
-                    cell_classes.append("today-cal-cell")
-                if not day_tasks:
-                    cell_classes.append("empty-cal-cell")
-                if not is_current_month:
-                    cell_classes.append("other-month-cal-cell")
-                if has_selected_task:
-                    cell_classes.append("move-mode-cal-cell")
-                
-                st.markdown(f'<div class="{" ".join(cell_classes)}">', unsafe_allow_html=True)
-                
-                btn_key = f"cal_cell_{cell_date.strftime('%Y%m%d')}"
-                if st.button(btn_label, key=btn_key, use_container_width=True):
-                    if has_selected_task:
-                        # Μετακίνηση
-                        sel = st.session_state["cal_selected_task"]
-                        if sel["type"] == "item":
-                            if sel["u_key"] in st.session_state["tasks_store"]:
-                                if sel["t_idx"] < len(st.session_state["tasks_store"][sel["u_key"]]):
-                                    st.session_state["tasks_store"][sel["u_key"]][sel["t_idx"]]["date"] = cell_date
-                                    mark_unsaved_changes()
-                                    st.session_state["cal_selected_task"] = None
-                                    st.toast(f"✅ Μετακινήθηκε στις {cell_date.strftime('%d/%m/%Y')}", icon="✅")
-                                    st.rerun()
-                        else:
-                            if sel["p_key"] in st.session_state["project_tasks_store"]:
-                                if sel["task_name"] in st.session_state["project_tasks_store"][sel["p_key"]]:
-                                    st.session_state["project_tasks_store"][sel["p_key"]][sel["task_name"]]["date"] = cell_date
-                                    mark_unsaved_changes()
-                                    st.session_state["cal_selected_task"] = None
-                                    st.toast(f"✅ Μετακινήθηκε στις {cell_date.strftime('%d/%m/%Y')}", icon="✅")
-                                    st.rerun()
-                
-                st.markdown('</div>', unsafe_allow_html=True)
-    
-    # --- Timeline: όλες οι μέρες ---
-    st.divider()
-    st.markdown("### 📋 Λεπτομέρειες ανά μέρα")
-    
-    # Group tasks by date
-    tasks_by_date = {}
-    for t in all_tasks:
-        d = t["date"]
-        if d not in tasks_by_date:
-            tasks_by_date[d] = []
-        tasks_by_date[d].append(t)
-    
-    # Sort dates
-    sorted_dates = sorted(tasks_by_date.keys())
-    
-    if not sorted_dates:
-        st.info("Δεν υπάρχουν tasks για αυτόν τον μήνα με τα τρέχοντα φίλτρα.")
-    else:
-        for day in sorted_dates:
-            day_tasks = tasks_by_date[day]
-            day_name = WEEKDAYS_GREEK.get(day.weekday(), "?")
-            is_today = (day == today)
-            
-            # Header της μέρας
-            if is_today:
-                st.markdown(f"#### 🔔 **{day_name} {day.strftime('%d/%m/%Y')}** (Σήμερα) — {len(day_tasks)} tasks")
-            else:
-                st.markdown(f"#### 📅 **{day_name} {day.strftime('%d/%m/%Y')}** — {len(day_tasks)} tasks")
-            
-            # Tasks
-            for idx_t, t in enumerate(day_tasks):
-                is_selected = False
-                if st.session_state["cal_selected_task"] is not None:
-                    sel = st.session_state["cal_selected_task"]
-                    if (sel.get("u_key") == t.get("u_key") and 
-                        sel.get("t_idx") == t.get("t_idx") and
-                        sel.get("p_key") == t.get("p_key") and
-                        sel.get("task_name") == t.get("task_name")):
-                        is_selected = True
-                
-                with st.container(border=True):
-                    col_info, col_action = st.columns([6, 1])
-                    
-                    with col_info:
-                        status_icon = "✅" if t["done"] else "⏳"
-                        
-                        # Line 1: Task name (bold)
-                        st.markdown(f"{status_icon} **{t['task']}**")
-                        
-                        # Line 2: Project · Item ID · Qty
-                        project_info = f"{t['project']}"
-                        if t["item_id"] != "-":
-                            project_info += f" · `{t['item_id']}` · {t['qty']} τμχ"
-                        else:
-                            project_info += f" · {t['qty']} τμχ"
-                        st.caption(project_info)
-                        
-                        # Line 3: Users
-                        users_str = ", ".join(t["users"])
-                        st.caption(f"👤 {users_str}")
-                    
-                    with col_action:
-                        if is_selected:
-                            if st.button("✓", key=f"cal_v3_deselect_{t['date']}_{idx_t}", help="Αποεπιλογή", type="primary"):
-                                st.session_state["cal_selected_task"] = None
-                                st.rerun()
-                        else:
-                            if st.button("📌", key=f"cal_v3_select_{t['date']}_{idx_t}", help="Επιλογή για μετακίνηση"):
-                                st.session_state["cal_selected_task"] = {
-                                    "type": t["type"],
-                                    "u_key": t.get("u_key"),
-                                    "t_idx": t.get("t_idx"),
-                                    "p_key": t.get("p_key"),
-                                    "task_name": t.get("task_name"),
-                                    "task_label": t["task"],
-                                }
-                                st.rerun()
-
 # --- MAIN ---
 def main():
     init_auth()
@@ -3766,7 +3404,7 @@ def main():
             st.divider()
         
         st.markdown("### 📋 Navigation")
-        pages_list = ["📦 Projects", "📦 Παραλαβές", "📅 Calendar", "📋 Master View", "🗓️ Daily Plan", "👤 Technician", "📆 Projection", "📝 Daily Report", "📊 Database", "⚙️ Settings"]
+        pages_list = ["📦 Projects", "📦 Παραλαβές", "📋 Master View", "🗓️ Daily Plan", "👤 Technician", "📆 Projection", "📝 Daily Report", "📊 Database", "⚙️ Settings"]
         current_page = st.session_state.get("page", "📦 Projects")
         if current_page not in pages_list:
             current_page = "📦 Projects"
@@ -3823,8 +3461,6 @@ def main():
         render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df)
     elif page == "📦 Παραλαβές":
         render_incoming(procurement_df, tasks_database, team_database, incoming_df)
-    elif page == "📅 Calendar":
-        render_calendar_view(procurement_df, tasks_database, team_database, availability_database)
     elif page == "📋 Master View":
         render_master_view(procurement_df, tasks_database, team_database, availability_database, incoming_df)
     elif page == "🗓️ Daily Plan":
