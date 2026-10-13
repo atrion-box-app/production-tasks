@@ -2878,146 +2878,164 @@ def render_team_members(team_members_list, availability_database, availability_o
     days_order = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο", "Κυριακή"]
     short_days = ["Δευ", "Τρι", "Τετ", "Πεμ", "Παρ", "Σαβ", "Κυρ"]
     
-    # --- Section 1: Weekly availability table (HTML) ---
+    # --- Section 1: Weekly availability (Styled DataFrame) ---
     st.subheader("📊 Εβδομαδιαία Διαθεσιμότητα")
     
-    # Build HTML table
-    header_cells = '<th style="padding:10px;background:#1e88e5;color:white;text-align:center;font-size:12px;border:1px solid #1565c0;">Όνομα</th>'
-    header_cells += '<th style="padding:10px;background:#1e88e5;color:white;text-align:center;font-size:12px;border:1px solid #1565c0;">Τύπος</th>'
-    for sd in short_days:
-        header_cells += f'<th style="padding:10px;background:#1e88e5;color:white;text-align:center;font-size:12px;border:1px solid #1565c0;min-width:50px;">{sd}</th>'
-    header_cells += '<th style="padding:10px;background:#1565c0;color:white;text-align:center;font-size:12px;border:1px solid #0d47a1;min-width:70px;">Σύνολο</th>'
-    
-    body_rows = ""
-    for idx, member in enumerate(team_members_list):
+    # Build DataFrame
+    table_data = []
+    for member in team_members_list:
         name = member.get("name", "")
         mtype = member.get("type", "—")
         active = member.get("active", True)
         
-        row_bg = "#ffffff" if idx % 2 == 0 else "#f8f9fa"
-        if not active:
-            row_bg = "#f0f0f0"
-        
-        icon = "🟢" if active else "⚪"
+        row = {
+            "Όνομα": f"{'🟢' if active else '⚪'} {name}",
+            "Τύπος": mtype,
+        }
         
         total_week = 0.0
-        cells = (
-            f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
-            f'background:{row_bg};font-weight:600;">{icon} {name}</td>'
-            f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
-            f'background:{row_bg};color:#666;font-size:12px;">{mtype}</td>'
-        )
-        
         for i, day in enumerate(days_order):
             day_avail = availability_database.get(day, {})
             hrs = day_avail.get(name, 0.0)
+            row[short_days[i]] = hrs if hrs > 0 else None
             total_week += hrs
-            
-            if hrs > 0:
-                cell_bg = "#e8f5e9"
-                cell_color = "#2e7d32"
-                display = f"{round(hrs, 1)}"
-            else:
-                cell_bg = row_bg
-                cell_color = "#ccc"
-                display = "—"
-            
-            cells += (
-                f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
-                f'background:{cell_bg};color:{cell_color};font-weight:600;">{display}</td>'
-            )
         
-        # Total
-        cells += (
-            f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
-            f'background:#e3f2fd;color:#1565c0;font-weight:700;">{round(total_week, 1)}h</td>'
+        row["Σύνολο"] = f"{round(total_week, 1)}h"
+        table_data.append(row)
+    
+    df_table = pd.DataFrame(table_data)
+    
+    # Styled DataFrame — center everything
+    styled_df = (
+        df_table.style
+        .set_properties(**{
+            'text-align': 'center',
+            'font-size': '13px',
+        })
+        .set_table_styles([
+            # Header
+            {'selector': 'th', 'props': [
+                ('text-align', 'center'),
+                ('background-color', '#1e88e5'),
+                ('color', 'white'),
+                ('font-weight', '700'),
+                ('padding', '10px'),
+                ('border', '1px solid #1565c0'),
+            ]},
+            # Cells
+            {'selector': 'td', 'props': [
+                ('text-align', 'center !important'),
+                ('padding', '8px'),
+                ('border', '1px solid #e0e0e0'),
+            ]},
+            # Index column
+            {'selector': 'th.row_heading', 'props': [
+                ('display', 'none'),
+            ]},
+            {'selector': 'td.row_heading', 'props': [
+                ('display', 'none'),
+            ]},
+        ])
+        .format({
+            **{d: lambda x: f"{x:.1f}" if pd.notna(x) else "—" for d in short_days},
+        }, na_rep="—")
+        .applymap(
+            lambda v: 'background-color: #e8f5e9; color: #2e7d32; font-weight: 600;' 
+            if isinstance(v, (int, float)) and v > 0 else '',
+            subset=short_days
         )
-        
-        body_rows += f'<tr>{cells}</tr>'
-    
-    table_html = (
-        f'<div style="overflow-x:auto;">'
-        f'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
-        f'<thead><tr>{header_cells}</tr></thead>'
-        f'<tbody>{body_rows}</tbody>'
-        f'</table>'
-        f'</div>'
+        .hide(axis="index")
     )
-    st.markdown(table_html, unsafe_allow_html=True)
     
-    # --- Section 2: Daily totals (HTML) ---
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    
+    # --- Section 2: Daily totals (Styled DataFrame) ---
     st.subheader("📈 Σύνολο ανά Ημέρα")
     
-    day_header = '<th style="padding:10px;background:#1e88e5;color:white;text-align:center;font-size:12px;border:1px solid #1565c0;">Ημέρα</th>'
-    day_header += '<th style="padding:10px;background:#1e88e5;color:white;text-align:center;font-size:12px;border:1px solid #1565c0;">Ενεργοί</th>'
-    day_header += '<th style="padding:10px;background:#1565c0;color:white;text-align:center;font-size:12px;border:1px solid #0d47a1;">Σύνολο Ωρών</th>'
-    
-    day_rows = ""
-    for idx, day in enumerate(days_order):
+    daily_data = []
+    for day in days_order:
         day_avail = availability_database.get(day, {})
         total = sum(day_avail.get(m.get("name", ""), 0.0) for m in team_members_list if m.get("active", True))
         active_count = sum(1 for m in team_members_list if m.get("active", True) and day_avail.get(m.get("name", ""), 0.0) > 0)
-        
-        row_bg = "#ffffff" if idx % 2 == 0 else "#f8f9fa"
-        
-        day_rows += (
-            f'<tr>'
-            f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
-            f'background:{row_bg};font-weight:600;">{day}</td>'
-            f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
-            f'background:{row_bg};">{active_count}</td>'
-            f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
-            f'background:#e3f2fd;color:#1565c0;font-weight:700;">{round(total, 1)}h</td>'
-            f'</tr>'
-        )
+        daily_data.append({
+            "Ημέρα": day,
+            "Ενεργοί": active_count,
+            "Σύνολο Ωρών": f"{round(total, 1)}h",
+        })
     
-    day_table = (
-        f'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
-        f'<thead><tr>{day_header}</tr></thead>'
-        f'<tbody>{day_rows}</tbody>'
-        f'</table>'
+    df_daily = pd.DataFrame(daily_data)
+    
+    styled_daily = (
+        df_daily.style
+        .set_properties(**{
+            'text-align': 'center',
+            'font-size': '13px',
+        })
+        .set_table_styles([
+            {'selector': 'th', 'props': [
+                ('text-align', 'center'),
+                ('background-color', '#1e88e5'),
+                ('color', 'white'),
+                ('font-weight', '700'),
+                ('padding', '10px'),
+                ('border', '1px solid #1565c0'),
+            ]},
+            {'selector': 'td', 'props': [
+                ('text-align', 'center !important'),
+                ('padding', '8px'),
+                ('border', '1px solid #e0e0e0'),
+            ]},
+        ])
+        .hide(axis="index")
     )
-    st.markdown(day_table, unsafe_allow_html=True)
+    
+    st.dataframe(styled_daily, use_container_width=True, hide_index=True)
     
     # --- Section 3: Overrides ---
     if availability_overrides:
         st.subheader("🏖️ Άδειες / Overrides")
         
-        ov_header = '<th style="padding:10px;background:#ff9800;color:white;text-align:center;font-size:12px;border:1px solid #f57c00;">Όνομα</th>'
-        ov_header += '<th style="padding:10px;background:#ff9800;color:white;text-align:center;font-size:12px;border:1px solid #f57c00;">Από</th>'
-        ov_header += '<th style="padding:10px;background:#ff9800;color:white;text-align:center;font-size:12px;border:1px solid #f57c00;">Έως</th>'
-        ov_header += '<th style="padding:10px;background:#ff9800;color:white;text-align:center;font-size:12px;border:1px solid #f57c00;">Ώρες</th>'
-        ov_header += '<th style="padding:10px;background:#ff9800;color:white;text-align:center;font-size:12px;border:1px solid #f57c00;">Αιτία</th>'
+        ov_data = []
+        for ov in availability_overrides:
+            ov_data.append({
+                "Όνομα": ov.get("name", ""),
+                "Από": ov.get("date_from").strftime("%d/%m/%Y") if ov.get("date_from") else "—",
+                "Έως": ov.get("date_to").strftime("%d/%m/%Y") if ov.get("date_to") else "—",
+                "Ώρες": f"{ov.get('hours', 0)}h",
+                "Αιτία": ov.get("reason", ""),
+            })
         
-        ov_rows = ""
-        for idx, ov in enumerate(availability_overrides):
-            row_bg = "#ffffff" if idx % 2 == 0 else "#fff8e1"
-            ov_rows += (
-                f'<tr>'
-                f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
-                f'background:{row_bg};font-weight:600;">{ov.get("name", "")}</td>'
-                f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
-                f'background:{row_bg};">{ov.get("date_from").strftime("%d/%m/%Y") if ov.get("date_from") else "—"}</td>'
-                f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
-                f'background:{row_bg};">{ov.get("date_to").strftime("%d/%m/%Y") if ov.get("date_to") else "—"}</td>'
-                f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
-                f'background:{row_bg};font-weight:700;color:#f57c00;">{ov.get("hours", 0)}h</td>'
-                f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
-                f'background:{row_bg};color:#666;">{ov.get("reason", "")}</td>'
-                f'</tr>'
-            )
+        df_ov = pd.DataFrame(ov_data)
         
-        ov_table = (
-            f'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
-            f'<thead><tr>{ov_header}</tr></thead>'
-            f'<tbody>{ov_rows}</tbody>'
-            f'</table>'
+        styled_ov = (
+            df_ov.style
+            .set_properties(**{
+                'text-align': 'center',
+                'font-size': '13px',
+            })
+            .set_table_styles([
+                {'selector': 'th', 'props': [
+                    ('text-align', 'center'),
+                    ('background-color', '#ff9800'),
+                    ('color', 'white'),
+                    ('font-weight', '700'),
+                    ('padding', '10px'),
+                    ('border', '1px solid #f57c00'),
+                ]},
+                {'selector': 'td', 'props': [
+                    ('text-align', 'center !important'),
+                    ('padding', '8px'),
+                    ('border', '1px solid #e0e0e0'),
+                ]},
+            ])
+            .hide(axis="index")
         )
-        st.markdown(ov_table, unsafe_allow_html=True)
+        
+        st.dataframe(styled_ov, use_container_width=True, hide_index=True)
     else:
         st.info("Δεν υπάρχουν καταχωρημένες άδειες.")
     
-    # --- Section 4: Export (χρησιμοποιεί DataFrame μόνο για το CSV) ---
+    # --- Section 4: Export ---
     st.divider()
     export_data = []
     for member in team_members_list:
@@ -3047,7 +3065,6 @@ def render_team_members(team_members_list, availability_database, availability_o
         mime="text/csv",
         use_container_width=True
     )
-
 # --- RENDER DATABASE ---
 def render_database(tasks_database, team_database, availability_database):
     st.header("Βάση Δεδομένων")
