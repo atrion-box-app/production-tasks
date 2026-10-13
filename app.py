@@ -313,6 +313,98 @@ def get_availability_for_date(target_date, availability_weekly, availability_ove
     
     return result
 
+def get_team_options_for_date(target_date, team_members_list, availability_database, availability_overrides):
+    """
+    Επιστρέφει:
+    - display_options: λίστα display strings για multiselect
+    - display_to_value: dict display → clean name
+    - value_to_display: dict clean name → display
+    """
+    if target_date is None:
+        target_date = date.today()
+    
+    day_avail = get_availability_for_date(
+        target_date, availability_database, availability_overrides, team_members_list
+    )
+    
+    display_options = []
+    display_to_value = {}
+    value_to_display = {}
+    
+    for member in team_members_list:
+        if not member.get("active", True):
+            continue
+        
+        name = member.get("name", "")
+        mtype = member.get("type", "")
+        
+        if not name:
+            continue
+        
+        # Βασικό label με τύπο
+        type_suffix = f" ({mtype})" if mtype and mtype not in ["—", "Άγνωστος"] else ""
+        
+        # Έλεγξε override
+        has_override = False
+        override_reason = ""
+        for ov in availability_overrides:
+            if ov.get("name") == name:
+                ov_from = ov.get("date_from")
+                ov_to = ov.get("date_to") or ov_from
+                if ov_from and ov_to and ov_from <= target_date <= ov_to:
+                    has_override = True
+                    override_reason = ov.get("reason", "")
+                    break
+        
+        hrs = day_avail.get(name, 0.0)
+        
+        if has_override and hrs == 0:
+            reason_str = f" ⚠️ {override_reason}" if override_reason else " ⚠️ Άδεια"
+            display = f"{name}{type_suffix}{reason_str}"
+        else:
+            display = f"{name}{type_suffix}"
+        
+        display_options.append(display)
+        display_to_value[display] = name
+        value_to_display[name] = display
+    
+    return display_options, display_to_value, value_to_display
+
+
+def clean_users_to_display(clean_list, value_to_display):
+    """Μετατροπή clean names → display strings (για defaults)."""
+    result = []
+    for name in clean_list:
+        if name in value_to_display:
+            result.append(value_to_display[name])
+        else:
+            result.append(name)
+    return result
+
+
+def update_item_users_mapped(u_key, t_idx, widget_key, display_to_value):
+    """Callback για item users — μετατρέπει display → clean."""
+    selected_display = st.session_state[widget_key]
+    selected_clean = [display_to_value.get(d, d) for d in selected_display]
+    st.session_state["tasks_store"][u_key][t_idx]["users"] = selected_clean
+    if selected_clean:
+        st.session_state["tasks_store"][u_key][t_idx]["user"] = selected_clean[0]
+    else:
+        st.session_state["tasks_store"][u_key][t_idx]["user"] = "- Χωρίς Ανάθεση -"
+    mark_unsaved_changes()
+
+
+def update_proj_users_mapped(p_key, task_name, widget_key, display_to_value):
+    """Callback για project users — μετατρέπει display → clean."""
+    selected_display = st.session_state[widget_key]
+    selected_clean = [display_to_value.get(d, d) for d in selected_display]
+    st.session_state["project_tasks_store"][p_key][task_name]["users"] = selected_clean
+    if selected_clean:
+        st.session_state["project_tasks_store"][p_key][task_name]["user"] = selected_clean[0]
+    else:
+        st.session_state["project_tasks_store"][p_key][task_name]["user"] = "- Χωρίς Ανάση -"
+    mark_unsaved_changes()
+
 # --- DATA LOADING ---
 @st.cache_data(ttl=60, show_spinner=False)
 def load_all_data(version=0):
@@ -1363,6 +1455,10 @@ def get_project_details(project_name, procurement_df, tasks_database, incoming_d
 # --- RENDER PROJECTS ---
 def render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df):
     st.header("Projects")
+
+    # ΝΕΟ:
+    team_members_list = st.session_state.get("team_members_list", [])
+    availability_overrides = st.session_state.get("availability_overrides", [])
     
     if procurement_df.empty:
         st.warning("No procurement data available.")
@@ -1562,16 +1658,24 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 if not isinstance(current_users, list):
                                     current_users = [current_users] if current_users else []
                                 
-                                valid_users = [u for u in current_users if u in team_database]
+                                # Display options με labels + warnings
+                                task_date = t_data.get("date", date.today())
+                                display_opts, disp_to_val, val_to_disp = get_team_options_for_date(
+                                    task_date, team_members_list, availability_database, availability_overrides
+                                )
+                                
+                                # Μετατροπή current users (clean) → display
+                                valid_users_clean = [u for u in current_users if u in team_database]
+                                current_display = clean_users_to_display(valid_users_clean, val_to_disp)
                                 
                                 user_k = f"mat_users_{unique_key}_{t_idx}"
                                 c_user.multiselect(
                                     "Υπεύθυνοι",
-                                    options=team_database,
-                                    default=valid_users,
+                                    options=display_opts,
+                                    default=current_display,
                                     key=user_k,
-                                    on_change=update_item_users,
-                                    args=(unique_key, t_idx, user_k)
+                                    on_change=update_item_users_mapped,
+                                    args=(unique_key, t_idx, user_k, disp_to_val)
                                 )
                                 
                                 date_k = f"mat_date_{unique_key}_{t_idx}"
@@ -1661,16 +1765,24 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         current_users = t_data.get("users", [])
                         if not isinstance(current_users, list):
                             current_users = [current_users] if current_users else []
-                        valid_users = [u for u in current_users if u in team_database]
+                        
+                        # Display options με labels + warnings
+                        task_date = t_data.get("date", date.today())
+                        display_opts, disp_to_val, val_to_disp = get_team_options_for_date(
+                            task_date, team_members_list, availability_database, availability_overrides
+                        )
+                        
+                        valid_users_clean = [u for u in current_users if u in team_database]
+                        current_display = clean_users_to_display(valid_users_clean, val_to_disp)
                         
                         puser_k = f"puser_proj_{proj_key}_{task_name}"
                         c_user.multiselect(
                             "Υπεύθυνοι",
-                            options=team_database,
-                            default=valid_users,
+                            options=display_opts,
+                            default=current_display,
                             key=puser_k,
-                            on_change=update_proj_users,
-                            args=(proj_key, task_name, puser_k)
+                            on_change=update_proj_users_mapped,
+                            args=(proj_key, task_name, puser_k, disp_to_val)
                         )
                         
                         pdate_k = f"pdate_proj_{proj_key}_{task_name}"
@@ -3146,6 +3258,11 @@ def render_settings():
 def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
     st.header("📦 Παραλαβές")
     st.caption("Υλικά που παραλαμβάνονται ανά ημερομηνία — όρισε tasks απευθείας")
+
+    # ΝΕΟ:
+    team_members_list = st.session_state.get("team_members_list", [])
+    availability_overrides = st.session_state.get("availability_overrides", [])
+    availability_database = st.session_state.get("availability_database", {})
     
     if procurement_df.empty:
         st.warning("No procurement data available.")
@@ -3342,10 +3459,19 @@ def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
                                 current_users = t_data.get("users", [])
                                 if not isinstance(current_users, list):
                                     current_users = [current_users] if current_users else []
-                                valid_users = [u for u in current_users if u in team_database]
+                                
+                                # Display options
+                                task_date = t_data.get("date", date.today())
+                                display_opts, disp_to_val, val_to_disp = get_team_options_for_date(
+                                    task_date, team_members_list, availability_database, availability_overrides
+                                )
+                                
+                                valid_users_clean = [u for u in current_users if u in team_database]
+                                current_display = clean_users_to_display(valid_users_clean, val_to_disp)
+                                
                                 user_k = f"incoming_users_{unique_key}_{t_idx}"
-                                c3.multiselect("Υπεύθυνοι", options=team_database, default=valid_users,
-                                             key=user_k, on_change=update_item_users, args=(unique_key, t_idx, user_k),
+                                c3.multiselect("Υπεύθυνοι", options=display_opts, default=current_display,
+                                             key=user_k, on_change=update_item_users_mapped, args=(unique_key, t_idx, user_k, disp_to_val),
                                              label_visibility="collapsed")
                                 
                                 date_k = f"incoming_date_{unique_key}_{t_idx}"
