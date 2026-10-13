@@ -2021,9 +2021,9 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
             use_container_width=True
         )
 
-# --- RENDER CALENDAR V2 (Clickable Cells) ---
+# --- RENDER CALENDAR V3 (Safe strings) ---
 def render_calendar_view(procurement_df, tasks_database, team_database, availability_database):
-    """Ημερολόγιο με clickable cells — πατάς cell → ανοίγει panel/μετακινείς task."""
+    """Ημερολόγιο με clickable cells."""
     st.header("📅 Calendar View")
     st.caption("Πατάς σε μια μέρα για λεπτομέρειες ή για να μετακινήσεις ένα task")
     
@@ -2031,54 +2031,53 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
         st.warning("No procurement data available.")
         return
     
-    # *** CSS για cell buttons ***
-    CALENDAR_CSS = """
-    <style>
-    div[data-testid="stButton"] > button {
-        background: white;
-        color: #333;
-        border: 1px solid #e0e0e0;
-        border-radius: 6px;
-        padding: 8px;
-        min-height: 110px;
-        text-align: left;
-        font-size: 11px;
-        font-weight: 500;
-        line-height: 1.3;
-        white-space: pre-line;
-        transition: all 0.15s;
-        display: block;
-        width: 100%;
-    }
-    div[data-testid="stButton"] > button:hover {
-        background: #f5f7fa;
-        border-color: #1565c0;
-    }
-    div[data-testid="stButton"] > button:focus {
-        box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.3);
-    }
-    .today-cell div[data-testid="stButton"] > button {
-        background: #fff8e1;
-        border: 2px solid #ff9800;
-    }
-    .move-mode div[data-testid="stButton"] > button {
-        background: #e3f2fd;
-        border: 2px dashed #1565c0;
-    }
-    .empty-cell div[data-testid="stButton"] > button {
-        background: #fafafa;
-        color: #999;
-    }
-    .other-month div[data-testid="stButton"] > button {
-        opacity: 0.4;
-    }
-    </style>
-    """
-    st.markdown(CALENDAR_CSS, unsafe_allow_html=True)
+    # CSS as list of strings (NO triple quotes!)
+    css_lines = [
+        "<style>",
+        'div[data-testid="stButton"] > button {',
+        "    background: white;",
+        "    color: #333333;",
+        "    border: 1px solid #e0e0e0;",
+        "    border-radius: 6px;",
+        "    padding: 8px;",
+        "    min-height: 110px;",
+        "    text-align: left;",
+        "    font-size: 11px;",
+        "    font-weight: 500;",
+        "    line-height: 1.3;",
+        "    white-space: pre-line;",
+        "    display: block;",
+        "    width: 100%;",
+        "}",
+        'div[data-testid="stButton"] > button:hover {',
+        "    background: #f5f7fa;",
+        "    border-color: #1565c0;",
+        "}",
+        'div[data-testid="stButton"] > button:focus {',
+        "    box-shadow: 0 0 0 3px rgba(21,101,192,0.3);",
+        "}",
+        '.today-cell div[data-testid="stButton"] > button {',
+        "    background: #fff8e1;",
+        "    border: 2px solid #ff9800;",
+        "}",
+        '.move-mode div[data-testid="stButton"] > button {',
+        "    background: #e3f2fd;",
+        "    border: 2px dashed #1565c0;",
+        "}",
+        '.empty-cell div[data-testid="stButton"] > button {',
+        "    background: #fafafa;",
+        "    color: #999999;",
+        "}",
+        '.other-month div[data-testid="stButton"] > button {',
+        "    opacity: 0.4;",
+        "}",
+        "</style>",
+    ]
+    st.markdown("\n".join(css_lines), unsafe_allow_html=True)
     
     today = date.today()
     
-    # *** State ***
+    # State
     if "cal_month" not in st.session_state:
         st.session_state["cal_month"] = date(today.year, today.month, 1)
     if "cal_selected_task" not in st.session_state:
@@ -2088,11 +2087,11 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
     
     selected_month = st.session_state["cal_month"]
     
-    # *** Πλοήγηση μηνών ***
+    # Navigation
     col_nav1, col_nav2, col_nav3, col_nav4 = st.columns([1, 1, 1, 3])
     
     with col_nav1:
-        if st.button("⬅️", use_container_width=True, key="cal_prev", help="Προηγούμενος μήνας"):
+        if st.button("⬅️", use_container_width=True, key="cal_prev", help="Προηγούμενος"):
             prev = selected_month - timedelta(days=1)
             st.session_state["cal_month"] = date(prev.year, prev.month, 1)
             st.session_state["cal_selected_task"] = None
@@ -2100,14 +2099,14 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
             st.rerun()
     
     with col_nav2:
-        if st.button("🏠", use_container_width=True, key="cal_home", help="Τρέχων μήνας"):
+        if st.button("🏠", use_container_width=True, key="cal_home", help="Τρέχων"):
             st.session_state["cal_month"] = date(today.year, today.month, 1)
             st.session_state["cal_selected_task"] = None
             st.session_state["cal_open_panel"] = None
             st.rerun()
     
     with col_nav3:
-        if st.button("➡️", use_container_width=True, key="cal_next", help="Επόμενος μήνας"):
+        if st.button("➡️", use_container_width=True, key="cal_next", help="Επόμενος"):
             if selected_month.month == 12:
                 next_m = date(selected_month.year + 1, 1, 1)
             else:
@@ -2126,10 +2125,9 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
         month_name = greek_months.get(selected_month.month, "?")
         st.markdown(f"## 📅 {month_name} {selected_month.year}")
     
-    # *** Φίλτρα ***
+    # Filters
     col_f1, col_f2, col_f3 = st.columns([1, 1, 1])
     
-    # Μάζεψε projects & users
     all_projects = set()
     all_users = set()
     
@@ -2160,25 +2158,13 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
                             all_users.add(u)
     
     with col_f1:
-        filter_project = st.selectbox(
-            "Project:",
-            ["Όλα"] + sorted(list(all_projects)),
-            key="cal_v2_filter_proj"
-        )
+        filter_project = st.selectbox("Project:", ["Όλα"] + sorted(list(all_projects)), key="cal_v3_filter_proj")
     with col_f2:
-        filter_user = st.selectbox(
-            "Τεχνίτης:",
-            ["Όλοι"] + sorted(list(all_users)),
-            key="cal_v2_filter_user"
-        )
+        filter_user = st.selectbox("Τεχνίτης:", ["Όλοι"] + sorted(list(all_users)), key="cal_v3_filter_user")
     with col_f3:
-        filter_status = st.selectbox(
-            "Status:",
-            ["Όλα", "⏳ Εκκρεμή", "✅ Ολοκληρωμένα"],
-            key="cal_v2_filter_status"
-        )
+        filter_status = st.selectbox("Status:", ["Όλα", "⏳ Εκκρεμή", "✅ Ολοκληρωμένα"], key="cal_v3_filter_status")
     
-    # *** Μάζεψε όλα τα tasks ***
+    # Collect tasks
     all_tasks = []
     
     for u_key, task_list in st.session_state.get("tasks_store", {}).items():
@@ -2207,7 +2193,6 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
                 if not t_users:
                     t_users = [t.get("user", "- Χωρίς Ανάθεση -")]
                 
-                # Φίλτρα
                 if filter_project != "Όλα" and proj_name != filter_project:
                     continue
                 if filter_user != "Όλοι":
@@ -2267,37 +2252,35 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
                         "item_id": "-",
                     })
     
-    # *** Stats ***
+    # Stats
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Σύνολο", len(all_tasks))
     c2.metric("✅ Done", sum(1 for t in all_tasks if t["done"]))
     c3.metric("⏳ Εκκρεμή", sum(1 for t in all_tasks if not t["done"]))
     c4.metric("Projects", len(set(t["project"] for t in all_tasks if t["project"] != "-")))
     
-    # *** Selected task info ***
+    # Selected task
     if st.session_state["cal_selected_task"] is not None:
         sel = st.session_state["cal_selected_task"]
         sel_label = sel.get("task_label", "task")
         st.warning(f"📌 **Επιλεγμένο**: `{sel_label}` — Πάτα σε **άλλη μέρα** για μετακίνηση")
-        if st.button("✕ Ακύρωση", key="cal_v2_cancel"):
+        if st.button("✕ Ακύρωση", key="cal_v3_cancel"):
             st.session_state["cal_selected_task"] = None
             st.rerun()
     
     st.divider()
     
-    # *** Header: Δευ-Κυρ ***
+    # Header days
     day_names = ["Δευ", "Τρι", "Τετ", "Πεμ", "Παρ", "Σαβ", "Κυρ"]
     header_cols = st.columns(7)
     for i, name in enumerate(day_names):
         with header_cols[i]:
             st.markdown(
-                f'<div style="text-align:center;font-weight:700;padding:6px;'
-                f'background:#f5f5f5;color:#333;border-radius:4px;font-size:13px;">'
-                f'{name}</div>',
+                f'<div style="text-align:center;font-weight:700;padding:6px;background:#f5f5f5;color:#333333;border-radius:4px;font-size:13px;">{name}</div>',
                 unsafe_allow_html=True
             )
     
-    # *** Calendar grid ***
+    # Grid
     first_of_month = selected_month
     first_weekday = first_of_month.weekday()
     
@@ -2309,7 +2292,6 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
     start_date = first_of_month - timedelta(days=first_weekday)
     calendar_days = [start_date + timedelta(days=i) for i in range(42)]
     
-    # *** Render 6 εβδομάδες ***
     for week_idx in range(6):
         week_cols = st.columns(7)
         
@@ -2318,19 +2300,16 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
             cell_date = calendar_days[cell_idx]
             
             with week_cols[day_idx]:
-                # Tasks για αυτή τη μέρα
                 day_tasks = [t for t in all_tasks if t["date"] == cell_date]
                 
                 is_today = (cell_date == today)
                 is_current_month = (cell_date.month == selected_month.month)
                 has_selected_task = st.session_state["cal_selected_task"] is not None
                 
-                # *** Φτιάξε το label του button ***
-                lines = []
-                lines.append(f"{cell_date.day}")
+                # Build label
+                lines = [str(cell_date.day)]
                 
                 if day_tasks:
-                    # Δείξε 2 πρώτα tasks
                     for t in day_tasks[:2]:
                         status_icon = "✅" if t["done"] else "⏳"
                         task_label = t["task"][:18] + ("..." if len(t["task"]) > 18 else "")
@@ -2343,7 +2322,7 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
                 
                 btn_label = "\n".join(lines)
                 
-                # *** CSS classes για styling ***
+                # CSS classes
                 cell_classes = []
                 if is_today:
                     cell_classes.append("today-cell")
@@ -2354,14 +2333,11 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
                 if has_selected_task:
                     cell_classes.append("move-mode")
                 
-                # *** Wrap σε div με classes ***
                 st.markdown(f'<div class="{" ".join(cell_classes)}">', unsafe_allow_html=True)
                 
-                # *** Button ***
                 btn_key = f"cal_cell_{cell_date.strftime('%Y%m%d')}"
                 if st.button(btn_label, key=btn_key, use_container_width=True):
                     if has_selected_task:
-                        # Μετακίνηση
                         sel = st.session_state["cal_selected_task"]
                         if sel["type"] == "item":
                             if sel["u_key"] in st.session_state["tasks_store"]:
@@ -2380,13 +2356,12 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
                                     st.toast(f"✅ Μετακινήθηκε στις {cell_date.strftime('%d/%m/%Y')}", icon="✅")
                                     st.rerun()
                     else:
-                        # Άνοιγμα panel
                         st.session_state["cal_open_panel"] = cell_date
                         st.rerun()
                 
                 st.markdown('</div>', unsafe_allow_html=True)
     
-    # *** Panel λεπτομερειών ***
+    # Panel
     if st.session_state["cal_open_panel"] is not None:
         panel_date = st.session_state["cal_open_panel"]
         day_tasks = [t for t in all_tasks if t["date"] == panel_date]
@@ -2398,7 +2373,7 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
             day_name = WEEKDAYS_GREEK.get(panel_date.weekday(), "?")
             st.markdown(f"### 📋 {day_name} {panel_date.strftime('%d/%m/%Y')} — {len(day_tasks)} tasks")
         with col_close:
-            if st.button("✕ Κλείσιμο", key="cal_v2_close_panel", use_container_width=True):
+            if st.button("✕ Κλείσιμο", key="cal_v3_close_panel", use_container_width=True):
                 st.session_state["cal_open_panel"] = None
                 st.rerun()
         
@@ -2414,14 +2389,14 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
                         users_str = ", ".join(t["users"])
                         st.markdown(
                             f"**{status_icon} {t['task']}**  \n"
-                            f"<span style='color:#666;font-size:12px;'>"
-                            f"{t['project']} — {t['material'][:40]}  \n"
+                            f"<span style='color:#666;font-size:12px;'>{t['project']} — {t['material'][:40]}  \n"
                             f"👤 {users_str}</span>",
                             unsafe_allow_html=True
                         )
                     
                     with col_action:
-                        if st.button("📌", key=f"cal_v2_select_{t.get('u_key', t.get('p_key'))}_{t.get('t_idx', t.get('task_name'))}", help="Επιλογή για μετακίνηση"):
+                        unique_key = f"{t.get('u_key', t.get('p_key'))}_{t.get('t_idx', t.get('task_name'))}"
+                        if st.button("📌", key=f"cal_v3_select_{unique_key}", help="Επιλογή για μετακίνηση"):
                             st.session_state["cal_selected_task"] = {
                                 "type": t["type"],
                                 "u_key": t.get("u_key"),
@@ -2433,13 +2408,13 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
                             st.session_state["cal_open_panel"] = None
                             st.rerun()
     
-    # *** Legend ***
+    # Legend
     st.divider()
     st.markdown("### 🎨 Legend")
     st.markdown(
         '<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;">'
         '<span>🟠 <b>Σήμερα</b></span>'
-        '<span>🟦 <b>Move mode</b> (επιλεγμένο task)</span>'
+        '<span>🟦 <b>Move mode</b></span>'
         '<span>⬜ <b>Άλλος μήνας</b></span>'
         '<span>✅ Done</span>'
         '<span>⏳ Pending</span>'
