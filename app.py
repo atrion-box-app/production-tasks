@@ -214,7 +214,11 @@ def parse_date_safe(date_str):
 
 
 def get_shipping_info(project_name, incoming_df):
-    """Επιστρέφει (is_shipped, shipping_date_str) για ένα project."""
+    """Επιστρέφει (is_shipped, shipping_date_str) για ένα project.
+    
+    ΚΡΙΣΙΜΟ: Το is_shipped καθορίζεται ΜΟΝΟ από το Shipping Status,
+    ΟΧΙ από το Shipping Date (γιατί όλα τα projects έχουν date).
+    """
     if incoming_df is None or incoming_df.empty:
         return False, ""
     if "Project" not in incoming_df.columns:
@@ -228,13 +232,30 @@ def get_shipping_info(project_name, incoming_df):
             shipping_status = str(inc_row.get("Shipping Status", "")).strip().upper()
             shipping_date = str(inc_row.get("Shipping Date", "")).strip()
             
+            # ΚΡΙΣΙΜΟ: Έλεγχος ΜΟΝΟ με case-insensitive match
+            # Το "OK Shipped" (mixed) πρέπει να πιάνεται
             is_shipped = False
-            if "OK SHIPPED" in shipping_status or "OK SHIP" in shipping_status or shipping_status == "SHIPPED":
-                is_shipped = True
-            if shipping_date and shipping_date not in ["-", "nan", "", "NONE", "NAT"]:
+            status_normalized = shipping_status.replace("_", " ").replace("-", " ").strip()
+            
+            # Πολλαπλά patterns για robustness
+            shipped_patterns = [
+                "OK SHIPPED",
+                "OK SHIP",
+                "SHIPPED",
+                "OK SHIPPED ✓",
+            ]
+            
+            for pattern in shipped_patterns:
+                if pattern in status_normalized:
+                    is_shipped = True
+                    break
+            
+            # Επίσης: αν το status είναι ΑΚΡΙΒΩΣ "SHIPPED" (χωρίς OK)
+            if status_normalized == "SHIPPED":
                 is_shipped = True
             
-            if shipping_date in ["-", "nan", "", "None", "NaT"]:
+            # Καθάρισε την ημερομηνία (αν υπάρχει, απλά την επιστρέφουμε για display)
+            if shipping_date in ["-", "nan", "", "None", "NaT", "NAT"]:
                 shipping_date = ""
             
             return is_shipped, shipping_date
