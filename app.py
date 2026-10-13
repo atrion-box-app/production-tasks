@@ -4020,34 +4020,25 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
         
         return day_data
     
-    # --- Print button ---
+    # --- Print button: Download HTML ---
     col_print, _ = st.columns([1, 4])
     with col_print:
-        if st.button("🖨️ Εκτύπωση Ημερολογίου", use_container_width=True, type="primary", key="tc_print"):
-            html = generate_calendar_print_html(
-                selected_month, selected_year, weeks, team_database,
-                availability_database, get_day_data, month_names_greek,
-                availability_overrides, team_members_list
-            )
-            st.session_state["tc_print_html"] = html
-            st.session_state["tc_show_print"] = True
-    
-    if st.session_state.get("tc_show_print", False) and "tc_print_html" in st.session_state:
-        st.info("📄 Το HTML είναι έτοιμο. Άνοιξε το παρακάτω link για print preview.")
-        
-        b64_html = base64.b64encode(st.session_state["tc_print_html"].encode("utf-8")).decode("utf-8")
-        href = f"data:text/html;base64,{b64_html}"
-        
-        st.markdown(
-            f'<a href="{href}" target="_blank" style="display:inline-block;padding:12px 24px;background:#1e88e5;color:white;text-decoration:none;border-radius:6px;font-weight:600;">🖨️ Άνοιγμα σε νέα καρτέλα για Εκτύπωση</a>',
-            unsafe_allow_html=True
+        html = generate_calendar_print_html(
+            selected_month, selected_year, weeks, team_database,
+            availability_database, get_day_data, month_names_greek,
+            availability_overrides, team_members_list
         )
-        
-        if st.button("✕ Κλείσιμο print preview", key="tc_close_print"):
-            st.session_state["tc_show_print"] = False
-            if "tc_print_html" in st.session_state:
-                del st.session_state["tc_print_html"]
-            st.rerun()
+        st.download_button(
+            label="🖨️ Λήψη Ημερολογίου (HTML)",
+            data=html,
+            file_name=f"Team_Calendar_{selected_year}_{selected_month:02d}.html",
+            mime="text/html",
+            use_container_width=True,
+            type="primary",
+            key="tc_download_html"
+        )
+    
+    st.caption("💡 Άνοιξε το αρχείο και πάτησε `Ctrl+P` για εκτύπωση. Για καλύτερο αποτέλεσμα: **A4 Landscape**.")
     
     st.divider()
     
