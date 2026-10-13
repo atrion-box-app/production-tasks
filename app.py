@@ -3634,11 +3634,9 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
     greek_day = WEEKDAYS_GREEK.get(day.weekday(), "Δευτέρα")
     day_avail = availability_database.get(greek_day, {})
     
-    # Available hours (sum of team)
     total_available = sum(day_avail.get(m, 6.0) for m in team_database)
     committed_hours = day_data["total_hours"]
     
-    # Colors
     if not is_current_month:
         bg_color = "#fafafa"
         text_color = "#ccc"
@@ -3654,7 +3652,7 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
     
     border = "3px solid #ff9800" if is_today else "1px solid #e0e0e0"
     
-    # Build projects HTML
+    # Build projects HTML - ΧΩΡΙΣ newlines
     projects_html = ""
     for proj_name, proj_info in list(day_data["projects"].items())[:3]:
         icons = ""
@@ -3665,7 +3663,6 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
         
         display_name = proj_name[:18] + "…" if len(proj_name) > 18 else proj_name
         
-        # Color based on shipping
         if proj_info.get("shipping"):
             proj_color = "#c62828"
             proj_bg = "#ffebee"
@@ -3711,17 +3708,18 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
     else:
         hours_html = ""
     
-    # Day cell HTML
-    cell_html = f"""
-    <div style="background:{bg_color};border:{border};border-radius:8px;padding:8px;min-height:120px;opacity:{opacity};">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-            <div style="font-size:13px;font-weight:700;color:{text_color};">{day.day}</div>
-            <div style="font-size:9px;color:#999;">{WEEKDAYS_SHORT_GREEK.get(day.weekday(), '')}</div>
-        </div>
-        {projects_html}
-        {hours_html}
-    </div>
-    """
+    # ΚΡΙΣΙΜΟ: ΧΩΡΙΣ newlines/spaces στην αρχή - όλα σε ΜΙΑ γραμμή
+    cell_html = (
+        f'<div style="background:{bg_color};border:{border};border-radius:8px;'
+        f'padding:8px;min-height:120px;opacity:{opacity};">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+        f'<div style="font-size:13px;font-weight:700;color:{text_color};">{day.day}</div>'
+        f'<div style="font-size:9px;color:#999;">{WEEKDAYS_SHORT_GREEK.get(day.weekday(), "")}</div>'
+        f'</div>'
+        f'{projects_html}'
+        f'{hours_html}'
+        f'</div>'
+    )
     st.markdown(cell_html, unsafe_allow_html=True)
 
 
