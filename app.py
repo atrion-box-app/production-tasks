@@ -3630,7 +3630,7 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
 
 
 def render_day_cell(day, day_data, team_database, availability_database, is_current_month, is_today):
-    """Render ένα κελί ημέρας στο calendar."""
+    """Render ένα κελί ημέρας στο calendar - μεγαλύτερο & πιο ευανάγνωστο."""
     greek_day = WEEKDAYS_GREEK.get(day.weekday(), "Δευτέρα")
     day_avail = availability_database.get(greek_day, {})
     
@@ -3652,16 +3652,17 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
     
     border = "3px solid #ff9800" if is_today else "1px solid #e0e0e0"
     
-    # Build projects HTML - ΧΩΡΙΣ newlines
+    # === Projects (μεγαλύτερα) ===
     projects_html = ""
-    for proj_name, proj_info in list(day_data["projects"].items())[:3]:
+    max_projects = 5  # Περισσότερα από 3
+    for proj_name, proj_info in list(day_data["projects"].items())[:max_projects]:
         icons = ""
         if proj_info.get("shipping"):
             icons += "🚚 "
         if proj_info.get("tasks"):
             icons += "🔧 "
         
-        display_name = proj_name[:18] + "…" if len(proj_name) > 18 else proj_name
+        display_name = proj_name[:22] + "…" if len(proj_name) > 22 else proj_name
         
         if proj_info.get("shipping"):
             proj_color = "#c62828"
@@ -3674,17 +3675,17 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
             proj_bg = "#f5f5f5"
         
         projects_html += (
-            f'<div style="background:{proj_bg};color:{proj_color};padding:2px 5px;'
-            f'border-radius:4px;font-size:10px;margin-bottom:2px;font-weight:600;'
+            f'<div style="background:{proj_bg};color:{proj_color};padding:5px 8px;'
+            f'border-radius:5px;font-size:12px;margin-bottom:4px;font-weight:600;'
             f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
             f'{icons}{display_name}</div>'
         )
     
-    extra_projects = len(day_data["projects"]) - 3
+    extra_projects = len(day_data["projects"]) - max_projects
     if extra_projects > 0:
-        projects_html += f'<div style="font-size:9px;color:#666;text-align:center;">+{extra_projects} ακόμα</div>'
+        projects_html += f'<div style="font-size:11px;color:#666;text-align:center;padding:3px;">+{extra_projects} ακόμα</div>'
     
-    # Hours bar
+    # === Hours bar (μεγαλύτερο) ===
     if is_current_month and total_available > 0:
         pct = min((committed_hours / total_available) * 100, 100)
         if committed_hours > total_available:
@@ -3695,11 +3696,11 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
             bar_color = "#1e88e5"
         
         hours_html = (
-            f'<div style="margin-top:4px;">'
-            f'<div style="background:#e0e0e0;border-radius:3px;height:4px;overflow:hidden;">'
+            f'<div style="margin-top:8px;padding-top:6px;border-top:1px solid #eee;">'
+            f'<div style="background:#e0e0e0;border-radius:4px;height:6px;overflow:hidden;">'
             f'<div style="width:{pct}%;height:100%;background:{bar_color};"></div>'
             f'</div>'
-            f'<div style="font-size:9px;color:#666;margin-top:2px;display:flex;justify-content:space-between;">'
+            f'<div style="font-size:11px;color:#555;margin-top:5px;display:flex;justify-content:space-between;font-weight:600;">'
             f'<span>🕐 {round(total_available, 0):.0f}h</span>'
             f'<span>📌 {round(committed_hours, 1)}h</span>'
             f'</div>'
@@ -3708,13 +3709,13 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
     else:
         hours_html = ""
     
-    # ΚΡΙΣΙΜΟ: ΧΩΡΙΣ newlines/spaces στην αρχή - όλα σε ΜΙΑ γραμμή
+    # === Cell (ΜΕΓΑΛΥΤΕΡΟ) ===
     cell_html = (
-        f'<div style="background:{bg_color};border:{border};border-radius:8px;'
-        f'padding:8px;min-height:120px;opacity:{opacity};">'
-        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
-        f'<div style="font-size:13px;font-weight:700;color:{text_color};">{day.day}</div>'
-        f'<div style="font-size:9px;color:#999;">{WEEKDAYS_SHORT_GREEK.get(day.weekday(), "")}</div>'
+        f'<div style="background:{bg_color};border:{border};border-radius:10px;'
+        f'padding:12px;min-height:200px;opacity:{opacity};">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+        f'<div style="font-size:20px;font-weight:800;color:{text_color};">{day.day}</div>'
+        f'<div style="font-size:11px;color:#999;font-weight:600;">{WEEKDAYS_SHORT_GREEK.get(day.weekday(), "")}</div>'
         f'</div>'
         f'{projects_html}'
         f'{hours_html}'
