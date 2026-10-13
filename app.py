@@ -2871,6 +2871,23 @@ def render_team_members(team_members_list, availability_database, availability_o
     st.header("👥 Ομάδα")
     st.caption("Εβδομαδιαία διαθεσιμότητα και πληροφορίες μελών")
     
+    # CSS για center alignment σε όλα τα dataframe cells
+    st.markdown("""
+    <style>
+        div[data-testid="stDataFrame"] div[role="gridcell"],
+        div[data-testid="stDataFrame"] div[role="columnheader"],
+        div[data-testid="stDataFrame"] div[role="rowheader"] {
+            text-align: center !important;
+            justify-content: center !important;
+        }
+        div[data-testid="stDataFrame"] div[role="gridcell"] > div,
+        div[data-testid="stDataFrame"] div[role="columnheader"] > div {
+            justify-content: center !important;
+            text-align: center !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
     if not team_members_list:
         st.warning("Δεν βρέθηκαν μέλη. Έλεγξε το Team_Members sheet.")
         return
@@ -2896,7 +2913,7 @@ def render_team_members(team_members_list, availability_database, availability_o
         for i, day in enumerate(days_order):
             day_avail = availability_database.get(day, {})
             hrs = day_avail.get(name, 0.0)
-            row[short_days[i]] = hrs if hrs > 0 else None
+            row[short_days[i]] = f"{hrs:.1f}"  # πάντα string, πάντα εμφανίζεται
             total_week += hrs
         
         row["Σύνολο"] = f"{round(total_week, 1)}h"
@@ -2904,11 +2921,8 @@ def render_team_members(team_members_list, availability_database, availability_o
     
     df_table = pd.DataFrame(table_data)
     
-    # Styled DataFrame — center everything
-    styled_df = df_table.style.set_properties(**{
-        'text-align': 'center',
-        'font-size': '13px',
-    }).set_table_styles([
+    # Απλό style — μόνο header styling, χωρίς background σε cells
+    styled_df = df_table.style.set_table_styles([
         {'selector': 'th', 'props': [
             ('text-align', 'center'),
             ('background-color', '#1e88e5'),
@@ -2922,14 +2936,7 @@ def render_team_members(team_members_list, availability_database, availability_o
             ('padding', '8px'),
             ('border', '1px solid #e0e0e0'),
         ]},
-    ]).format(
-        {d: lambda x: f"{x:.1f}" if pd.notna(x) else "—" for d in short_days},
-        na_rep="—"
-    ).map(
-        lambda v: 'background-color: #e8f5e9; color: #2e7d32; font-weight: 600;' 
-        if isinstance(v, (int, float)) and v > 0 else '',
-        subset=short_days
-    )
+    ])
     
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
     
@@ -2943,16 +2950,13 @@ def render_team_members(team_members_list, availability_database, availability_o
         active_count = sum(1 for m in team_members_list if m.get("active", True) and day_avail.get(m.get("name", ""), 0.0) > 0)
         daily_data.append({
             "Ημέρα": day,
-            "Ενεργοί": active_count,
+            "Ενεργοί": str(active_count),
             "Σύνολο Ωρών": f"{round(total, 1)}h",
         })
     
     df_daily = pd.DataFrame(daily_data)
     
-    styled_daily = df_daily.style.set_properties(**{
-        'text-align': 'center',
-        'font-size': '13px',
-    }).set_table_styles([
+    styled_daily = df_daily.style.set_table_styles([
         {'selector': 'th', 'props': [
             ('text-align', 'center'),
             ('background-color', '#1e88e5'),
@@ -2986,10 +2990,7 @@ def render_team_members(team_members_list, availability_database, availability_o
         
         df_ov = pd.DataFrame(ov_data)
         
-        styled_ov = df_ov.style.set_properties(**{
-            'text-align': 'center',
-            'font-size': '13px',
-        }).set_table_styles([
+        styled_ov = df_ov.style.set_table_styles([
             {'selector': 'th', 'props': [
                 ('text-align', 'center'),
                 ('background-color', '#ff9800'),
