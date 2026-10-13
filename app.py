@@ -2878,10 +2878,9 @@ def render_team_members(team_members_list, availability_database, availability_o
     days_order = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο", "Κυριακή"]
     short_days = ["Δευ", "Τρι", "Τετ", "Πεμ", "Παρ", "Σαβ", "Κυρ"]
     
-    # --- Section 1: Weekly availability (Styled DataFrame) ---
+    # --- Section 1: Weekly availability ---
     st.subheader("📊 Εβδομαδιαία Διαθεσιμότητα")
     
-    # Build DataFrame
     table_data = []
     for member in team_members_list:
         name = member.get("name", "")
@@ -2906,50 +2905,35 @@ def render_team_members(team_members_list, availability_database, availability_o
     df_table = pd.DataFrame(table_data)
     
     # Styled DataFrame — center everything
-    styled_df = (
-        df_table.style
-        .set_properties(**{
-            'text-align': 'center',
-            'font-size': '13px',
-        })
-        .set_table_styles([
-            # Header
-            {'selector': 'th', 'props': [
-                ('text-align', 'center'),
-                ('background-color', '#1e88e5'),
-                ('color', 'white'),
-                ('font-weight', '700'),
-                ('padding', '10px'),
-                ('border', '1px solid #1565c0'),
-            ]},
-            # Cells
-            {'selector': 'td', 'props': [
-                ('text-align', 'center !important'),
-                ('padding', '8px'),
-                ('border', '1px solid #e0e0e0'),
-            ]},
-            # Index column
-            {'selector': 'th.row_heading', 'props': [
-                ('display', 'none'),
-            ]},
-            {'selector': 'td.row_heading', 'props': [
-                ('display', 'none'),
-            ]},
-        ])
-        .format({
-            **{d: lambda x: f"{x:.1f}" if pd.notna(x) else "—" for d in short_days},
-        }, na_rep="—")
-        .applymap(
-            lambda v: 'background-color: #e8f5e9; color: #2e7d32; font-weight: 600;' 
-            if isinstance(v, (int, float)) and v > 0 else '',
-            subset=short_days
-        )
-        .hide(axis="index")
+    styled_df = df_table.style.set_properties(**{
+        'text-align': 'center',
+        'font-size': '13px',
+    }).set_table_styles([
+        {'selector': 'th', 'props': [
+            ('text-align', 'center'),
+            ('background-color', '#1e88e5'),
+            ('color', 'white'),
+            ('font-weight', '700'),
+            ('padding', '10px'),
+            ('border', '1px solid #1565c0'),
+        ]},
+        {'selector': 'td', 'props': [
+            ('text-align', 'center'),
+            ('padding', '8px'),
+            ('border', '1px solid #e0e0e0'),
+        ]},
+    ]).format(
+        {d: lambda x: f"{x:.1f}" if pd.notna(x) else "—" for d in short_days},
+        na_rep="—"
+    ).map(
+        lambda v: 'background-color: #e8f5e9; color: #2e7d32; font-weight: 600;' 
+        if isinstance(v, (int, float)) and v > 0 else '',
+        subset=short_days
     )
     
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
     
-    # --- Section 2: Daily totals (Styled DataFrame) ---
+    # --- Section 2: Daily totals ---
     st.subheader("📈 Σύνολο ανά Ημέρα")
     
     daily_data = []
@@ -2965,29 +2949,24 @@ def render_team_members(team_members_list, availability_database, availability_o
     
     df_daily = pd.DataFrame(daily_data)
     
-    styled_daily = (
-        df_daily.style
-        .set_properties(**{
-            'text-align': 'center',
-            'font-size': '13px',
-        })
-        .set_table_styles([
-            {'selector': 'th', 'props': [
-                ('text-align', 'center'),
-                ('background-color', '#1e88e5'),
-                ('color', 'white'),
-                ('font-weight', '700'),
-                ('padding', '10px'),
-                ('border', '1px solid #1565c0'),
-            ]},
-            {'selector': 'td', 'props': [
-                ('text-align', 'center !important'),
-                ('padding', '8px'),
-                ('border', '1px solid #e0e0e0'),
-            ]},
-        ])
-        .hide(axis="index")
-    )
+    styled_daily = df_daily.style.set_properties(**{
+        'text-align': 'center',
+        'font-size': '13px',
+    }).set_table_styles([
+        {'selector': 'th', 'props': [
+            ('text-align', 'center'),
+            ('background-color', '#1e88e5'),
+            ('color', 'white'),
+            ('font-weight', '700'),
+            ('padding', '10px'),
+            ('border', '1px solid #1565c0'),
+        ]},
+        {'selector': 'td', 'props': [
+            ('text-align', 'center'),
+            ('padding', '8px'),
+            ('border', '1px solid #e0e0e0'),
+        ]},
+    ])
     
     st.dataframe(styled_daily, use_container_width=True, hide_index=True)
     
@@ -3007,29 +2986,24 @@ def render_team_members(team_members_list, availability_database, availability_o
         
         df_ov = pd.DataFrame(ov_data)
         
-        styled_ov = (
-            df_ov.style
-            .set_properties(**{
-                'text-align': 'center',
-                'font-size': '13px',
-            })
-            .set_table_styles([
-                {'selector': 'th', 'props': [
-                    ('text-align', 'center'),
-                    ('background-color', '#ff9800'),
-                    ('color', 'white'),
-                    ('font-weight', '700'),
-                    ('padding', '10px'),
-                    ('border', '1px solid #f57c00'),
-                ]},
-                {'selector': 'td', 'props': [
-                    ('text-align', 'center !important'),
-                    ('padding', '8px'),
-                    ('border', '1px solid #e0e0e0'),
-                ]},
-            ])
-            .hide(axis="index")
-        )
+        styled_ov = df_ov.style.set_properties(**{
+            'text-align': 'center',
+            'font-size': '13px',
+        }).set_table_styles([
+            {'selector': 'th', 'props': [
+                ('text-align', 'center'),
+                ('background-color', '#ff9800'),
+                ('color', 'white'),
+                ('font-weight', '700'),
+                ('padding', '10px'),
+                ('border', '1px solid #f57c00'),
+            ]},
+            {'selector': 'td', 'props': [
+                ('text-align', 'center'),
+                ('padding', '8px'),
+                ('border', '1px solid #e0e0e0'),
+            ]},
+        ])
         
         st.dataframe(styled_ov, use_container_width=True, hide_index=True)
     else:
@@ -3065,6 +3039,7 @@ def render_team_members(team_members_list, availability_database, availability_o
         mime="text/csv",
         use_container_width=True
     )
+    
 # --- RENDER DATABASE ---
 def render_database(tasks_database, team_database, availability_database):
     st.header("Βάση Δεδομένων")
