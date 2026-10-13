@@ -3421,16 +3421,36 @@ def main():
         
         st.divider()
         
+        # *** ΝΕΟ: Μέτρησε μόνο τα tasks που φαίνονται στο Master View ***
         total_tasks = 0
-        for u_key, task_list in st.session_state.get("tasks_store", {}).items():
-            for t in task_list:
-                if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
-                    total_tasks += 1
-        for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
-            if isinstance(p_dict, dict):
-                for t_name, p_data in p_dict.items():
-                    if isinstance(p_data, dict) and p_data.get("active", False):
+        
+        # Tasks από items που υπάρχουν στο procurement_df
+        if not procurement_df.empty:
+            valid_item_ids = set(str(r["ID"]) for _, r in procurement_df.iterrows())
+            valid_u_keys = set()
+            for idx, row in procurement_df.iterrows():
+                item_id = str(row["ID"])
+                valid_u_keys.add(f"{item_id}_{idx}")
+            
+            for u_key, task_list in st.session_state.get("tasks_store", {}).items():
+                if u_key not in valid_u_keys:
+                    continue  # Skip orphan
+                for t in task_list:
+                    if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
                         total_tasks += 1
+        
+        # Project tasks - μόνο για projects που υπάρχουν στο procurement_df
+        if not procurement_df.empty:
+            valid_projects = set(str(p) for p in procurement_df["Project"].unique() if p != "-")
+            for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
+                if isinstance(p_dict, dict):
+                    proj_name = p_key.replace("proj_", "")
+                    if proj_name not in valid_projects:
+                        continue  # Skip orphan
+                    for t_name, p_data in p_dict.items():
+                        if isinstance(p_data, dict) and p_data.get("active", False):
+                            total_tasks += 1
+        
         st.metric("Total Tasks", total_tasks)
         
         active_count = 0
