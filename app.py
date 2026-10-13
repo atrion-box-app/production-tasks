@@ -2032,56 +2032,49 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
         return
     
     # *** CSS για cell buttons ***
-    st.markdown("""
+    CALENDAR_CSS = """
     <style>
-        div[data-testid="stButton"] > button {
-            background: white !important;
-            color: #333 !important;
-            border: 1px solid #e0e0e0 !important;
-            border-radius: 6px !important;
-            padding: 8px !important;
-            min-height: 110px !important;
-            text-align: left !important;
-            font-size: 11px !important;
-            font-weight: 500 !important;
-            line-height: 1.3 !important;
-            white-space: pre-line !important;
-            transition: all 0.15s !important;
-            display: block !important;
-            width: 100% !important;
-        }
-        div[data-testid="stButton"] > button:hover {
-            background: #f5f7fa !important;
-            border-color: #1565c0 !important;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        div[data-testid="stButton"] > button:focus {
-            box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.3) !important;
-            outline: none !important;
-        }
-        .today-cell div[data-testid="stButton"] > button {
-            background: #fff8e1 !important;
-            border: 2px solid #ff9800 !important;
-        }
-        .move-mode div[data-testid="stButton"] > button {
-            background: #e3f2fd !important;
-            border: 2px dashed #1565c0 !important;
-            cursor: crosshair !important;
-        }
-        .move-mode div[data-testid="stButton"] > button:hover {
-            background: #bbdefb !important;
-            border-style: solid !important;
-        }
-        .empty-cell div[data-testid="stButton"] > button {
-            background: #fafafa !important;
-            color: #999 !important;
-        }
-        .other-month div[data-testid="stButton"] > button {
-            opacity: 0.4 !important;
-        }
+    div[data-testid="stButton"] > button {
+        background: white;
+        color: #333;
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        padding: 8px;
+        min-height: 110px;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 500;
+        line-height: 1.3;
+        white-space: pre-line;
+        transition: all 0.15s;
+        display: block;
+        width: 100%;
+    }
+    div[data-testid="stButton"] > button:hover {
+        background: #f5f7fa;
+        border-color: #1565c0;
+    }
+    div[data-testid="stButton"] > button:focus {
+        box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.3);
+    }
+    .today-cell div[data-testid="stButton"] > button {
+        background: #fff8e1;
+        border: 2px solid #ff9800;
+    }
+    .move-mode div[data-testid="stButton"] > button {
+        background: #e3f2fd;
+        border: 2px dashed #1565c0;
+    }
+    .empty-cell div[data-testid="stButton"] > button {
+        background: #fafafa;
+        color: #999;
+    }
+    .other-month div[data-testid="stButton"] > button {
+        opacity: 0.4;
+    }
     </style>
-    """, unsafe_allow_html=True)
+    """
+    st.markdown(CALENDAR_CSS, unsafe_allow_html=True)
     
     today = date.today()
     
