@@ -276,10 +276,11 @@ def get_availability_for_date(target_date, availability_weekly, availability_ove
     Επιστρέφει dict {όνομα: ώρες} για τη συγκεκριμένη ημερομηνία.
     
     Λογική:
-    1. Παίρνει την ημέρα της εβδομάδας (π.χ. Δευτέρα)
-    2. Διαβάζει ώρες από availability_weekly[greek_day]
-    3. Εφαρμόζει overrides για τη συγκεκριμένη ημερομηνία
-    4. Φιλτράρει μόνο ενεργά μέλη
+    1. Ελέγχει αν ο κάθε τεχνίτης είναι εντός του διαστήματος έναρξης/λήξης
+    2. Παίρνει την ημέρα της εβδομάδας (π.χ. Δευτέρα)
+    3. Διαβάζει ώρες από availability_weekly[greek_day]
+    4. Εφαρμόζει overrides για τη συγκεκριμένη ημερομηνία
+    5. Φιλτράρει μόνο ενεργά μέλη
     """
     if target_date is None:
         return {}
@@ -290,9 +291,35 @@ def get_availability_for_date(target_date, availability_weekly, availability_ove
     # Start with weekly values
     result = {}
     for member in team_members_list:
-        name = member["name"] if isinstance(member, dict) else member
-        if member.get("active", True) if isinstance(member, dict) else True:
-            result[name] = day_avail.get(name, 0.0)
+        if not isinstance(member, dict):
+            # Fallback: σκέτο όνομα
+            result[member] = day_avail.get(member, 0.0)
+            continue
+        
+        name = member.get("name", "")
+        if not name:
+            continue
+        
+        # Έλεγχος ενεργού
+        if not member.get("active", True):
+            continue
+        
+        # === ΝΕΟ: Έλεγχος ημερομηνιών έναρξης/λήξης ===
+        date_from = member.get("start_date")
+        date_to = member.get("end_date")
+        
+        if date_from and target_date < date_from:
+            # Δεν έχει ξεκινήσει ακόμα → 0 ώρες
+            result[name] = 0.0
+            continue
+        
+        if date_to and target_date > date_to:
+            # Έχει τελειώσει → 0 ώρες
+            result[name] = 0.0
+            continue
+        
+        # Κανονική τιμή από weekly
+        result[name] = day_avail.get(name, 0.0)
     
     # Apply overrides
     for override in availability_overrides:
@@ -481,10 +508,19 @@ def load_all_data(version=0):
             active_raw = strip_all_fields(str(row.get("Ενεργός", "ΝΑΙ"))).upper()
             is_active = active_raw in ["ΝΑΙ", "YES", "TRUE", "1", "✅"]
             
+            # ΝΕΟ: Διάβασε ημερομηνίες έναρξης/λήξης
+            start_str = strip_all_fields(str(row.get("Ημ. Έναρξης", "")))
+            end_str = strip_all_fields(str(row.get("Ημ. Λήξης", "")))
+            
+            start_date = parse_date_ambiguous(start_str, prefer_eu=True) if start_str else None
+            end_date = parse_date_ambiguous(end_str, prefer_eu=True) if end_str else None
+            
             team_members_list.append({
                 "name": name,
                 "type": member_type,
                 "active": is_active,
+                "start_date": start_date,
+                "end_date": end_date,
             })
             if is_active:
                 team_member_names.append(name)
