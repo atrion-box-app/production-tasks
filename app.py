@@ -147,10 +147,14 @@ PROC_CSV_URL = f"https://docs.google.com/spreadsheets/d/{PROC_SHEET_ID}/export?f
 
 MY_SHEET_ID = "1rps5ha4wyo8DQ3zwUTqS5BSNMrJPatvqdh8M0iMHVEg"
 TIMES_GID = "2126316973"
-TEAM_GID = "1303086311"
+TEAM_MEMBERS_GID = "1035290737"
+AVAILABILITY_WEEKLY_GID = "1303086311"
+AVAILABILITY_OVERRIDES_GID = "1438091482"
 
 TIMES_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TIMES_GID}"
-TEAM_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TEAM_GID}"
+TEAM_MEMBERS_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TEAM_MEMBERS_GID}"
+AVAILABILITY_WEEKLY_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={AVAILABILITY_WEEKLY_GID}"
+AVAILABILITY_OVERRIDES_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={AVAILABILITY_OVERRIDES_GID}"
 
 WEEKDAYS_GREEK = {
     0: "Δευτέρα", 1: "Τρίτη", 2: "Τετάρτη", 3: "Πέμπτη", 
@@ -205,9 +209,33 @@ def parse_date_safe(date_str):
     s = str(date_str).strip()
     if s in ["-", "nan", "", "None", "NaT"]:
         return None
-    for fmt in ["%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d.%m.%Y", "%Y-%m-%d %H:%M:%S"]:
+    # Try DD/MM/YYYY first (European format) — for our data
+    for fmt in ["%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%Y-%m-%d", "%Y/%m/%d", "%Y-%m-%d %H:%M:%S"]:
         try:
             return datetime.strptime(s.split(" ")[0], fmt.split(" ")[0]).date()
+        except:
+            continue
+    return None
+
+
+def parse_date_ambiguous(date_str, prefer_eu=True):
+    """
+    Parse date where format is ambiguous (e.g., 04/11/2026 — 4 Nov or 11 Apr?).
+    If prefer_eu=True → DD/MM/YYYY
+    """
+    s = str(date_str).strip()
+    if s in ["-", "nan", "", "None", "NaT"]:
+        return None
+    # Try EU format first (DD/MM/YYYY)
+    if prefer_eu:
+        try:
+            return datetime.strptime(s.split(" ")[0], "%d/%m/%Y").date()
+        except:
+            pass
+    # Then US format
+    for fmt in ["%m/%d/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y"]:
+        try:
+            return datetime.strptime(s.split(" ")[0], fmt).date()
         except:
             continue
     return None
@@ -232,13 +260,9 @@ def get_shipping_info(project_name, incoming_df):
             shipping_status = str(inc_row.get("Shipping Status", "")).strip()
             shipping_date = str(inc_row.get("Shipping Date", "")).strip()
             
-            # Normalize: uppercase, collapse whitespace
             status_clean = re.sub(r'\s+', ' ', shipping_status.upper()).strip()
-            
-            # is_shipped = True ΜΟΝΟ αν είναι ΑΚΡΙΒΩΣ "OK SHIPPED"
             is_shipped = (status_clean == "OK SHIPPED")
             
-            # Καθάρισε την ημερομηνία για display
             if shipping_date in ["-", "nan", "", "None", "NaT", "NAT"]:
                 shipping_date = ""
             
@@ -246,9 +270,53 @@ def get_shipping_info(project_name, incoming_df):
     
     return False, ""
 
+
+def get_availability_for_date(target_date, availability_weekly, availability_overrides, team_members_list):
+    """
+    Επιστρέφει dict {όνομα: ώρες} για τη συγκεκριμένη ημερομηνία.
+    
+    Λογική:
+    1. Παίρνει την ημέρα της εβδομάδας (π.χ. Δευτέρα)
+    2. Διαβάζει ώρες από availability_weekly[greek_day]
+    3. Εφαρμόζει overrides για τη συγκεκριμένη ημερομηνία
+    4. Φιλτράρει μόνο ενεργά μέλη
+    """
+    if target_date is None:
+        return {}
+    
+    greek_day = WEEKDAYS_GREEK.get(target_date.weekday(), "Δευτέρα")
+    day_avail = availability_weekly.get(greek_day, {})
+    
+    # Start with weekly values
+    result = {}
+    for member in team_members_list:
+        name = member["name"] if isinstance(member, dict) else member
+        if member.get("active", True) if isinstance(member, dict) else True:
+            result[name] = day_avail.get(name, 0.0)
+    
+    # Apply overrides
+    for override in availability_overrides:
+        ov_name = override.get("name", "").strip()
+        ov_from = override.get("date_from")
+        ov_to = override.get("date_to")
+        ov_hours = override.get("hours", 0.0)
+        
+        if not ov_name or ov_from is None:
+            continue
+        
+        if ov_to is None:
+            ov_to = ov_from
+        
+        if ov_from <= target_date <= ov_to:
+            if ov_name in result:
+                result[ov_name] = ov_hours
+    
+    return result
+
 # --- DATA LOADING ---
 @st.cache_data(ttl=60, show_spinner=False)
 def load_all_data(version=0):
+    # --- 1. Procurement ---
     try:
         df_proc_raw = pd.read_csv(PROC_CSV_URL, header=None)
         indices = [18, 3, 17, 1, 2, 5, 6, 4, 10, 12]
@@ -266,12 +334,12 @@ def load_all_data(version=0):
     except Exception:
         df_proc = pd.DataFrame()
 
+    # --- 2. Incoming ---
     df_incoming = pd.DataFrame()
     try:
         df_incoming_raw = pd.read_csv(INCOMING_CSV_URL, header=None)
         
         if not df_incoming_raw.empty:
-            # Στήλες: 1=Project, 8=Project's Shipping Date, 11=Shipping Status
             df_incoming = df_incoming_raw.iloc[1:, [1, 8, 11]].copy()
             df_incoming.columns = ["Project", "Shipping Date", "Shipping Status"]
             df_incoming = df_incoming.dropna(subset=["Project"])
@@ -284,6 +352,7 @@ def load_all_data(version=0):
     except Exception as e:
         st.warning(f"Could not load Incoming Projects List: {e}")
 
+    # --- 3. Tasks times ---
     tasks_dict = {}
     try:
         df_times_raw = pd.read_csv(TIMES_CSV_URL, header=None)
@@ -302,33 +371,116 @@ def load_all_data(version=0):
     except Exception:
         tasks_dict = {"Έλεγχος (εύκολο)": 1.0, "Συναρμολόγηση": 2.0, "Συσκευασία": 1.5}
 
-    team_members = ["Βαγγέλης Μ.", "Βαγγέλης JR.", "Εποχικός 1", "Εποχικός 2", "Ana", "Alex"]
-    availability_dict = {day: {m: 6.0 for m in team_members} for day in WEEKDAYS_GREEK.values()}
-
+    # --- 4. Team Members (από νέο Sheet) ---
+    team_members_list = []  # λίστα από dicts: {name, type, active, start_date, end_date, notes}
+    team_member_names = []  # μόνο τα ονόματα
+    
     try:
-        df_team_raw = pd.read_csv(TEAM_CSV_URL)
-        df_team_raw.columns = [str(c).strip() for c in df_team_raw.columns]
-        ignore_cols = ["Ημέρα", "Σύνολο διαθέσιμων ωρών", "Unnamed: 0"]
-        found_members = [c for c in df_team_raw.columns if c and c not in ignore_cols and "Unnamed" not in c]
-        if found_members:
-            team_members = found_members
+        df_members = pd.read_csv(TEAM_MEMBERS_CSV_URL)
+        df_members.columns = [str(c).strip() for c in df_members.columns]
+        
+        # Expected columns: Όνομα, Τύπος, Ενεργός, Ημ. Έναρξης, Ημ. Λήξης, Σημειώσεις
+        for _, row in df_members.iterrows():
+            name = strip_all_fields(str(row.get("Όνομα", "")))
+            if not name or name.lower() in ["nan", "none"]:
+                continue
             
-        for _, row in df_team_raw.iterrows():
+            member_type = strip_all_fields(str(row.get("Τύπος", "Άγνωστος")))
+            active_raw = strip_all_fields(str(row.get("Ενεργός", "ΝΑΙ"))).upper()
+            is_active = active_raw in ["ΝΑΙ", "YES", "TRUE", "1", "✅"]
+            
+            team_members_list.append({
+                "name": name,
+                "type": member_type,
+                "active": is_active,
+            })
+            if is_active:
+                team_member_names.append(name)
+    except Exception as e:
+        st.warning(f"Could not load Team_Members: {e}")
+    
+    # Fallback αν δεν φορτώσουν
+    if not team_member_names:
+        team_member_names = ["Βαγγέλης Μ.", "Βαγγέλης JR.", "Μαρία"]
+        team_members_list = [{"name": n, "type": "Μόνιμος", "active": True} for n in team_member_names]
+
+    # --- 5. Availability Weekly ---
+    availability_dict = {}  # {greek_day: {member: hours}}
+    
+    try:
+        df_week = pd.read_csv(AVAILABILITY_WEEKLY_CSV_URL)
+        df_week.columns = [str(c).strip() for c in df_week.columns]
+        
+        # Στήλη A = Ημέρα, υπόλοιπες = μέλη
+        ignore_cols = ["Ημέρα", "Σύνολο", "ΣΥΝΟΛΟ", "Σύνολο διαθέσιμων ωρών", "Unnamed: 0"]
+        member_cols = [c for c in df_week.columns if c and c not in ignore_cols and "Unnamed" not in c]
+        
+        for _, row in df_week.iterrows():
             day_name = str(row.iloc[0]).strip()
             if day_name in WEEKDAYS_GREEK.values():
-                if day_name not in availability_dict:
-                    availability_dict[day_name] = {}
-                for member in team_members:
-                    if member in df_team_raw.columns:
-                        try:
-                            val = float(str(row[member]).replace(',', '.'))
-                            availability_dict[day_name][member] = val
-                        except:
-                            availability_dict[day_name][member] = 6.0
-    except Exception:
+                availability_dict[day_name] = {}
+                for member_col in member_cols:
+                    try:
+                        val = float(str(row[member_col]).replace(',', '.'))
+                        if pd.isna(val):
+                            val = 0.0
+                    except:
+                        val = 0.0
+                    availability_dict[day_name][member_col] = val
+    except Exception as e:
+        st.warning(f"Could not load Availability_Weekly: {e}")
+        # Fallback
+        for day in WEEKDAYS_GREEK.values():
+            availability_dict[day] = {m: 6.0 for m in team_member_names}
+    
+    # Ensure all days present
+    for day in WEEKDAYS_GREEK.values():
+        if day not in availability_dict:
+            availability_dict[day] = {m: 0.0 for m in team_member_names}
+
+    # --- 6. Availability Overrides ---
+    availability_overrides = []  # λίστα από dicts
+    
+    try:
+        df_ov = pd.read_csv(AVAILABILITY_OVERRIDES_CSV_URL)
+        df_ov.columns = [str(c).strip() for c in df_ov.columns]
+        
+        for _, row in df_ov.iterrows():
+            name = strip_all_fields(str(row.get("Όνομα", "")))
+            if not name or name.lower() in ["nan", "none"]:
+                continue
+            
+            date_from_str = strip_all_fields(str(row.get("Ημ. Από", "")))
+            date_to_str = strip_all_fields(str(row.get("Ημ. Έως", "")))
+            
+            # Parse dates (προτιμούμε EU format)
+            date_from = parse_date_ambiguous(date_from_str, prefer_eu=True)
+            date_to = parse_date_ambiguous(date_to_str, prefer_eu=True)
+            
+            if date_from is None:
+                continue
+            if date_to is None:
+                date_to = date_from
+            
+            try:
+                hours = float(str(row.get("Ώρες Override", 0)).replace(',', '.'))
+            except:
+                hours = 0.0
+            
+            reason = strip_all_fields(str(row.get("Αιτία", "")))
+            
+            availability_overrides.append({
+                "name": name,
+                "date_from": date_from,
+                "date_to": date_to,
+                "hours": hours,
+                "reason": reason,
+            })
+    except Exception as e:
+        # Overrides είναι optional, μην κάνεις warning αν είναι κενό
         pass
 
-    return df_proc, tasks_dict, team_members, availability_dict, df_incoming
+    return df_proc, tasks_dict, team_member_names, availability_dict, df_incoming, team_members_list, availability_overrides
 
 # --- ASSIGNMENTS MANAGEMENT ---
 @st.cache_data(ttl=30)
@@ -1016,12 +1168,20 @@ def update_proj_users(p_key, task_name, widget_key):
     mark_unsaved_changes()
 
 # --- CHECK USER OVERLOAD ---
-def check_user_overload(target_date, availability_database):
+def check_user_overload(target_date, availability_database, availability_overrides=None, team_members_list=None):
     if not target_date:
         return {}
     
-    greek_day = WEEKDAYS_GREEK.get(target_date.weekday(), "Δευτέρα")
-    day_availability = availability_database.get(greek_day, {})
+    if availability_overrides is None:
+        availability_overrides = st.session_state.get("availability_overrides", [])
+    if team_members_list is None:
+        team_members_list = st.session_state.get("team_members_list", [])
+    
+    # Use override-aware availability
+    day_availability = get_availability_for_date(
+        target_date, availability_database, availability_overrides, team_members_list
+    )
+    
     tasks_db = st.session_state.get("_tasks_db_cache", {})
     procurement_df = st.session_state.get("procurement_df", pd.DataFrame())
     
@@ -1092,9 +1252,12 @@ def render_overload_warnings(target_dates, availability_database):
     if not target_dates:
         return
     
+    availability_overrides = st.session_state.get("availability_overrides", [])
+    team_members_list = st.session_state.get("team_members_list", [])
+    
     all_warnings = {}
     for check_date in sorted(target_dates):
-        overloads = check_user_overload(check_date, availability_database)
+        overloads = check_user_overload(check_date, availability_database, availability_overrides, team_members_list)
         for user, info in overloads.items():
             if check_date not in all_warnings:
                 all_warnings[check_date] = []
@@ -1378,7 +1541,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         item_tasks = st.session_state["tasks_store"][unique_key]
                         task_options = ["- Επιλογή Εργασίας -"] + sorted(list(tasks_database.keys()))
-                        team_options = ["- Χωρίς Ανάθεση -"] + team_database
                         
                         if not item_tasks:
                             st.info("Δεν έχουν οριστεί εργασίες. Πάτησε **Προσθήκη Εργασίας** παρακάτω.")
@@ -2299,7 +2461,14 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
             st.warning(f"**Προσοχή:** Υπάρχουν **{len(pending_proc)} tasks** με υλικά σε εκκρεμότητα!")
 
         st.markdown("#### Φόρτος Εργασίας & Διαθεσιμότητα Ομάδας")
-        day_availability = availability_database.get(greek_day_name, {})
+        
+        # Use override-aware availability
+        availability_overrides = st.session_state.get("availability_overrides", [])
+        team_members_list = st.session_state.get("team_members_list", [])
+        day_availability = get_availability_for_date(
+            target_date, availability_database, availability_overrides, team_members_list
+        )
+        
         user_hours = {}
         for d in daily_tasks:
             for u in d["Υπεύθυνος_list"]:
@@ -2309,7 +2478,7 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
         for i, (member_name, assigned_hrs) in enumerate(user_hours.items()):
             assigned_hrs = round(assigned_hrs, 2)
             if member_name != "- Χωρίς Ανάθεση -":
-                max_hrs = day_availability.get(member_name, 6.0)
+                max_hrs = day_availability.get(member_name, 0.0)
                 delta_hrs = round(assigned_hrs - max_hrs, 2)
                 if delta_hrs > 0:
                     cols[i].metric(f"{member_name}", f"{assigned_hrs} / {max_hrs}h", delta=f"+{delta_hrs}h Υπερκάλυψη", delta_color="inverse")
@@ -2483,10 +2652,13 @@ def render_projection(procurement_df, tasks_database, team_database, availabilit
     total_assigned_range = 0.0
     total_available_range = 0.0
     overbooked_days_count = 0
+    
+    availability_overrides = st.session_state.get("availability_overrides", [])
+    team_members_list = st.session_state.get("team_members_list", [])
+    
     for d in all_flat_days:
-        g_day = WEEKDAYS_GREEK.get(d.weekday(), "Δευτέρα")
-        day_avail = availability_database.get(g_day, {})
-        day_max = sum(day_avail.get(m, 6.0) for m in team_database)
+        day_avail = get_availability_for_date(d, availability_database, availability_overrides, team_members_list)
+        day_max = sum(day_avail.values())
         total_available_range += day_max
 
     weeks_matrices = []
@@ -2544,9 +2716,8 @@ def render_projection(procurement_df, tasks_database, team_database, availabilit
         total_assigned_range += w_assigned_tot
         for d in w_days:
             col_str = f"{WEEKDAYS_SHORT_GREEK[d.weekday()]} {d.strftime('%d/%m')}"
-            g_day = WEEKDAYS_GREEK.get(d.weekday(), "Δευτέρα")
-            day_avail = availability_database.get(g_day, {})
-            day_max = sum(day_avail.get(m, 6.0) for m in team_database)
+            day_avail = get_availability_for_date(d, availability_database, availability_overrides, team_members_list)
+            day_max = sum(day_avail.values())
             if d_totals[col_str] > day_max:
                 overbooked_days_count += 1
         weeks_matrices.append((w_num, w_monday, w_days, w_matrix))
@@ -2693,6 +2864,90 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
         st.dataframe(pd.DataFrame(display_data), use_container_width=True, hide_index=True)
     else:
         st.success("Όλες οι εργασίες έχουν ολοκληρωθεί!")
+
+
+# --- RENDER TEAM MEMBERS (ΝΕΑ ΣΕΛΙΔΑ) ---
+def render_team_members(team_members_list, availability_database, availability_overrides):
+    st.header("👥 Ομάδα")
+    st.caption("Εβδομαδιαία διαθεσιμότητα και πληροφορίες μελών")
+    
+    if not team_members_list:
+        st.warning("Δεν βρέθηκαν μέλη. Έλεγξε το Team_Members sheet.")
+        return
+    
+    # --- Section 1: Weekly availability table ---
+    st.subheader("📊 Εβδομαδιαία Διαθεσιμότητα")
+    
+    days_order = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο", "Κυριακή"]
+    short_days = ["Δευ", "Τρι", "Τετ", "Πεμ", "Παρ", "Σαβ", "Κυρ"]
+    
+    table_data = []
+    for member in team_members_list:
+        name = member.get("name", "")
+        mtype = member.get("type", "—")
+        active = member.get("active", True)
+        
+        row = {
+            "Όνομα": f"{'🟢' if active else '⚪'} {name}",
+            "Τύπος": mtype,
+        }
+        
+        total_week = 0.0
+        for i, day in enumerate(days_order):
+            day_avail = availability_database.get(day, {})
+            hrs = day_avail.get(name, 0.0)
+            row[short_days[i]] = hrs if hrs > 0 else "—"
+            total_week += hrs
+        
+        row["Σύνολο/εβδ"] = f"{round(total_week, 1)}h"
+        table_data.append(row)
+    
+    df_table = pd.DataFrame(table_data)
+    st.dataframe(df_table, use_container_width=True, hide_index=True)
+    
+    # --- Section 2: Daily totals ---
+    st.subheader("📈 Σύνολο ανά Ημέρα")
+    
+    daily_totals = []
+    for day in days_order:
+        day_avail = availability_database.get(day, {})
+        total = sum(day_avail.get(m.get("name", ""), 0.0) for m in team_members_list if m.get("active", True))
+        active_count = sum(1 for m in team_members_list if m.get("active", True) and day_avail.get(m.get("name", ""), 0.0) > 0)
+        daily_totals.append({
+            "Ημέρα": day,
+            "Ενεργοί": active_count,
+            "Σύνολο Ωρών": f"{round(total, 1)}h",
+        })
+    
+    st.dataframe(pd.DataFrame(daily_totals), use_container_width=True, hide_index=True)
+    
+    # --- Section 3: Overrides ---
+    if availability_overrides:
+        st.subheader("🏖️ Άδειες / Overrides")
+        
+        ov_data = []
+        for ov in availability_overrides:
+            ov_data.append({
+                "Όνομα": ov.get("name", ""),
+                "Από": ov.get("date_from").strftime("%d/%m/%Y") if ov.get("date_from") else "—",
+                "Έως": ov.get("date_to").strftime("%d/%m/%Y") if ov.get("date_to") else "—",
+                "Ώρες": ov.get("hours", 0),
+                "Αιτία": ov.get("reason", ""),
+            })
+        st.dataframe(pd.DataFrame(ov_data), use_container_width=True, hide_index=True)
+    else:
+        st.info("Δεν υπάρχουν καταχωρημένες άδειες.")
+    
+    # --- Section 4: Export ---
+    st.divider()
+    csv = df_table.to_csv(index=False).encode('utf-8-sig')
+    st.download_button(
+        "📥 Εξαγωγή CSV",
+        data=csv,
+        file_name=f"Team_{date.today().strftime('%Y-%m-%d')}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
 
 
 # --- RENDER DATABASE ---
@@ -3430,8 +3685,11 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
     
     today = date.today()
     
+    availability_overrides = st.session_state.get("availability_overrides", [])
+    team_members_list = st.session_state.get("team_members_list", [])
+    
     # --- Controls ---
-    col_month, col_year, col_info = st.columns([1, 1, 3])
+    col_month, col_year, col_info, col_weekend = st.columns([1, 1, 2, 1])
     
     month_names_greek = [
         "Ιανουάριος", "Φεβρουάριος", "Μάρτιος", "Απρίλιος", "Μάιος", "Ιούνιος",
@@ -3456,7 +3714,11 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
     with col_info:
         st.write("")
         st.write("")
-        st.caption("🟢 Διαθέσιμες ώρες | 🔵 Committed ώρες | 🚚 Αποστολές | 🔧 Σύνθεση")
+        st.caption("🕐 Διαθέσιμες | 📌 Committed | 🚚 Αποστολές | 🔧 Σύνθεση")
+    with col_weekend:
+        st.write("")
+        st.write("")
+        include_weekend_view = st.checkbox("ΣΚ στο grid", value=True, key="tc_include_weekend")
     
     # --- Navigation ---
     col_prev, col_next, col_today, _ = st.columns([1, 1, 1, 3])
@@ -3497,8 +3759,8 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
     def get_day_data(day):
         """Επιστρέφει dict με projects, tasks, hours, shipping για μια μέρα."""
         day_data = {
-            "projects": {},   # proj_name -> {"shipping": bool, "tasks": [task_names]}
-            "user_hours": {}, # user -> hours
+            "projects": {},
+            "user_hours": {},
             "total_hours": 0.0,
         }
         
@@ -3579,16 +3841,15 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
         if st.button("🖨️ Εκτύπωση Ημερολογίου", use_container_width=True, type="primary", key="tc_print"):
             html = generate_calendar_print_html(
                 selected_month, selected_year, weeks, team_database,
-                availability_database, get_day_data, month_names_greek
+                availability_database, get_day_data, month_names_greek,
+                availability_overrides, team_members_list
             )
-            # Show in expander with print button
             st.session_state["tc_print_html"] = html
             st.session_state["tc_show_print"] = True
     
     if st.session_state.get("tc_show_print", False) and "tc_print_html" in st.session_state:
         st.info("📄 Το HTML είναι έτοιμο. Άνοιξε το παρακάτω link για print preview.")
         
-        # Encode as data URI
         b64_html = base64.b64encode(st.session_state["tc_print_html"].encode("utf-8")).decode("utf-8")
         href = f"data:text/html;base64,{b64_html}"
         
@@ -3608,9 +3869,19 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
     # --- Render calendar grid ---
     st.markdown(f"### {month_names_greek[selected_month - 1]} {selected_year}")
     
+    # Determine which days of week to show
+    if include_weekend_view:
+        weekday_names = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο", "Κυριακή"]
+        weekday_indices = [0, 1, 2, 3, 4, 5, 6]
+    else:
+        weekday_names = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή"]
+        weekday_indices = [0, 1, 2, 3, 4]
+    
+    num_days_shown = len(weekday_indices)
+    
     # Weekday headers
-    header_cols = st.columns(7)
-    for i, day_name in enumerate(["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο", "Κυριακή"]):
+    header_cols = st.columns(num_days_shown)
+    for i, day_name in enumerate(weekday_names):
         header_cols[i].markdown(
             f'<div style="text-align:center;font-weight:700;padding:8px;background:#f5f5f5;border-radius:6px;font-size:12px;">{day_name}</div>',
             unsafe_allow_html=True
@@ -3618,23 +3889,32 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
     
     # Week rows
     for week in weeks:
-        week_cols = st.columns(7)
+        week_cols = st.columns(num_days_shown)
         for i, day in enumerate(week):
-            with week_cols[i]:
+            if day.weekday() not in weekday_indices:
+                continue
+            col_idx = weekday_indices.index(day.weekday())
+            with week_cols[col_idx]:
                 is_current_month = (day.month == selected_month)
                 is_today = (day == today)
                 
                 day_data = get_day_data(day) if is_current_month else {"projects": {}, "user_hours": {}, "total_hours": 0.0}
                 
-                render_day_cell(day, day_data, team_database, availability_database, is_current_month, is_today)
+                render_day_cell(day, day_data, team_database, availability_database, is_current_month, is_today,
+                                availability_overrides, team_members_list)
 
 
-def render_day_cell(day, day_data, team_database, availability_database, is_current_month, is_today):
-    """Render ένα κελί ημέρας στο calendar - μεγαλύτερο & πιο ευανάγνωστο."""
-    greek_day = WEEKDAYS_GREEK.get(day.weekday(), "Δευτέρα")
-    day_avail = availability_database.get(greek_day, {})
+def render_day_cell(day, day_data, team_database, availability_database, is_current_month, is_today,
+                    availability_overrides=None, team_members_list=None):
+    """Render ένα κελί ημέρας στο calendar."""
+    if availability_overrides is None:
+        availability_overrides = st.session_state.get("availability_overrides", [])
+    if team_members_list is None:
+        team_members_list = st.session_state.get("team_members_list", [])
     
-    total_available = sum(day_avail.get(m, 6.0) for m in team_database)
+    # Use override-aware availability
+    day_avail = get_availability_for_date(day, availability_database, availability_overrides, team_members_list)
+    total_available = sum(day_avail.values())
     committed_hours = day_data["total_hours"]
     
     if not is_current_month:
@@ -3652,9 +3932,9 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
     
     border = "3px solid #ff9800" if is_today else "1px solid #e0e0e0"
     
-    # === Projects (μεγαλύτερα) ===
+    # Projects
     projects_html = ""
-    max_projects = 5  # Περισσότερα από 3
+    max_projects = 5
     for proj_name, proj_info in list(day_data["projects"].items())[:max_projects]:
         icons = ""
         if proj_info.get("shipping"):
@@ -3685,7 +3965,7 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
     if extra_projects > 0:
         projects_html += f'<div style="font-size:11px;color:#666;text-align:center;padding:3px;">+{extra_projects} ακόμα</div>'
     
-    # === Hours bar (μεγαλύτερο) ===
+    # Hours bar
     if is_current_month and total_available > 0:
         pct = min((committed_hours / total_available) * 100, 100)
         if committed_hours > total_available:
@@ -3709,7 +3989,6 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
     else:
         hours_html = ""
     
-    # === Cell (ΜΕΓΑΛΥΤΕΡΟ) ===
     cell_html = (
         f'<div style="background:{bg_color};border:{border};border-radius:10px;'
         f'padding:12px;min-height:200px;opacity:{opacity};">'
@@ -3724,11 +4003,16 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
     st.markdown(cell_html, unsafe_allow_html=True)
 
 
-def generate_calendar_print_html(month, year, weeks, team_database, availability_database, get_day_data, month_names_greek):
+def generate_calendar_print_html(month, year, weeks, team_database, availability_database, get_day_data, month_names_greek,
+                                  availability_overrides=None, team_members_list=None):
     """Δημιουργεί printable HTML για το ημερολόγιο."""
     today = date.today()
     
-    # Build weeks HTML
+    if availability_overrides is None:
+        availability_overrides = []
+    if team_members_list is None:
+        team_members_list = []
+    
     weeks_html = ""
     for week in weeks:
         week_cells = ""
@@ -3741,12 +4025,10 @@ def generate_calendar_print_html(month, year, weeks, team_database, availability
             else:
                 day_data = {"projects": {}, "user_hours": {}, "total_hours": 0.0}
             
-            greek_day = WEEKDAYS_GREEK.get(day.weekday(), "Δευτέρα")
-            day_avail = availability_database.get(greek_day, {})
-            total_available = sum(day_avail.get(m, 6.0) for m in team_database)
+            day_avail = get_availability_for_date(day, availability_database, availability_overrides, team_members_list)
+            total_available = sum(day_avail.values())
             committed_hours = day_data["total_hours"]
             
-            # Build projects
             projects_html = ""
             for proj_name, proj_info in list(day_data["projects"].items())[:4]:
                 icons = ""
@@ -3770,7 +4052,6 @@ def generate_calendar_print_html(month, year, weeks, team_database, availability
             if extra > 0:
                 projects_html += f'<div class="proj-more">+{extra} ακόμα</div>'
             
-            # Hours
             if is_current_month and total_available > 0:
                 pct = min((committed_hours / total_available) * 100, 100)
                 if committed_hours > total_available:
@@ -3913,11 +4194,17 @@ def main():
         return
     
     version = st.session_state.get("data_version", 0)
-    procurement_df, tasks_database, team_database, availability_database, incoming_df = load_all_data(version)
+    
+    # New: load_all_data returns 7 values now
+    (procurement_df, tasks_database, team_database, availability_database, 
+     incoming_df, team_members_list, availability_overrides) = load_all_data(version)
+    
     st.session_state.procurement_df = procurement_df
     st.session_state.availability_database = availability_database
     st.session_state.incoming_df = incoming_df
     st.session_state._tasks_db_cache = tasks_database
+    st.session_state.team_members_list = team_members_list
+    st.session_state.availability_overrides = availability_overrides
     
     sheet_item_assignments, sheet_proj_assignments = load_assignments_from_sheet()
     
@@ -3975,11 +4262,6 @@ def main():
         st.session_state["_has_unsaved_changes"] = False
     if "incoming_selected_item" not in st.session_state:
         st.session_state["incoming_selected_item"] = None
-    if "cal_month" not in st.session_state:
-        today_init = date.today()
-        st.session_state["cal_month"] = date(today_init.year, today_init.month, 1)
-    if "cal_selected_task" not in st.session_state:
-        st.session_state["cal_selected_task"] = None
     if "tc_show_print" not in st.session_state:
         st.session_state["tc_show_print"] = False
    
@@ -4018,6 +4300,7 @@ def main():
             "📆 Projection", 
             "📝 Daily Report", 
             "📆 Team Calendar",
+            "👥 Ομάδα",
             "📊 Database", 
             "⚙️ Settings"
         ]
@@ -4105,6 +4388,8 @@ def main():
         render_daily_report(procurement_df, tasks_database, team_database, availability_database)
     elif page == "📆 Team Calendar":
         render_team_calendar(procurement_df, tasks_database, team_database, availability_database, incoming_df)
+    elif page == "👥 Ομάδα":
+        render_team_members(team_members_list, availability_database, availability_overrides)
     elif page == "📊 Database":
         render_database(tasks_database, team_database, availability_database)
     elif page == "⚙️ Settings":
