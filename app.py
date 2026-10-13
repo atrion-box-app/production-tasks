@@ -565,6 +565,89 @@ def cleanup_duplicates_in_sheet():
     except Exception as e:
         return False, 0, 0, f"Σφάλμα: {e}"
 
+def cleanup_orphans_in_sheet(procurement_df):
+    """Καθαρίζει orphan tasks (tasks που δεν ανήκουν σε υπάρχον project)."""
+    gc, err = get_gspread_client()
+    if not gc:
+        return False, 0, 0, f"Σφάλμα σύνδεσης: {err}"
+    
+    if procurement_df is None or procurement_df.empty:
+        return False, 0, 0, "Δεν υπάρχουν δεδομένα procurement."
+    
+    try:
+        sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
+        all_values = sheet.get_all_values()
+        
+        if len(all_values) <= 1:
+            return True, 0, 0, "Το sheet είναι ήδη κενό (μόνο header)."
+        
+        header = all_values[0]
+        
+        # Valid values από procurement
+        valid_item_ids = set(str(r["ID"]) for _, r in procurement_df.iterrows())
+        valid_projects = set(str(p) for p in procurement_df["Project"].unique() if p != "-")
+        
+        clean_rows = [header]
+        removed = 0
+        removed_list = []
+        
+        for row in all_values[1:]:
+            if not any(str(c).strip() for c in row):
+                continue
+            
+            # Columns: Project, Item_ID, Task_Name, Assigned_User, Assigned_Date, Status_Done, Task_Type
+            if len(row) < 7:
+                # Άκυρη γραμμή — skip
+                removed += 1
+                continue
+            
+            project = strip_all_fields(str(row[0]))
+            item_id = strip_all_fields(str(row[1]))
+            task_type = strip_all_fields(str(row[6])).upper()
+            
+            is_orphan = False
+            
+            if task_type == "PROJECT":
+                # Orphan αν το project δεν υπάρχει
+                if project not in valid_projects:
+                    is_orphan = True
+            else:
+                # Item: orphan αν το item_id δεν υπάρχει
+                if item_id not in valid_item_ids:
+                    is_orphan = True
+            
+            if is_orphan:
+                removed += 1
+                removed_list.append(f"{project} — {row[2][:40]}")
+            else:
+                clean_rows.append(row)
+        
+        if removed == 0:
+            return True, 0, 0, "Δεν βρέθηκαν orphan tasks."
+        
+        sheet.clear()
+        time.sleep(0.5)
+        sheet.update(range_name="A1", values=clean_rows)
+        time.sleep(0.5)
+        
+        load_assignments_from_sheet.clear()
+        
+        # Log
+        if "audit_log" not in st.session_state:
+            st.session_state.audit_log = []
+        st.session_state.audit_log.append({
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "user": st.session_state.get("username", "-"),
+            "action": "cleanup_orphans",
+            "removed": removed,
+            "examples": removed_list[:5]
+        })
+        
+        return True, removed, len(all_values) - 1, f"Καθαρίστηκαν {removed} orphan tasks (από {len(all_values) - 1} γραμμές)"
+    
+    except Exception as e:
+        return False, 0, 0, f"Σφάλμα: {e}"
+
 
 def strip_spaces_in_sheet():
     gc, err = get_gspread_client()
@@ -2625,7 +2708,29 @@ def render_settings():
                     st.info(f"ℹ️ {msg}")
             else:
                 st.error(f"❌ {msg}")
-    
+
+    st.divider()
+    st.subheader("🧹 Καθαρισμός Orphan Tasks")
+    st.caption("Αφαιρεί tasks που ανήκουν σε projects/items που **δεν υπάρχουν πια** στο procurement.")
+    col_o1, col_o2 = st.columns([1, 3])
+    with col_o1:
+        if st.button("Καθαρισμός Orphans", use_container_width=True, type="secondary", key="cleanup_orphans_btn"):
+            with st.spinner("Καθαρισμός..."):
+                procurement_df = st.session_state.get("procurement_df", None)
+                success, removed, total, msg = cleanup_orphans_in_sheet(procurement_df)
+            if success:
+                if removed > 0:
+                    st.success(f"✅ {msg}")
+                    st.cache_data.clear()
+                    load_assignments_from_sheet.clear()
+                    st.rerun()
+                else:
+                    st.info(f"ℹ️ {msg}")
+            else:
+                st.error(f"❌ {msg}")
+    with col_o2:
+        st.write("")
+
     st.divider()
     st.subheader("🧼 Καθαρισμός Κενών Διαστήματων")
     st.caption("Καθαρίζει leading/trailing/διπλά spaces από το **Assignments**.")
