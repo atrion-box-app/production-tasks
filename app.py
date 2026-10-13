@@ -216,8 +216,8 @@ def parse_date_safe(date_str):
 def get_shipping_info(project_name, incoming_df):
     """Επιστρέφει (is_shipped, shipping_date_str) για ένα project.
     
-    ΚΡΙΣΙΜΟ: Το is_shipped καθορίζεται ΜΟΝΟ από το Shipping Status,
-    ΟΧΙ από το Shipping Date (γιατί όλα τα projects έχουν date).
+    is_shipped = True ΜΟΝΟ όταν το Shipping Status είναι ακριβώς 'OK Shipped'
+    (case-insensitive). Οτιδήποτε άλλο → ενεργό project.
     """
     if incoming_df is None or incoming_df.empty:
         return False, ""
@@ -229,32 +229,16 @@ def get_shipping_info(project_name, incoming_df):
     for _, inc_row in incoming_df.iterrows():
         inc_project = str(inc_row["Project"]).strip().upper()
         if inc_project == project_name_clean:
-            shipping_status = str(inc_row.get("Shipping Status", "")).strip().upper()
+            shipping_status = str(inc_row.get("Shipping Status", "")).strip()
             shipping_date = str(inc_row.get("Shipping Date", "")).strip()
             
-            # ΚΡΙΣΙΜΟ: Έλεγχος ΜΟΝΟ με case-insensitive match
-            # Το "OK Shipped" (mixed) πρέπει να πιάνεται
-            is_shipped = False
-            status_normalized = shipping_status.replace("_", " ").replace("-", " ").strip()
+            # Normalize: uppercase, collapse whitespace
+            status_clean = re.sub(r'\s+', ' ', shipping_status.upper()).strip()
             
-            # Πολλαπλά patterns για robustness
-            shipped_patterns = [
-                "OK SHIPPED",
-                "OK SHIP",
-                "SHIPPED",
-                "OK SHIPPED ✓",
-            ]
+            # is_shipped = True ΜΟΝΟ αν είναι ΑΚΡΙΒΩΣ "OK SHIPPED"
+            is_shipped = (status_clean == "OK SHIPPED")
             
-            for pattern in shipped_patterns:
-                if pattern in status_normalized:
-                    is_shipped = True
-                    break
-            
-            # Επίσης: αν το status είναι ΑΚΡΙΒΩΣ "SHIPPED" (χωρίς OK)
-            if status_normalized == "SHIPPED":
-                is_shipped = True
-            
-            # Καθάρισε την ημερομηνία (αν υπάρχει, απλά την επιστρέφουμε για display)
+            # Καθάρισε την ημερομηνία για display
             if shipping_date in ["-", "nan", "", "None", "NaT", "NAT"]:
                 shipping_date = ""
             
