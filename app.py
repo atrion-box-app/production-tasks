@@ -2031,49 +2031,46 @@ def render_calendar_view(procurement_df, tasks_database, team_database, availabi
         st.warning("No procurement data available.")
         return
     
-    # CSS as list of strings (NO triple quotes!)
-    css_lines = [
-        "<style>",
-        'div[data-testid="stButton"] > button {',
-        "    background: white;",
-        "    color: #333333;",
-        "    border: 1px solid #e0e0e0;",
-        "    border-radius: 6px;",
-        "    padding: 8px;",
-        "    min-height: 110px;",
-        "    text-align: left;",
-        "    font-size: 11px;",
-        "    font-weight: 500;",
-        "    line-height: 1.3;",
-        "    white-space: pre-line;",
-        "    display: block;",
-        "    width: 100%;",
-        "}",
-        'div[data-testid="stButton"] > button:hover {',
-        "    background: #f5f7fa;",
-        "    border-color: #1565c0;",
-        "}",
-        'div[data-testid="stButton"] > button:focus {',
-        "    box-shadow: 0 0 0 3px rgba(21,101,192,0.3);",
-        "}",
-        '.today-cell div[data-testid="stButton"] > button {',
-        "    background: #fff8e1;",
-        "    border: 2px solid #ff9800;",
-        "}",
-        '.move-mode div[data-testid="stButton"] > button {',
-        "    background: #e3f2fd;",
-        "    border: 2px dashed #1565c0;",
-        "}",
-        '.empty-cell div[data-testid="stButton"] > button {',
-        "    background: #fafafa;",
-        "    color: #999999;",
-        "}",
-        '.other-month div[data-testid="stButton"] > button {',
-        "    opacity: 0.4;",
-        "}",
-        "</style>",
-    ]
-    st.markdown("\n".join(css_lines), unsafe_allow_html=True)
+    # CSS - χρησιμοποιώ st.html (Streamlit 1.33+) για σιγουριά
+    css_text = (
+        "<style>"
+        'div[data-testid="stButton"] > button {'
+        "background: white;"
+        "color: #333333;"
+        "border: 1px solid #e0e0e0;"
+        "border-radius: 6px;"
+        "padding: 8px;"
+        "min-height: 110px;"
+        "text-align: left;"
+        "font-size: 11px;"
+        "font-weight: 500;"
+        "line-height: 1.3;"
+        "white-space: pre-line;"
+        "display: block;"
+        "width: 100%;"
+        "}"
+        'div[data-testid="stButton"] > button:hover {'
+        "background: #f5f7fa;"
+        "border-color: #1565c0;"
+        "}"
+        ".today-cell button {"
+        "background: #fff8e1;"
+        "border: 2px solid #ff9800;"
+        "}"
+        ".move-mode button {"
+        "background: #e3f2fd;"
+        "border: 2px dashed #1565c0;"
+        "}"
+        ".empty-cell button {"
+        "background: #fafafa;"
+        "color: #999999;"
+        "}"
+        ".other-month button {"
+        "opacity: 0.4;"
+        "}"
+        "</style>"
+    )
+    st.markdown(css_text, unsafe_allow_html=True)
     
     today = date.today()
     
