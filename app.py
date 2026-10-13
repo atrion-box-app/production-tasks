@@ -2875,72 +2875,171 @@ def render_team_members(team_members_list, availability_database, availability_o
         st.warning("Δεν βρέθηκαν μέλη. Έλεγξε το Team_Members sheet.")
         return
     
-    # --- Section 1: Weekly availability table ---
-    st.subheader("📊 Εβδομαδιαία Διαθεσιμότητα")
-    
     days_order = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο", "Κυριακή"]
     short_days = ["Δευ", "Τρι", "Τετ", "Πεμ", "Παρ", "Σαβ", "Κυρ"]
     
-    table_data = []
-    for member in team_members_list:
+    # --- Section 1: Weekly availability table (HTML) ---
+    st.subheader("📊 Εβδομαδιαία Διαθεσιμότητα")
+    
+    # Build HTML table
+    header_cells = '<th style="padding:10px;background:#1e88e5;color:white;text-align:center;font-size:12px;border:1px solid #1565c0;">Όνομα</th>'
+    header_cells += '<th style="padding:10px;background:#1e88e5;color:white;text-align:center;font-size:12px;border:1px solid #1565c0;">Τύπος</th>'
+    for sd in short_days:
+        header_cells += f'<th style="padding:10px;background:#1e88e5;color:white;text-align:center;font-size:12px;border:1px solid #1565c0;min-width:50px;">{sd}</th>'
+    header_cells += '<th style="padding:10px;background:#1565c0;color:white;text-align:center;font-size:12px;border:1px solid #0d47a1;min-width:70px;">Σύνολο</th>'
+    
+    body_rows = ""
+    for idx, member in enumerate(team_members_list):
         name = member.get("name", "")
         mtype = member.get("type", "—")
         active = member.get("active", True)
         
-        row = {
-            "Όνομα": f"{'🟢' if active else '⚪'} {name}",
-            "Τύπος": mtype,
-        }
+        row_bg = "#ffffff" if idx % 2 == 0 else "#f8f9fa"
+        if not active:
+            row_bg = "#f0f0f0"
+        
+        icon = "🟢" if active else "⚪"
         
         total_week = 0.0
+        cells = (
+            f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
+            f'background:{row_bg};font-weight:600;">{icon} {name}</td>'
+            f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
+            f'background:{row_bg};color:#666;font-size:12px;">{mtype}</td>'
+        )
+        
         for i, day in enumerate(days_order):
             day_avail = availability_database.get(day, {})
             hrs = day_avail.get(name, 0.0)
-            row[short_days[i]] = hrs if hrs > 0 else "—"
             total_week += hrs
+            
+            if hrs > 0:
+                cell_bg = "#e8f5e9"
+                cell_color = "#2e7d32"
+                display = f"{round(hrs, 1)}"
+            else:
+                cell_bg = row_bg
+                cell_color = "#ccc"
+                display = "—"
+            
+            cells += (
+                f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
+                f'background:{cell_bg};color:{cell_color};font-weight:600;">{display}</td>'
+            )
         
-        row["Σύνολο/εβδ"] = f"{round(total_week, 1)}h"
-        table_data.append(row)
+        # Total
+        cells += (
+            f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
+            f'background:#e3f2fd;color:#1565c0;font-weight:700;">{round(total_week, 1)}h</td>'
+        )
+        
+        body_rows += f'<tr>{cells}</tr>'
     
-    df_table = pd.DataFrame(table_data)
-    st.dataframe(df_table, use_container_width=True, hide_index=True)
+    table_html = (
+        f'<div style="overflow-x:auto;">'
+        f'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+        f'<thead><tr>{header_cells}</tr></thead>'
+        f'<tbody>{body_rows}</tbody>'
+        f'</table>'
+        f'</div>'
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
     
-    # --- Section 2: Daily totals ---
+    # --- Section 2: Daily totals (HTML) ---
     st.subheader("📈 Σύνολο ανά Ημέρα")
     
-    daily_totals = []
-    for day in days_order:
+    day_header = '<th style="padding:10px;background:#1e88e5;color:white;text-align:center;font-size:12px;border:1px solid #1565c0;">Ημέρα</th>'
+    day_header += '<th style="padding:10px;background:#1e88e5;color:white;text-align:center;font-size:12px;border:1px solid #1565c0;">Ενεργοί</th>'
+    day_header += '<th style="padding:10px;background:#1565c0;color:white;text-align:center;font-size:12px;border:1px solid #0d47a1;">Σύνολο Ωρών</th>'
+    
+    day_rows = ""
+    for idx, day in enumerate(days_order):
         day_avail = availability_database.get(day, {})
         total = sum(day_avail.get(m.get("name", ""), 0.0) for m in team_members_list if m.get("active", True))
         active_count = sum(1 for m in team_members_list if m.get("active", True) and day_avail.get(m.get("name", ""), 0.0) > 0)
-        daily_totals.append({
-            "Ημέρα": day,
-            "Ενεργοί": active_count,
-            "Σύνολο Ωρών": f"{round(total, 1)}h",
-        })
+        
+        row_bg = "#ffffff" if idx % 2 == 0 else "#f8f9fa"
+        
+        day_rows += (
+            f'<tr>'
+            f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
+            f'background:{row_bg};font-weight:600;">{day}</td>'
+            f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
+            f'background:{row_bg};">{active_count}</td>'
+            f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
+            f'background:#e3f2fd;color:#1565c0;font-weight:700;">{round(total, 1)}h</td>'
+            f'</tr>'
+        )
     
-    st.dataframe(pd.DataFrame(daily_totals), use_container_width=True, hide_index=True)
+    day_table = (
+        f'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+        f'<thead><tr>{day_header}</tr></thead>'
+        f'<tbody>{day_rows}</tbody>'
+        f'</table>'
+    )
+    st.markdown(day_table, unsafe_allow_html=True)
     
     # --- Section 3: Overrides ---
     if availability_overrides:
         st.subheader("🏖️ Άδειες / Overrides")
         
-        ov_data = []
-        for ov in availability_overrides:
-            ov_data.append({
-                "Όνομα": ov.get("name", ""),
-                "Από": ov.get("date_from").strftime("%d/%m/%Y") if ov.get("date_from") else "—",
-                "Έως": ov.get("date_to").strftime("%d/%m/%Y") if ov.get("date_to") else "—",
-                "Ώρες": ov.get("hours", 0),
-                "Αιτία": ov.get("reason", ""),
-            })
-        st.dataframe(pd.DataFrame(ov_data), use_container_width=True, hide_index=True)
+        ov_header = '<th style="padding:10px;background:#ff9800;color:white;text-align:center;font-size:12px;border:1px solid #f57c00;">Όνομα</th>'
+        ov_header += '<th style="padding:10px;background:#ff9800;color:white;text-align:center;font-size:12px;border:1px solid #f57c00;">Από</th>'
+        ov_header += '<th style="padding:10px;background:#ff9800;color:white;text-align:center;font-size:12px;border:1px solid #f57c00;">Έως</th>'
+        ov_header += '<th style="padding:10px;background:#ff9800;color:white;text-align:center;font-size:12px;border:1px solid #f57c00;">Ώρες</th>'
+        ov_header += '<th style="padding:10px;background:#ff9800;color:white;text-align:center;font-size:12px;border:1px solid #f57c00;">Αιτία</th>'
+        
+        ov_rows = ""
+        for idx, ov in enumerate(availability_overrides):
+            row_bg = "#ffffff" if idx % 2 == 0 else "#fff8e1"
+            ov_rows += (
+                f'<tr>'
+                f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
+                f'background:{row_bg};font-weight:600;">{ov.get("name", "")}</td>'
+                f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
+                f'background:{row_bg};">{ov.get("date_from").strftime("%d/%m/%Y") if ov.get("date_from") else "—"}</td>'
+                f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
+                f'background:{row_bg};">{ov.get("date_to").strftime("%d/%m/%Y") if ov.get("date_to") else "—"}</td>'
+                f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
+                f'background:{row_bg};font-weight:700;color:#f57c00;">{ov.get("hours", 0)}h</td>'
+                f'<td style="padding:8px;text-align:center;border:1px solid #e0e0e0;'
+                f'background:{row_bg};color:#666;">{ov.get("reason", "")}</td>'
+                f'</tr>'
+            )
+        
+        ov_table = (
+            f'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+            f'<thead><tr>{ov_header}</tr></thead>'
+            f'<tbody>{ov_rows}</tbody>'
+            f'</table>'
+        )
+        st.markdown(ov_table, unsafe_allow_html=True)
     else:
         st.info("Δεν υπάρχουν καταχωρημένες άδειες.")
     
-    # --- Section 4: Export ---
+    # --- Section 4: Export (χρησιμοποιεί DataFrame μόνο για το CSV) ---
     st.divider()
-    csv = df_table.to_csv(index=False).encode('utf-8-sig')
+    export_data = []
+    for member in team_members_list:
+        name = member.get("name", "")
+        mtype = member.get("type", "—")
+        active = member.get("active", True)
+        row = {
+            "Όνομα": name,
+            "Τύπος": mtype,
+            "Ενεργός": "ΝΑΙ" if active else "ΟΧΙ",
+        }
+        total = 0.0
+        for i, day in enumerate(days_order):
+            day_avail = availability_database.get(day, {})
+            hrs = day_avail.get(name, 0.0)
+            row[short_days[i]] = hrs
+            total += hrs
+        row["Σύνολο/εβδ"] = round(total, 1)
+        export_data.append(row)
+    
+    export_df = pd.DataFrame(export_data)
+    csv = export_df.to_csv(index=False).encode('utf-8-sig')
     st.download_button(
         "📥 Εξαγωγή CSV",
         data=csv,
@@ -2948,7 +3047,6 @@ def render_team_members(team_members_list, availability_database, availability_o
         mime="text/csv",
         use_container_width=True
     )
-
 
 # --- RENDER DATABASE ---
 def render_database(tasks_database, team_database, availability_database):
@@ -3906,7 +4004,7 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
 
 def render_day_cell(day, day_data, team_database, availability_database, is_current_month, is_today,
                     availability_overrides=None, team_members_list=None):
-    """Render ένα κελί ημέρας στο calendar."""
+    """Render ένα κελί ημέρας στο calendar - με hover tooltip."""
     if availability_overrides is None:
         availability_overrides = st.session_state.get("availability_overrides", [])
     if team_members_list is None:
@@ -3932,7 +4030,38 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
     
     border = "3px solid #ff9800" if is_today else "1px solid #e0e0e0"
     
-    # Projects
+    # === Build tooltip (με διαθέσιμους τεχνίτες + projects) ===
+    tooltip_lines = []
+    tooltip_lines.append(f"📅 {WEEKDAYS_GREEK.get(day.weekday(), '')} {day.strftime('%d/%m/%Y')}")
+    tooltip_lines.append("")
+    
+    # Διαθέσιμοι τεχνίτες
+    active_avail = {name: hrs for name, hrs in day_avail.items() if hrs > 0}
+    if active_avail:
+        tooltip_lines.append("👥 Διαθέσιμοι:")
+        for name, hrs in sorted(active_avail.items(), key=lambda x: -x[1]):
+            tooltip_lines.append(f"  • {name}: {round(hrs, 1)}h")
+        tooltip_lines.append(f"  Σύνολο: {round(total_available, 1)}h")
+    else:
+        tooltip_lines.append("👥 Κανείς διαθέσιμος")
+    tooltip_lines.append("")
+    
+    # Projects με tasks
+    if day_data["projects"]:
+        tooltip_lines.append("📦 Projects:")
+        for proj_name, proj_info in day_data["projects"].items():
+            icons = ""
+            if proj_info.get("shipping"):
+                icons += "🚚"
+            if proj_info.get("tasks"):
+                icons += "🔧"
+            tooltip_lines.append(f"  {icons} {proj_name}")
+    else:
+        tooltip_lines.append("📦 Χωρίς projects")
+    
+    tooltip_text = "&#10;".join(tooltip_lines).replace('"', '&quot;')
+    
+    # Projects HTML
     projects_html = ""
     max_projects = 5
     for proj_name, proj_info in list(day_data["projects"].items())[:max_projects]:
@@ -3989,9 +4118,11 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
     else:
         hours_html = ""
     
+    # === Cell με title attribute για hover tooltip ===
     cell_html = (
-        f'<div style="background:{bg_color};border:{border};border-radius:10px;'
-        f'padding:12px;min-height:200px;opacity:{opacity};">'
+        f'<div title="{tooltip_text}" '
+        f'style="background:{bg_color};border:{border};border-radius:10px;'
+        f'padding:12px;min-height:200px;opacity:{opacity};cursor:help;">'
         f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
         f'<div style="font-size:20px;font-weight:800;color:{text_color};">{day.day}</div>'
         f'<div style="font-size:11px;color:#999;font-weight:600;">{WEEKDAYS_SHORT_GREEK.get(day.weekday(), "")}</div>'
@@ -4001,7 +4132,6 @@ def render_day_cell(day, day_data, team_database, availability_database, is_curr
         f'</div>'
     )
     st.markdown(cell_html, unsafe_allow_html=True)
-
 
 def generate_calendar_print_html(month, year, weeks, team_database, availability_database, get_day_data, month_names_greek,
                                   availability_overrides=None, team_members_list=None):
