@@ -3769,7 +3769,6 @@ def render_weekly_view(procurement_df, tasks_database, team_database, target_dat
         )
 
 
-# --- RENDER TEAM CALENDAR ---
 def render_team_calendar(procurement_df, tasks_database, team_database, availability_database, incoming_df):
     st.header("📆 Team Calendar")
     st.caption("Μηνιαίο ημερολόγιο παραγωγής — projects, ώρες, αποστολές")
@@ -3796,10 +3795,13 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
             key="tc_month"
         )
     with col_year:
+        year_options = list(range(today.year - 1, today.year + 3))
+        current_year_idx = year_options.index(today.year) if today.year in year_options else 1
+        
         selected_year = st.selectbox(
             "Έτος:",
-            list(range(today.year - 1, today.year + 2)),
-            index=1,
+            year_options,
+            index=current_year_idx,
             key="tc_year"
         )
     with col_info:
@@ -3811,44 +3813,13 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
         st.write("")
         include_weekend_view = st.checkbox("ΣΚ στο grid", value=True, key="tc_include_weekend")
     
-    # --- Navigation ---
-    col_prev, col_next, col_today, _ = st.columns([1, 1, 1, 3])
-    with col_prev:
-        if st.button("⬅️ Προηγούμενος", use_container_width=True, key="tc_prev"):
-            new_month = selected_month - 1
-            new_year = selected_year
-            if new_month < 1:
-                new_month = 12
-                new_year -= 1
-            st.session_state["tc_month"] = new_month
-            st.session_state["tc_year"] = new_year
-            st.rerun()
-    with col_next:
-        if st.button("Επόμενος ➡️", use_container_width=True, key="tc_next"):
-            new_month = selected_month + 1
-            new_year = selected_year
-            if new_month > 12:
-                new_month = 1
-                new_year += 1
-            st.session_state["tc_month"] = new_month
-            st.session_state["tc_year"] = new_year
-            st.rerun()
-    with col_today:
-        if st.button("🏠 Τρέχων Μήνας", use_container_width=True, key="tc_today"):
-            st.session_state["tc_month"] = today.month
-            st.session_state["tc_year"] = today.year
-            st.rerun()
-    
     # --- Build month grid ---
-    cal = calendar.Calendar(firstweekday=0)  # Monday first
+    cal = calendar.Calendar(firstweekday=0)
     month_days = list(cal.itermonthdates(selected_year, selected_month))
-    
-    # Split into weeks (rows of 7)
     weeks = [month_days[i:i+7] for i in range(0, len(month_days), 7)]
     
     # --- Build data per day ---
     def get_day_data(day):
-        """Επιστρέφει dict με projects, tasks, hours, shipping για μια μέρα."""
         day_data = {
             "projects": {},
             "user_hours": {},
@@ -3858,7 +3829,6 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
         if procurement_df.empty:
             return day_data
         
-        # Item tasks
         for idx, row in procurement_df.iterrows():
             item_id = str(row["ID"])
             u_key = f"{item_id}_{idx}"
@@ -3885,7 +3855,6 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
                         if u and u != "- Χωρίς Ανάθεση -":
                             day_data["user_hours"][u] = day_data["user_hours"].get(u, 0.0) + hrs_per_user
         
-        # Project tasks
         for p_key, p_tasks_dict in st.session_state.get("project_tasks_store", {}).items():
             if isinstance(p_tasks_dict, dict):
                 proj_name = p_key.replace("proj_", "")
@@ -3914,7 +3883,6 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
                             if u and u != "- Χωρίς Ανάθεση -":
                                 day_data["user_hours"][u] = day_data["user_hours"].get(u, 0.0) + hrs_per_user
         
-        # Shipping dates
         if incoming_df is not None and not incoming_df.empty:
             for _, inc_row in incoming_df.iterrows():
                 shipping_date = parse_date_safe(inc_row.get("Shipping Date", ""))
@@ -3960,7 +3928,6 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
     # --- Render calendar grid ---
     st.markdown(f"### {month_names_greek[selected_month - 1]} {selected_year}")
     
-    # Determine which days of week to show
     if include_weekend_view:
         weekday_names = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο", "Κυριακή"]
         weekday_indices = [0, 1, 2, 3, 4, 5, 6]
@@ -3970,7 +3937,6 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
     
     num_days_shown = len(weekday_indices)
     
-    # Weekday headers
     header_cols = st.columns(num_days_shown)
     for i, day_name in enumerate(weekday_names):
         header_cols[i].markdown(
@@ -3978,7 +3944,6 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
             unsafe_allow_html=True
         )
     
-    # Week rows
     for week in weeks:
         week_cols = st.columns(num_days_shown)
         for i, day in enumerate(week):
