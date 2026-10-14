@@ -432,6 +432,50 @@ def update_proj_users_mapped(p_key, task_name, widget_key, display_to_value):
         st.session_state["project_tasks_store"][p_key][task_name]["user"] = "- Χωρίς Ανάση -"
     mark_unsaved_changes()
 
+def apply_bulk_assign_users(tasks, mode, target_user, display_to_value=None):
+    """
+    Εφαρμόζει bulk ανάθεση σε μια λίστα tasks.
+    
+    Returns: (changed_count, details_list)
+    """
+    changed = 0
+    details = []
+    
+    for t in tasks:
+        old_users = t.get("users", [])
+        if not isinstance(old_users, list):
+            old_users = [old_users] if old_users else []
+        
+        # Καθάρισε τα
+        old_users = [u for u in old_users if u and u != "- Χωρίς Ανάθεση -"]
+        
+        if mode == "Replace":
+            new_users = [target_user]
+        elif mode == "Add":
+            if target_user in old_users:
+                continue  # Already there
+            new_users = old_users + [target_user]
+        elif mode == "Remove":
+            if target_user not in old_users:
+                continue  # Not there
+            new_users = [u for u in old_users if u != target_user]
+        else:
+            continue
+        
+        # Update task
+        t["users"] = new_users
+        if new_users:
+            t["user"] = new_users[0]
+        else:
+            t["user"] = "- Χωρίς Ανάθεση -"
+        
+        changed += 1
+        old_str = ", ".join(old_users) if old_users else "(κανείς)"
+        new_str = ", ".join(new_users) if new_users else "(κανείς)"
+        details.append(f"{t.get('task', '?')}: {old_str} → {new_str}")
+    
+    return changed, details
+
 # --- DATA LOADING ---
 @st.cache_data(ttl=60, show_spinner=False)
 def load_all_data(version=0):
@@ -2402,6 +2446,179 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
         st.write("")
         st.write("")
         st.caption("Επίλεξε εργασίες με τα checkboxes και πάτησε το κουμπί για να αλλάξεις την ημερομηνία τους.")
+    
+    st.divider()
+    
+    # === ΝΕΟ: BULK ΑΝΑΘΕΣΗ ΥΠΕΥΘΥΝΟΥ ===
+    st.markdown("### 👥 Bulk Ανάθεση Υπευθύνου")
+    
+    col_ba1, col_ba2, col_ba3 = st.columns([1.2, 2, 1.3])
+    
+    with col_ba1:
+        bulk_user_mode = st.selectbox(
+            "Mode:",
+            ["Replace (Αντικατάσταση)", "Add (Προσθήκη)", "Remove (Αφαίρεση)"],
+            key="mv_bulk_user_mode",
+            help="Replace: αντικαθιστά όλους τους υπάρχοντες υπευθύνους\nAdd: προσθέτει τον νέο σε όσους έχουν ήδη\nRemove: αφαιρεί τον τεχνίτη"
+        )
+        # Extract mode
+        mode_clean = bulk_user_mode.split(" ")[0]  # "Replace" / "Add" / "Remove"
+    
+    with col_ba2:
+        # Build display options από team_members_list
+        team_members_list_local = st.session_state.get("team_members_list", [])
+        if team_members_list_local:
+            user_display_options = []
+            user_display_to_value = {}
+            for m in team_members_list_local:
+                if not m.get("active", True):
+                    continue
+                nm = m.get("name", "")
+                mt = m.get("type", "")
+                if not nm:
+                    continue
+                suffix = f" ({mt})" if mt and mt not in ["—", "Άγνωστος"] else ""
+                display = f"{nm}{suffix}"
+                user_display_options.append(display)
+                user_display_to_value[display] = nm
+        else:
+            user_display_options = ["- Χωρίς Ανάθεση -"] + team_database
+            user_display_to_value = {u: u for u in user_display_options}
+        
+        selected_user_display = st.selectbox(
+            "Τεχνίτης:",
+            user_display_options,
+            key="mv_bulk_user_target"
+        )
+        selected_user_clean = user_display_to_value.get(selected_user_display, selected_user_display)
+    
+    with col_ba3:
+        st.write("")
+        st.write("")
+        if st.button("Εφαρμογή ανάθεσης", use_container_width=True, key="mv_bulk_user_apply_btn", type="secondary"):
+            selected_keys_users = set()
+            for t in filtered_tasks:
+                chk_key = make_checkbox_key(t)
+                if st.session_state.get(chk_key, False):
+                    selected_keys_users.add(chk_key)
+            
+            if not selected_keys_users:
+                st.warning("⚠️ Δεν επιλέχθηκε καμία εργασία.")
+            else:
+                # Εφαρμογή
+                changed_users = 0
+                changed_users_details = []
+                
+                # Item tasks
+                for u_key, task_list in st.session_state["tasks_store"].items():
+                    for t_idx, t in enumerate(task_list):
+                        if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
+                            chk_key = f"mv_chk_item_{u_key}_{t_idx}"
+                            if chk_key in selected_keys_users:
+                                c, det = apply_bulk_assign_users([t], mode_clean, selected_user_clean)
+                                if c > 0:
+                                    changed_users += c
+                                    # Get project name
+                                    proj_for_item = "-"
+                                    try:
+                                        item_id = u_key.split("_")[0]
+                                        for _, r in st.session_state.procurement_df.iterrows():
+                                            if str(r["ID"]) == item_id:
+                                                proj_for_item = str(r["Project"])
+                                                break
+                                    except:
+                                        pass
+                                    for d in det:
+                                        changed_users_details.append(f"[{proj_for_item}] {d}")
+                
+                # Project tasks
+                for p_key, p_dict in st.session_state["project_tasks_store"].items():
+                    if isinstance(p_dict, dict):
+                        proj_name_for_task = p_key.replace("proj_", "")
+                        for t_name, p_data in p_dict.items():
+                            if isinstance(p_data, dict) and p_data.get("active", False):
+                                chk_key = f"mv_chk_proj_{p_key}_{t_name}"
+                                if chk_key in selected_keys_users:
+                                    # Get current users
+                                    old_users = p_data.get("users", [])
+                                    if not isinstance(old_users, list):
+                                        old_users = [old_users] if old_users else []
+                                    old_users = [u for u in old_users if u and u != "- Χωρίς Ανάθεση -"]
+                                    
+                                    if mode_clean == "Replace":
+                                        new_users = [selected_user_clean]
+                                    elif mode_clean == "Add":
+                                        if selected_user_clean in old_users:
+                                            continue
+                                        new_users = old_users + [selected_user_clean]
+                                    elif mode_clean == "Remove":
+                                        if selected_user_clean not in old_users:
+                                            continue
+                                        new_users = [u for u in old_users if u != selected_user_clean]
+                                    else:
+                                        continue
+                                    
+                                    p_data["users"] = new_users
+                                    if new_users:
+                                        p_data["user"] = new_users[0]
+                                    else:
+                                        p_data["user"] = "- Χωρίς Ανάθεση -"
+                                    
+                                    changed_users += 1
+                                    old_str = ", ".join(old_users) if old_users else "(κανείς)"
+                                    new_str = ", ".join(new_users) if new_users else "(κανείς)"
+                                    changed_users_details.append(f"[{proj_name_for_task}] {t_name}: {old_str} → {new_str}")
+                
+                if changed_users > 0:
+                    st.session_state["_bulk_user_result"] = {
+                        "mode": mode_clean,
+                        "user": selected_user_clean,
+                        "changed": changed_users,
+                        "details": changed_users_details,
+                        "saved": False
+                    }
+                    mark_unsaved_changes()
+                    # Clear checkboxes
+                    for t in filtered_tasks:
+                        chk_key = make_checkbox_key(t)
+                        if chk_key in st.session_state:
+                            st.session_state[chk_key] = False
+                    st.rerun()
+                else:
+                    st.info("ℹ️ Καμία αλλαγή — όλες οι επιλεγμένες εργασίες ήταν ήδη σε αυτή την κατάσταση.")
+    
+    # === Αποτελέσματα Bulk User ===
+    if "_bulk_user_result" in st.session_state:
+        result_u = st.session_state["_bulk_user_result"]
+        is_saved_u = result_u.get("saved", False)
+        
+        mode_icon = {"Replace": "🔄", "Add": "➕", "Remove": "➖"}.get(result_u["mode"], "•")
+        
+        if is_saved_u:
+            st.success(f"✅ **ΑΠΟΘΗΚΕΥΤΗΚΕ** — {mode_icon} {result_u['mode']} '{result_u['user']}' σε **{result_u['changed']}** tasks")
+        else:
+            st.warning(f"⚠️ **ΑΛΛΑΓΕΣ ΣΤΗ ΜΝΗΜΗ** — {mode_icon} {result_u['mode']} '{result_u['user']}' σε **{result_u['changed']}** tasks. Πάτησε **💾 Αποθήκευση** για να σωθούν.")
+        
+        with st.expander(f"Λεπτομέρειες αλλαγών ({len(result_u['details'])})"):
+            for detail in result_u["details"]:
+                st.write(f"• {detail}")
+        
+        col_ur1, col_ur2 = st.columns([1, 1])
+        with col_ur1:
+            if not is_saved_u:
+                if st.button("💾 Αποθήκευση στο Sheet", key="bulk_user_save_btn", type="primary", use_container_width=True):
+                    with st.spinner("Αποθήκευση..."):
+                        if save_all_assignments_to_sheet():
+                            load_assignments_from_sheet.clear()
+                            st.session_state["_bulk_user_result"]["saved"] = True
+                            st.success("✅ Αποθηκεύτηκε!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Σφάλμα κατά την αποθήκευση")
+        with col_ur2:
+            if st.button("✕ Καθαρισμός", key="clear_bulk_user_msg", use_container_width=True):
+                del st.session_state["_bulk_user_result"]
+                st.rerun()
     
     st.divider()
     
