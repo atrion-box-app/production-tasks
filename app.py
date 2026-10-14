@@ -2069,8 +2069,10 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     else:
                         tooltip_lines.append(f"🚚 Αποστολή: -")
                     
+                    completed_h = proj_data.get('completed_hours', 0.0)
+                    total_h_check = proj_data.get('total_hours', total_h)
                     tooltip_lines.append(f"📊 Πρόοδος: {progress}%")
-                    tooltip_lines.append(f"⏱️ Ώρες: {total_h}h / {proj_data.get('total_hours', total_h)}h")
+                    tooltip_lines.append(f"⏱️ Ώρες: {completed_h}h / {total_h_check}h")
                     tooltip_lines.append(f"📦 Υλικά: {materials}")
                     tooltip_lines.append(f"✅ Tasks: {done_tasks}/{total_tasks}")
                     
