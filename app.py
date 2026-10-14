@@ -2059,22 +2059,122 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     if proj_data.get("shipping_date"):
                         shipping_date_html = f'<div style="font-size:9px;color:#c62828;margin-top:3px;">📦 {proj_data["shipping_date"]}</div>'
                     
-                    card_html = f"""
-                    <div class="{card_class}">
-                        <div class="compact-title">{display_name}</div>
-                        {status_html}
-                        {shipping_date_html}
-                        <div class="compact-progress-bg">
-                            <div class="compact-progress-fill" style="width:{progress}%;background:{bar_color};"></div>
-                        </div>
-                        <div style="text-align:center;font-size:11px;font-weight:600;color:#333;">{progress}%</div>
-                        <div class="compact-meta">
-                            <span>{total_h}h</span>
-                            <span>{materials} υλικά</span>
-                            <span>{done_tasks}/{total_tasks}</span>
-                        </div>
-                    </div>
-                    """
+                    # === Build tooltip content ===
+                    tooltip_lines = []
+                    tooltip_lines.append(f"📦 {p_name}")
+                    tooltip_lines.append("━━━━━━━━━━━━━━━━")
+                    
+                    if proj_data.get("shipping_date"):
+                        tooltip_lines.append(f"🚚 Αποστολή: {proj_data['shipping_date']}")
+                    else:
+                        tooltip_lines.append(f"🚚 Αποστολή: -")
+                    
+                    tooltip_lines.append(f"📊 Πρόοδος: {progress}%")
+                    tooltip_lines.append(f"⏱️ Ώρες: {total_h}h / {proj_data.get('total_hours', total_h)}h")
+                    tooltip_lines.append(f"📦 Υλικά: {materials}")
+                    tooltip_lines.append(f"✅ Tasks: {done_tasks}/{total_tasks}")
+                    
+                    # Εκκρεμή tasks (top 3)
+                    proj_details_for_tooltip = projects_details_cache.get(p_name, {})
+                    pending_tasks = []
+                    
+                    # Collect pending item tasks
+                    filtered_p_items = procurement_df[procurement_df["Project"] == p_name]
+                    for idx_t, r_t in filtered_p_items.iterrows():
+                        item_id_t = str(r_t["ID"])
+                        u_key_t = f"{item_id_t}_{idx_t}"
+                        qty_t = int(r_t["Ποσότητα"]) if str(r_t["Ποσότητα"]).isdigit() else 1
+                        item_tasks_t = st.session_state["tasks_store"].get(u_key_t, [])
+                        for tt in item_tasks_t:
+                            if tt.get("task") and tt["task"] != "- Επιλογή Εργασίας -" and not tt.get("done", False):
+                                auto_t = tasks_database.get(tt["task"], 0.0)
+                                hrs_t = (auto_t * qty_t) / 60
+                                pending_tasks.append({
+                                    "name": tt["task"],
+                                    "hours": hrs_t,
+                                })
+                    
+                    # Collect pending project tasks
+                    p_key_t = f"proj_{p_name}"
+                    p_tasks_dict_t = st.session_state["project_tasks_store"].get(p_key_t, {})
+                    if isinstance(p_tasks_dict_t, dict):
+                        p_main_qty_t = 1
+                        for _, r_t in filtered_p_items.iterrows():
+                            if str(r_t["Ποσότητα"]).isdigit():
+                                p_main_qty_t = max(p_main_qty_t, int(r_t["Ποσότητα"]))
+                        for task_name_t, p_data_t in p_tasks_dict_t.items():
+                            if isinstance(p_data_t, dict) and p_data_t.get("active", False) and not p_data_t.get("done", False):
+                                auto_t = tasks_database.get(task_name_t, 0.0)
+                                hrs_t = (auto_t * p_main_qty_t) / 60
+                                pending_tasks.append({
+                                    "name": task_name_t,
+                                    "hours": hrs_t,
+                                })
+                    
+                    # Aggregate by name
+                    task_agg = {}
+                    for pt in pending_tasks:
+                        n = pt["name"]
+                        if n not in task_agg:
+                            task_agg[n] = {"count": 0, "hours": 0.0}
+                        task_agg[n]["count"] += 1
+                        task_agg[n]["hours"] += pt["hours"]
+                    
+                    # Sort by hours desc
+                    sorted_pending = sorted(task_agg.items(), key=lambda x: -x[1]["hours"])[:3]
+                    
+                    if sorted_pending:
+                        tooltip_lines.append("")
+                        tooltip_lines.append(f"🔧 Εκκρεμή Tasks (top {len(sorted_pending)}):")
+                        for task_n, agg in sorted_pending:
+                            tooltip_lines.append(f"  • {task_n} — {round(agg['hours'], 1)}h ({agg['count']}x)")
+                    elif total_tasks > 0:
+                        tooltip_lines.append("")
+                        tooltip_lines.append("✅ Δεν υπάρχουν εκκρεμή tasks!")
+                    
+                    # Υπεύθυνοι (unique)
+                    all_users_in_proj = set()
+                    for idx_u, r_u in filtered_p_items.iterrows():
+                        item_id_u = str(r_u["ID"])
+                        u_key_u = f"{item_id_u}_{idx_u}"
+                        for tt in st.session_state["tasks_store"].get(u_key_u, []):
+                            if tt.get("task") and tt["task"] != "- Επιλογή Εργασίας -":
+                                for uu in tt.get("users", []):
+                                    if uu and uu != "- Χωρίς Ανάθεση -":
+                                        all_users_in_proj.add(uu)
+                    
+                    if isinstance(p_tasks_dict_t, dict):
+                        for task_name_t, p_data_t in p_tasks_dict_t.items():
+                            if isinstance(p_data_t, dict) and p_data_t.get("active", False):
+                                for uu in p_data_t.get("users", []):
+                                    if uu and uu != "- Χωρίς Ανάθεση -":
+                                        all_users_in_proj.add(uu)
+                    
+                    if all_users_in_proj:
+                        tooltip_lines.append("")
+                        tooltip_lines.append(f"👥 Υπεύθυνοι ({len(all_users_in_proj)}):")
+                        for uu in sorted(all_users_in_proj):
+                            tooltip_lines.append(f"  • {uu}")
+                    
+                    # Build tooltip text
+                    tooltip_text = "&#10;".join(tooltip_lines).replace('"', '&quot;')
+                    
+                    card_html = (
+                        f'<div class="{card_class}" title="{tooltip_text}" style="cursor:help;">'
+                        f'<div class="compact-title">{display_name}</div>'
+                        f'{status_html}'
+                        f'{shipping_date_html}'
+                        f'<div class="compact-progress-bg">'
+                        f'<div class="compact-progress-fill" style="width:{progress}%;background:{bar_color};"></div>'
+                        f'</div>'
+                        f'<div style="text-align:center;font-size:11px;font-weight:600;color:#333;">{progress}%</div>'
+                        f'<div class="compact-meta">'
+                        f'<span>{total_h}h</span>'
+                        f'<span>{materials} υλικά</span>'
+                        f'<span>{done_tasks}/{total_tasks}</span>'
+                        f'</div>'
+                        f'</div>'
+                    )
                     st.markdown(card_html, unsafe_allow_html=True)
                     
                     if st.button("Άνοιγμα", key=f"drill_{p_name}", use_container_width=True):
