@@ -524,6 +524,7 @@ def load_all_data(version=0):
             })
             if is_active:
                 team_member_names.append(name)
+                
     except Exception as e:
         st.warning(f"Could not load Team_Members: {e}")
     
