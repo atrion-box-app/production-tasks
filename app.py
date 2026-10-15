@@ -3547,6 +3547,7 @@ def render_location_dashboard(procurement_df, tasks_database, team_members_list,
     col_main, col_wh = st.columns(2)
     
     def render_location_card(stats, location_name, color, emoji):
+        border_color = color
         emoji_part = f"{emoji} " if emoji else ""
         st.markdown(
             f'<div style="background:{color};color:white;padding:12px 20px;'
@@ -3591,13 +3592,14 @@ def render_location_dashboard(procurement_df, tasks_database, team_members_list,
         # Λίστα μελών
         st.markdown("#### 👥 Ομάδα")
         if stats["members"]:
+            border_color = "#1e88e5" if location_name == "Κεντρικό" else "#ff9800"
             for m in stats["members"]:
                 name = m.get("name", "")
                 mtype = m.get("type", "")
                 type_badge = f' <span style="color:#90a4ae;font-size:10px;">({mtype})</span>' if mtype else ""
                 st.markdown(
                     f'<div style="padding:6px 12px;background:#263238;border-radius:5px;'
-                    f'margin-bottom:4px;font-size:12px;">'
+                    f'margin-bottom:4px;font-size:12px;border-left:4px solid {border_color};">'
                     f'<span style="font-weight:600;color:#ffffff;">{name}</span>'
                     f'{type_badge}'
                     f'</div>',
