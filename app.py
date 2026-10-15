@@ -3547,11 +3547,12 @@ def render_location_dashboard(procurement_df, tasks_database, team_members_list,
     col_main, col_wh = st.columns(2)
     
     def render_location_card(stats, location_name, color, emoji):
+        emoji_part = f"{emoji} " if emoji else ""
         st.markdown(
             f'<div style="background:{color};color:white;padding:12px 20px;'
             f'border-radius:10px;text-align:center;font-weight:700;font-size:18px;'
             f'margin-bottom:15px;">'
-            f'{emoji} {location_name}'
+            f'{emoji_part}{location_name}'
             f'</div>',
             unsafe_allow_html=True
         )
@@ -3593,11 +3594,11 @@ def render_location_dashboard(procurement_df, tasks_database, team_members_list,
             for m in stats["members"]:
                 name = m.get("name", "")
                 mtype = m.get("type", "")
-                type_badge = f' <span style="color:#999;font-size:10px;">({mtype})</span>' if mtype else ""
+                type_badge = f' <span style="color:#666;font-size:10px;">({mtype})</span>' if mtype else ""
                 st.markdown(
                     f'<div style="padding:6px 12px;background:#f5f5f5;border-radius:5px;'
-                    f'margin-bottom:4px;font-size:12px;">'
-                    f'<span style="font-weight:600;">{name}</span>{type_badge}'
+                    f'margin-bottom:4px;font-size:12px;color:#333 !important;">'
+                    f'<span style="font-weight:600;color:#333 !important;">{name}</span>{type_badge}'
                     f'</div>',
                     unsafe_allow_html=True
                 )
@@ -3605,10 +3606,10 @@ def render_location_dashboard(procurement_df, tasks_database, team_members_list,
             st.caption("Δεν υπάρχουν μέλη")
     
     with col_main:
-        render_location_card(stats_main, "Κεντρικό", "#1e88e5", "🏠")
+        render_location_card(stats_main, "Κεντρικό", "#1e88e5", "")
     
     with col_wh:
-        render_location_card(stats_wh, "Παράρτημα", "#ff9800", "🏭")
+        render_location_card(stats_wh, "Παράρτημα", "#ff9800", "")
     
     # === Comparison section ===
     st.divider()
