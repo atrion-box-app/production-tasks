@@ -198,6 +198,49 @@ def get_team_members_by_location(team_members_list, location_filter):
         if m.get("active", True) and m.get("location", LOCATION_MAIN) == location_filter
     ]
 
+def compute_location_progress(procurement_df, tasks_database, location):
+    """
+    Υπολογίζει progress για ένα location.
+    Επιστρέφει (done_tasks, total_tasks, progress_pct)
+    """
+    # Φιλτράρισμα projects
+    proj_df = procurement_df[
+        procurement_df["Project"].apply(lambda p: detect_location(p) == location)
+    ] if not procurement_df.empty else pd.DataFrame()
+    
+    if proj_df.empty:
+        return 0, 0, 0
+    
+    total_tasks = 0
+    done_tasks = 0
+    
+    # Item tasks
+    for idx, row in proj_df.iterrows():
+        item_id = str(row["ID"])
+        u_key = f"{item_id}_{idx}"
+        item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
+        for t in item_tasks:
+            if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
+                total_tasks += 1
+                if t.get("done", False):
+                    done_tasks += 1
+    
+    # Project tasks
+    for p_key, p_tasks_dict in st.session_state.get("project_tasks_store", {}).items():
+        if isinstance(p_tasks_dict, dict):
+            proj_name = p_key.replace("proj_", "")
+            if detect_location(proj_name) != location:
+                continue
+            for task_name, p_data in p_tasks_dict.items():
+                if isinstance(p_data, dict) and p_data.get("active", False):
+                    total_tasks += 1
+                    if p_data.get("done", False):
+                        done_tasks += 1
+    
+    progress = int((done_tasks / total_tasks) * 100) if total_tasks > 0 else 0
+    
+    return done_tasks, total_tasks, progress
+
 
 def get_location_display(project_name):
     """Επιστρέφει πώς να εμφανίζεται το location (με χρώμα)."""
@@ -4864,9 +4907,10 @@ def main():
         
         st.divider()
         
-        # Location Filter
+        # === Location Filter + Progress bars ===
         st.markdown("### 📍 Location")
         
+        # Initialize
         if "_location_filter" not in st.session_state:
             st.session_state["_location_filter"] = LOCATION_ALL
         
@@ -4877,7 +4921,20 @@ def main():
             LOCATION_WAREHOUSE: "Παράρτημα",
         }
         
+        # Count members per location
         team_members_list_for_count = st.session_state.get("team_members_list", [])
+        
+        cnt_all = len([m for m in team_members_list_for_count if m.get("active", True)])
+        cnt_main = len([m for m in team_members_list_for_count if m.get("active", True) and m.get("location", LOCATION_MAIN) == LOCATION_MAIN])
+        cnt_wh = len([m for m in team_members_list_for_count if m.get("active", True) and m.get("location", LOCATION_MAIN) == LOCATION_WAREHOUSE])
+        
+        # Progress per location (υπολογισμός)
+        done_main, total_main, prog_main = compute_location_progress(procurement_df, tasks_database, LOCATION_MAIN)
+        done_wh, total_wh, prog_wh = compute_location_progress(procurement_df, tasks_database, LOCATION_WAREHOUSE)
+        
+        done_all = done_main + done_wh
+        total_all = total_main + total_wh
+        prog_all = int((done_all / total_all) * 100) if total_all > 0 else 0
         
         selected_location = st.radio(
             "Location:",
@@ -4889,16 +4946,45 @@ def main():
         )
         st.session_state["_location_filter"] = selected_location
         
-        cnt_all = len([m for m in team_members_list_for_count if m.get("active", True)])
-        cnt_main = len([m for m in team_members_list_for_count if m.get("active", True) and m.get("location", LOCATION_MAIN) == LOCATION_MAIN])
-        cnt_wh = len([m for m in team_members_list_for_count if m.get("active", True) and m.get("location", LOCATION_MAIN) == LOCATION_WAREHOUSE])
+        # === Progress bars per location ===
+        def render_sidebar_progress(emoji, label, count, done_t, total_t, progress_pct):
+            # Χρώμα bar
+            if progress_pct == 100:
+                bar_color = "#2e7d32"
+            elif progress_pct > 50:
+                bar_color = "#1e88e5"
+            elif progress_pct > 0:
+                bar_color = "#ff9800"
+            else:
+                bar_color = "#9e9e9e"
+            
+            st.markdown(
+                f'<div style="margin-bottom:8px;">'
+                f'<div style="display:flex;justify-content:space-between;font-size:11px;'
+                f'color:#b0bec5;margin-bottom:3px;">'
+                f'<span>{emoji} {label} ({count})</span>'
+                f'<span style="font-weight:600;color:#ffffff;">{progress_pct}%</span>'
+                f'</div>'
+                f'<div style="background:#37474f;border-radius:4px;height:6px;overflow:hidden;">'
+                f'<div style="width:{progress_pct}%;height:100%;background:{bar_color};"></div>'
+                f'</div>'
+                f'<div style="font-size:10px;color:#90a4ae;margin-top:2px;">'
+                f'{done_t}/{total_t} tasks'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        
+        st.markdown("**📊 Πρόοδος:**")
+        render_sidebar_progress("🏠", "Κεντρικό", cnt_main, done_main, total_main, prog_main)
+        render_sidebar_progress("🏭", "Παράρτημα", cnt_wh, done_wh, total_wh, prog_wh)
         
         if selected_location == LOCATION_ALL:
-            st.caption(f"👥 {cnt_all} άτομα")
+            st.caption(f"👥 {cnt_all} άτομα · 📊 {prog_all}% σύνολο")
         elif selected_location == LOCATION_MAIN:
-            st.caption(f"👥 {cnt_main} άτομα")
+            st.caption(f"👥 {cnt_main} άτομα · 📊 {prog_main}%")
         else:
-            st.caption(f"👥 {cnt_wh} άτομα")
+            st.caption(f"👥 {cnt_wh} άτομα · 📊 {prog_wh}%")
         
         st.divider()
         
