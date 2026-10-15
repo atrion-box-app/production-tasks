@@ -359,6 +359,49 @@ def save_partial_to_history(project, task_name, item_id, done_qty, total_qty, re
         st.warning(f"Could not save partial to history: {e}")
         return False
 
+def update_partial_status_item(u_key, t_idx, done_qty, total_qty, reason):
+    """Ενημερώνει ένα item task με partial status."""
+    if u_key not in st.session_state["tasks_store"]:
+        return False
+    if t_idx >= len(st.session_state["tasks_store"][u_key]):
+        return False
+    
+    task = st.session_state["tasks_store"][u_key][t_idx]
+    task["done_qty"] = done_qty
+    task["total_qty"] = total_qty
+    task["partial_reason"] = reason
+    task["is_partial"] = done_qty < total_qty
+    
+    if done_qty >= total_qty:
+        task["done"] = True
+    else:
+        task["done"] = False
+    
+    mark_unsaved_changes()
+    return True
+
+
+def update_partial_status_project(p_key, task_name, done_qty, total_qty, reason):
+    """Ενημερώνει ένα project task με partial status."""
+    if p_key not in st.session_state["project_tasks_store"]:
+        return False
+    if task_name not in st.session_state["project_tasks_store"][p_key]:
+        return False
+    
+    task = st.session_state["project_tasks_store"][p_key][task_name]
+    task["done_qty"] = done_qty
+    task["total_qty"] = total_qty
+    task["partial_reason"] = reason
+    task["is_partial"] = done_qty < total_qty
+    
+    if done_qty >= total_qty:
+        task["done"] = True
+    else:
+        task["done"] = False
+    
+    mark_unsaved_changes()
+    return True
+
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load_partial_history(version=0):
@@ -1898,14 +1941,50 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         for t_idx, t_data in enumerate(list(item_tasks)):
                             with st.container(border=True):
-                                c_done, c_task = st.columns([0.1, 0.9])
+                                c_done, c_task, c_partial = st.columns([0.1, 0.8, 0.1])
                                 
                                 chk_k = f"mat_chk_{unique_key}_{t_idx}"
                                 c_done.checkbox("Done", value=t_data["done"], key=chk_k, on_change=toggle_item_task, args=(unique_key, t_idx, chk_k))
                                 
+                                # Partial button
+                                is_partial = t_data.get("is_partial", False)
+                                partial_icon = "🔄" if is_partial else "⏳"
+                                partial_help = "Επεξεργασία partial" if is_partial else "Δήλωση μερικής ολοκλήρωσης"
+                                if c_partial.button(partial_icon, key=f"mat_partial_{unique_key}_{t_idx}", 
+                                                   help=partial_help, use_container_width=True):
+                                    state_k = f"_partial_dialog_item_{unique_key}_{t_idx}"
+                                    st.session_state[state_k] = not st.session_state.get(state_k, False)
+                                    st.rerun()
+                                
                                 task_idx = task_options.index(t_data["task"]) if t_data["task"] in task_options else 0
                                 task_k = f"mat_task_{unique_key}_{t_idx}"
                                 c_task.selectbox("Εργασία", task_options, index=task_idx, key=task_k, on_change=update_item_field, args=(unique_key, t_idx, "task", task_k))
+                               
+                                # Partial info
+                                if t_data.get("is_partial", False):
+                                    done_q = t_data.get("done_qty", 0)
+                                    total_q = t_data.get("total_qty", 0)
+                                    if total_q > 0:
+                                        pct = int((done_q / total_q) * 100)
+                                        st.markdown(
+                                            f'<div style="background:#fff3e0;padding:6px 10px;'
+                                            f'border-radius:5px;margin:5px 0;font-size:11px;'
+                                            f'border-left:3px solid #ff9800;">'
+                                            f'⏳ <b>{done_q}/{total_q}</b> ({pct}%)'
+                                            + (f' · 📝 {t_data.get("partial_reason", "")[:40]}' if t_data.get("partial_reason") else '')
+                                            + f'</div>',
+                                            unsafe_allow_html=True
+                                        )
+                                        st.progress(pct / 100)
+                                
+                                # Render dialog
+                                if t_data.get("task") and t_data["task"] != "- Επιλογή Εργασίας -":
+                                    render_partial_dialog(
+                                        unique_key, t_idx, "item",
+                                        qty, t_data.get("done_qty", 0),
+                                        t_data.get("partial_reason", ""),
+                                        selected_project, t_data["task"]
+                                    )
                                 
                                 c_user, c_date, c_time, c_del = st.columns([0.4, 0.3, 0.2, 0.1])
                                 
@@ -2000,7 +2079,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                 t_data = proj_tasks_dict.get(task_name, {"active": False, "done": False, "user": "- Χωρίς Ανάθεση -", "users": [], "date": date.today()})
                 
                 with st.container(border=True):
-                    c_active, c_name, c_done = st.columns([0.08, 0.62, 0.30])
+                    c_active, c_name, c_done, c_partial = st.columns([0.08, 0.55, 0.25, 0.12])
                     pact_k = f"pact_proj_{proj_key}_{task_name}"
                     is_active = c_active.checkbox("", value=t_data["active"], key=pact_k, on_change=update_proj_field, args=(proj_key, task_name, "active", pact_k))
                     c_name.markdown(f"**{task_name}**" if is_active else f"<span style='color:gray;'>{task_name}</span>", unsafe_allow_html=True)
@@ -2008,8 +2087,45 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     if is_active:
                         pdone_k = f"proj_pdone_proj_{proj_key}_{task_name}"
                         is_done = c_done.checkbox("Done", value=t_data["done"], key=pdone_k, on_change=toggle_project_task, args=(proj_key, task_name, pdone_k))
+                        
+                        # Partial button
+                        is_partial = t_data.get("is_partial", False)
+                        partial_icon = "🔄" if is_partial else "⏳"
+                        partial_help = "Επεξεργασία partial" if is_partial else "Δήλωση μερικής ολοκλήρωσης"
+                        if c_partial.button(partial_icon, key=f"proj_partial_{proj_key}_{task_name}",
+                                          help=partial_help, use_container_width=True):
+                            state_k = f"_partial_dialog_project_{proj_key}_{task_name}"
+                            st.session_state[state_k] = not st.session_state.get(state_k, False)
+                            st.rerun()
                     else:
                         c_done.caption("—")
+                        c_partial.caption("—")
+                    
+                    # Partial info
+                    if is_active and t_data.get("is_partial", False):
+                        done_q = t_data.get("done_qty", 0)
+                        total_q = t_data.get("total_qty", 0)
+                        if total_q > 0:
+                            pct = int((done_q / total_q) * 100)
+                            st.markdown(
+                                f'<div style="background:#fff3e0;padding:6px 10px;'
+                                f'border-radius:5px;margin:5px 0;font-size:11px;'
+                                f'border-left:3px solid #ff9800;">'
+                                f'⏳ <b>{done_q}/{total_q}</b> ({pct}%)'
+                                + (f' · 📝 {t_data.get("partial_reason", "")[:40]}' if t_data.get("partial_reason") else '')
+                                + f'</div>',
+                                unsafe_allow_html=True
+                            )
+                            st.progress(pct / 100)
+                    
+                    # Render dialog
+                    if is_active:
+                        render_partial_dialog(
+                            proj_key, task_name, "project",
+                            project_main_qty, t_data.get("done_qty", 0),
+                            t_data.get("partial_reason", ""),
+                            selected_project, task_name
+                        )
                     
                     if is_active:
                         c_user, c_date, c_time = st.columns([0.4, 0.4, 0.2])
@@ -3993,6 +4109,110 @@ def render_pending_partial(procurement_df, team_members_list):
     st.divider()
     st.caption(f"💾 **Σημείωση:** Πατήστε **Αποθήκευση** στο sidebar για να σωθούν οι αλλαγές στο Sheet.")
 
+def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type, 
+                           total_qty_default, current_done, current_reason, 
+                           project_name, task_name):
+    """
+    Render dialog για δήλωση partial.
+    task_type: "item" ή "project"
+    """
+    # State key για να θυμάται αν είναι ανοιχτό
+    state_key = f"_partial_dialog_{task_type}_{u_key_or_p_key}_{t_idx_or_task_name}"
+    
+    if st.session_state.get(state_key, False):
+        with st.expander(f"⏳ Δήλωση Μερικής Ολοκλήρωσης — {task_name}", expanded=True):
+            st.markdown(
+                f'<div style="background:#fff3e0;padding:10px;border-radius:6px;'
+                f'border-left:4px solid #ff9800;margin-bottom:10px;">'
+                f'<div style="font-weight:700;color:#e65100;">📋 {project_name}</div>'
+                f'<div style="color:#333;font-size:12px;margin-top:3px;">'
+                f'Εργασία: <b>{task_name}</b></div>'
+                f'<div style="color:#333;font-size:12px;">'
+                f'Συνολική ποσότητα: <b>{total_qty_default}</b></div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            
+            col_done, col_total = st.columns(2)
+            with col_done:
+                done_val = st.number_input(
+                    "Πόσα έγιναν:",
+                    min_value=0,
+                    max_value=int(total_qty_default) if total_qty_default else 9999,
+                    value=int(current_done) if current_done else 0,
+                    step=1,
+                    key=f"{state_key}_done"
+                )
+            with col_total:
+                total_val = st.number_input(
+                    "Από πόσα:",
+                    min_value=1,
+                    max_value=99999,
+                    value=int(total_qty_default) if total_qty_default else 1,
+                    step=1,
+                    key=f"{state_key}_total"
+                )
+            
+            reason_val = st.text_area(
+                "Αιτία (προαιρετικό):",
+                value=current_reason or "",
+                height=70,
+                key=f"{state_key}_reason",
+                placeholder="π.χ. Έλλειψη χρόνου, πρόβλημα υλικού..."
+            )
+            
+            # Preview progress
+            if total_val > 0:
+                pct_preview = int((done_val / total_val) * 100)
+                st.progress(min(pct_preview / 100, 1.0))
+                st.caption(f"📊 Πρόοδος: **{done_val}/{total_val}** ({pct_preview}%)")
+            
+            col_save, col_cancel = st.columns(2)
+            
+            with col_save:
+                if st.button("💾 Αποθήκευση", key=f"{state_key}_save", 
+                            type="primary", use_container_width=True):
+                    if done_val <= 0:
+                        st.error("⚠️ Πρέπει να βάλεις τουλάχιστον 1")
+                    elif done_val > total_val:
+                        st.error("⚠️ Τα 'έγιναν' δεν μπορούν να είναι > 'από πόσα'")
+                    else:
+                        # Save
+                        if task_type == "item":
+                            success = update_partial_status_item(
+                                u_key_or_p_key, t_idx_or_task_name, 
+                                done_val, total_val, reason_val
+                            )
+                        else:
+                            success = update_partial_status_project(
+                                u_key_or_p_key, t_idx_or_task_name, 
+                                done_val, total_val, reason_val
+                            )
+                        
+                        if success:
+                            # Save to history
+                            item_id_for_history = "-"
+                            if task_type == "item":
+                                item_id_for_history = u_key_or_p_key.split("_")[0]
+                            
+                            save_partial_to_history(
+                                project_name, task_name, 
+                                item_id_for_history, 
+                                done_val, total_val, reason_val
+                            )
+                            
+                            # Close dialog
+                            st.session_state[state_key] = False
+                            st.rerun()
+                        else:
+                            st.error("❌ Σφάλμα κατά την αποθήκευση")
+            
+            with col_cancel:
+                if st.button("✕ Ακύρωση", key=f"{state_key}_cancel", 
+                            use_container_width=True):
+                    st.session_state[state_key] = False
+                    st.rerun()
+
 # --- RENDER SETTINGS ---
 def render_settings():
     st.header("Ρυθμίσεις")
@@ -5249,12 +5469,44 @@ def main():
             for notif in notifications:
                 st.warning(notif)
             st.divider()
+
+        # === Partial Tasks Widget ===
+        partial_tasks_sidebar = get_all_partial_tasks()
+        if partial_tasks_sidebar:
+            st.markdown(f"### 🚨 Εκκρεμότητες ({len(partial_tasks_sidebar)})")
+            
+            for pt in partial_tasks_sidebar:
+                done = pt["done_qty"]
+                total = pt["total_qty"]
+                pct = int((done / total) * 100) if total > 0 else 0
+                
+                st.markdown(
+                    f'<div style="background:#fff3e0;border-left:3px solid #ff9800;'
+                    f'padding:6px 10px;border-radius:5px;margin-bottom:5px;font-size:11px;">'
+                    f'<div style="font-weight:700;color:#e65100;font-size:11px;">'
+                    f'⏳ {pt["task_name"][:25]}{"..." if len(pt["task_name"]) > 25 else ""}'
+                    f'</div>'
+                    f'<div style="color:#666;font-size:10px;margin-top:2px;">'
+                    f'📁 {pt["project"][:20]}{"..." if len(pt["project"]) > 20 else ""}'
+                    f'</div>'
+                    f'<div style="color:#333;font-size:10px;margin-top:2px;font-weight:600;">'
+                    f'{done}/{total} ({pct}%)'
+                    f'</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+            
+            if st.button("Δες όλα", key="see_all_partial", use_container_width=True):
+                st.session_state.page = "🚨 Εκκρεμότητες"
+                st.rerun()
+            
+            st.divider()
         
         st.markdown("### 📋 Navigation")
         pages_list = [
             "📦 Projects", "📦 Παραλαβές", "📋 Master View", "🗓️ Daily Plan",
             "👤 Technician", "📆 Projection", "📝 Daily Report", "📆 Team Calendar",
-            "👥 Ομάδα", "📊 Location Dashboard", "📊 Database", "⚙️ Settings"
+            "👥 Ομάδα", "📊 Location Dashboard", "🚨 Εκκρεμότητες", "📊 Database", "⚙️ Settings"
         ]
         
         current_page = st.session_state.get("page", "📦 Projects")
@@ -5343,6 +5595,8 @@ def main():
     elif page == "📊 Location Dashboard":
         render_location_dashboard(procurement_df, tasks_database, team_members_list, 
                                    availability_database, availability_overrides, incoming_df)
+    elif page == "🚨 Εκκρεμότητες":
+        render_pending_partial(procurement_df, team_members_list)
     elif page == "📊 Database":
         render_database(tasks_database, team_database, availability_database)
     elif page == "⚙️ Settings":
