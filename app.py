@@ -1961,18 +1961,20 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 c_task.selectbox("Εργασία", task_options, index=task_idx, key=task_k, on_change=update_item_field, args=(unique_key, t_idx, "task", task_k))
                                
                                 # Partial info
-                                if t_data.get("is_partial", False):
+                                if is_active and t_data.get("is_partial", False):
                                     done_q = t_data.get("done_qty", 0)
                                     total_q = t_data.get("total_qty", 0)
                                     if total_q > 0:
                                         pct = int((done_q / total_q) * 100)
+                                        reason_text = f' · 📝 {t_data.get("partial_reason", "")[:40]}' if t_data.get("partial_reason") else ''
                                         st.markdown(
                                             f'<div style="background:#fff3e0;padding:6px 10px;'
                                             f'border-radius:5px;margin:5px 0;font-size:11px;'
                                             f'border-left:3px solid #ff9800;">'
-                                            f'⏳ <b>{done_q}/{total_q}</b> ({pct}%)'
-                                            + (f' · 📝 {t_data.get("partial_reason", "")[:40]}' if t_data.get("partial_reason") else '')
-                                            + f'</div>',
+                                            f'<span style="color:#e65100 !important;font-weight:600;">'
+                                            f'⏳ {done_q}/{total_q} ({pct}%){reason_text}'
+                                            f'</span>'
+                                            f'</div>',
                                             unsafe_allow_html=True
                                         )
                                         st.progress(pct / 100)
@@ -2100,23 +2102,26 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     else:
                         c_done.caption("—")
                         c_partial.caption("—")
-                    
-                    # Partial info
-                    if is_active and t_data.get("is_partial", False):
-                        done_q = t_data.get("done_qty", 0)
-                        total_q = t_data.get("total_qty", 0)
-                        if total_q > 0:
-                            pct = int((done_q / total_q) * 100)
-                            st.markdown(
-                                f'<div style="background:#fff3e0;padding:6px 10px;'
-                                f'border-radius:5px;margin:5px 0;font-size:11px;'
-                                f'border-left:3px solid #ff9800;">'
-                                f'⏳ <b>{done_q}/{total_q}</b> ({pct}%)'
-                                + (f' · 📝 {t_data.get("partial_reason", "")[:40]}' if t_data.get("partial_reason") else '')
-                                + f'</div>',
-                                unsafe_allow_html=True
-                            )
-                            st.progress(pct / 100)
+
+                        # Partial info
+                        if t_data.get("is_partial", False):
+                            done_q = t_data.get("done_qty", 0)
+                            total_q = t_data.get("total_qty", 0)
+                            if total_q > 0:
+                                pct = int((done_q / total_q) * 100)
+                                reason_text = f' · 📝 {t_data.get("partial_reason", "")[:40]}' if t_data.get("partial_reason") else ''
+                                st.markdown(
+                                    f'<div style="background:#fff3e0;padding:6px 10px;'
+                                    f'border-radius:5px;margin:5px 0;font-size:11px;'
+                                    f'border-left:3px solid #ff9800;">'
+                                    f'<span style="color:#e65100 !important;font-weight:600;">'
+                                    f'⏳ {done_q}/{total_q} ({pct}%){reason_text}'
+                                    f'</span>'
+                                    f'</div>',
+                                    unsafe_allow_html=True
+                                )
+                                st.progress(pct / 100)                    
+
                     
                     # Render dialog
                     if is_active:
