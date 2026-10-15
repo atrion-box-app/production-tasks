@@ -3444,6 +3444,260 @@ def render_database(tasks_database, team_database, availability_database):
         avail_data = [{"Ημέρα": day, "Τεχνίτης": member, "Ώρες": hours} for day, members in availability_database.items() for member, hours in members.items()]
         st.dataframe(pd.DataFrame(avail_data), use_container_width=True, hide_index=True)
 
+def render_location_dashboard(procurement_df, tasks_database, team_members_list, availability_database, 
+                                availability_overrides, incoming_df):
+    """Location Dashboard - side-by-side σύγκριση Κεντρικό vs Παράρτημα"""
+    st.header("📊 Location Dashboard")
+    st.caption("Σύγκριση Κεντρικό vs Παράρτημα — metrics, progress, φόρτος")
+    
+    st.divider()
+    
+    # Υπολογισμός για κάθε location
+    def compute_location_stats(location):
+        # Φιλτράρισμα members
+        members = [m for m in team_members_list 
+                   if m.get("active", True) and m.get("location", LOCATION_MAIN) == location]
+        
+        # Φιλτράρισμα projects
+        proj_df = procurement_df[
+            procurement_df["Project"].apply(lambda p: detect_location(p) == location)
+        ].copy()
+        
+        # Υπολογισμός tasks + ωρών
+        total_tasks = 0
+        done_tasks = 0
+        pending_tasks = 0
+        total_hours = 0.0
+        done_hours = 0.0
+        
+        # Items tasks
+        for idx, row in proj_df.iterrows():
+            item_id = str(row["ID"])
+            u_key = f"{item_id}_{idx}"
+            qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+            
+            item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
+            for t in item_tasks:
+                if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
+                    auto_t = tasks_database.get(t["task"], 0.0)
+                    hrs = (auto_t * qty) / 60
+                    total_tasks += 1
+                    total_hours += hrs
+                    
+                    if t.get("done", False):
+                        done_tasks += 1
+                        done_hours += hrs
+                    else:
+                        pending_tasks += 1
+        
+        # Project tasks
+        for p_key, p_tasks_dict in st.session_state.get("project_tasks_store", {}).items():
+            if isinstance(p_tasks_dict, dict):
+                proj_name = p_key.replace("proj_", "")
+                if detect_location(proj_name) != location:
+                    continue
+                
+                proj_qty = 1
+                p_items = proj_df[proj_df["Project"] == proj_name]
+                for _, r in p_items.iterrows():
+                    if str(r["Ποσότητα"]).isdigit():
+                        proj_qty = max(proj_qty, int(r["Ποσότητα"]))
+                
+                for task_name, p_data in p_tasks_dict.items():
+                    if isinstance(p_data, dict) and p_data.get("active", False):
+                        auto_t = tasks_database.get(task_name, 0.0)
+                        hrs = (auto_t * proj_qty) / 60
+                        total_tasks += 1
+                        total_hours += hrs
+                        
+                        if p_data.get("done", False):
+                            done_tasks += 1
+                            done_hours += hrs
+                        else:
+                            pending_tasks += 1
+        
+        # Unique projects
+        unique_projects = len(set(proj_df["Project"].unique()) - {"-"})
+        
+        # Available hours σήμερα
+        today = date.today()
+        day_avail = get_availability_for_date(today, availability_database, availability_overrides, members)
+        today_available = sum(day_avail.values())
+        
+        # Progress
+        progress = int((done_tasks / total_tasks) * 100) if total_tasks > 0 else 0
+        
+        return {
+            "members_count": len(members),
+            "members": members,
+            "projects_count": unique_projects,
+            "total_tasks": total_tasks,
+            "done_tasks": done_tasks,
+            "pending_tasks": pending_tasks,
+            "total_hours": total_hours,
+            "done_hours": done_hours,
+            "progress": progress,
+            "today_available": today_available,
+        }
+    
+    stats_main = compute_location_stats(LOCATION_MAIN)
+    stats_wh = compute_location_stats(LOCATION_WAREHOUSE)
+    
+    # === Side-by-side columns ===
+    col_main, col_wh = st.columns(2)
+    
+    def render_location_card(stats, location_name, color, emoji):
+        st.markdown(
+            f'<div style="background:{color};color:white;padding:12px 20px;'
+            f'border-radius:10px;text-align:center;font-weight:700;font-size:18px;'
+            f'margin-bottom:15px;">'
+            f'{emoji} {location_name}'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+        
+        # Metrics 2x2
+        m1, m2 = st.columns(2)
+        m1.metric("👥 Άτομα", stats["members_count"])
+        m2.metric("📦 Projects", stats["projects_count"])
+        
+        m3, m4 = st.columns(2)
+        m3.metric("📋 Tasks", f"{stats['done_tasks']}/{stats['total_tasks']}")
+        m4.metric("⏳ Εκκρεμή", stats["pending_tasks"])
+        
+        m5, m6 = st.columns(2)
+        m5.metric("⏱️ Ώρες", f"{round(stats['done_hours'], 1)}h / {round(stats['total_hours'], 1)}h")
+        m6.metric("🕐 Διαθέσιμα σήμερα", f"{round(stats['today_available'], 0)}h")
+        
+        # Progress bar
+        st.markdown(f"**📊 Πρόοδος: {stats['progress']}%**")
+        if stats['progress'] == 100:
+            prog_color = "#2e7d32"
+        elif stats['progress'] > 50:
+            prog_color = "#1e88e5"
+        elif stats['progress'] > 0:
+            prog_color = "#ff9800"
+        else:
+            prog_color = "#9e9e9e"
+        
+        st.markdown(
+            f'<div style="background:#e0e0e0;border-radius:6px;height:14px;overflow:hidden;margin-bottom:15px;">'
+            f'<div style="width:{stats["progress"]}%;height:100%;background:{prog_color};"></div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+        
+        # Λίστα μελών
+        st.markdown("#### 👥 Ομάδα")
+        if stats["members"]:
+            for m in stats["members"]:
+                name = m.get("name", "")
+                mtype = m.get("type", "")
+                type_badge = f' <span style="color:#999;font-size:10px;">({mtype})</span>' if mtype else ""
+                st.markdown(
+                    f'<div style="padding:6px 12px;background:#f5f5f5;border-radius:5px;'
+                    f'margin-bottom:4px;font-size:12px;">'
+                    f'<span style="font-weight:600;">{name}</span>{type_badge}'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+        else:
+            st.caption("Δεν υπάρχουν μέλη")
+    
+    with col_main:
+        render_location_card(stats_main, "Κεντρικό", "#1e88e5", "🏠")
+    
+    with col_wh:
+        render_location_card(stats_wh, "Παράρτημα", "#ff9800", "🏭")
+    
+    # === Comparison section ===
+    st.divider()
+    st.markdown("### 📊 Σύγκριση")
+    
+    # Total stats
+    total_members = stats_main["members_count"] + stats_wh["members_count"]
+    total_projects = stats_main["projects_count"] + stats_wh["projects_count"]
+    total_all_tasks = stats_main["total_tasks"] + stats_wh["total_tasks"]
+    total_done = stats_main["done_tasks"] + stats_wh["done_tasks"]
+    total_all_hours = stats_main["total_hours"] + stats_wh["total_hours"]
+    
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("👥 Σύνολο ατόμων", total_members)
+    c2.metric("📦 Σύνολο projects", total_projects)
+    c3.metric("📋 Σύνολο tasks", f"{total_done}/{total_all_tasks}")
+    c4.metric("⏱️ Σύνολο ωρών", f"{round(total_all_hours, 1)}h")
+    
+    # Workload distribution
+    st.markdown("#### ⚖️ Κατανομή Φόρτου Εργασίας")
+    if total_all_hours > 0:
+        main_pct = int((stats_main["total_hours"] / total_all_hours) * 100)
+        wh_pct = int((stats_wh["total_hours"] / total_all_hours) * 100)
+        
+        st.markdown(
+            f'<div style="background:#e0e0e0;border-radius:6px;height:28px;overflow:hidden;display:flex;">'
+            f'<div style="width:{main_pct}%;background:#1e88e5;color:white;text-align:center;'
+            f'font-weight:600;font-size:13px;line-height:28px;">🏠 {main_pct}%</div>'
+            f'<div style="width:{wh_pct}%;background:#ff9800;color:white;text-align:center;'
+            f'font-weight:600;font-size:13px;line-height:28px;">🏭 {wh_pct}%</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+        st.caption(f"🏠 Κεντρικό: **{round(stats_main['total_hours'], 1)}h** · 🏭 Παράρτημα: **{round(stats_wh['total_hours'], 1)}h**")
+    else:
+        st.info("Δεν υπάρχουν καταγεγραμμένες ώρες.")
+    
+    # === Export ===
+    st.divider()
+    st.markdown("### 📥 Export")
+    
+    export_data = [
+        {
+            "Location": "Κεντρικό",
+            "Άτομα": stats_main["members_count"],
+            "Projects": stats_main["projects_count"],
+            "Total Tasks": stats_main["total_tasks"],
+            "Done Tasks": stats_main["done_tasks"],
+            "Pending Tasks": stats_main["pending_tasks"],
+            "Total Hours": round(stats_main["total_hours"], 1),
+            "Done Hours": round(stats_main["done_hours"], 1),
+            "Progress %": stats_main["progress"],
+            "Available Today": round(stats_main["today_available"], 1),
+        },
+        {
+            "Location": "Παράρτημα",
+            "Άτομα": stats_wh["members_count"],
+            "Projects": stats_wh["projects_count"],
+            "Total Tasks": stats_wh["total_tasks"],
+            "Done Tasks": stats_wh["done_tasks"],
+            "Pending Tasks": stats_wh["pending_tasks"],
+            "Total Hours": round(stats_wh["total_hours"], 1),
+            "Done Hours": round(stats_wh["done_hours"], 1),
+            "Progress %": stats_wh["progress"],
+            "Available Today": round(stats_wh["today_available"], 1),
+        }
+    ]
+    
+    col_e1, col_e2 = st.columns(2)
+    with col_e1:
+        export_df = pd.DataFrame(export_data)
+        csv = export_df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            "📥 Εξαγωγή CSV",
+            data=csv,
+            file_name=f"Location_Dashboard_{date.today().strftime('%Y-%m-%d')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    with col_e2:
+        excel_data = export_to_excel(export_df, "Location Dashboard")
+        st.download_button(
+            "📥 Εξαγωγή Excel",
+            data=excel_data,
+            file_name=f"Location_Dashboard_{date.today().strftime('%Y-%m-%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
 
 # --- RENDER SETTINGS ---
 def render_settings():
@@ -4663,8 +4917,9 @@ def main():
         pages_list = [
             "📦 Projects", "📦 Παραλαβές", "📋 Master View", "🗓️ Daily Plan",
             "👤 Technician", "📆 Projection", "📝 Daily Report", "📆 Team Calendar",
-            "👥 Ομάδα", "📊 Database", "⚙️ Settings"
+            "👥 Ομάδα", "📊 Location Dashboard", "📊 Database", "⚙️ Settings"
         ]
+        
         current_page = st.session_state.get("page", "📦 Projects")
         if current_page not in pages_list:
             current_page = "📦 Projects"
@@ -4748,6 +5003,9 @@ def main():
         render_team_calendar(procurement_df, tasks_database, team_database, availability_database, incoming_df)
     elif page == "👥 Ομάδα":
         render_team_members(team_members_list, availability_database, availability_overrides)
+    elif page == "📊 Location Dashboard":
+        render_location_dashboard(procurement_df, tasks_database, team_members_list, 
+                                   availability_database, availability_overrides, incoming_df)
     elif page == "📊 Database":
         render_database(tasks_database, team_database, availability_database)
     elif page == "⚙️ Settings":
