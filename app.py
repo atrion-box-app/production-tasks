@@ -3594,11 +3594,12 @@ def render_location_dashboard(procurement_df, tasks_database, team_members_list,
             for m in stats["members"]:
                 name = m.get("name", "")
                 mtype = m.get("type", "")
-                type_badge = f' <span style="color:#666;font-size:10px;">({mtype})</span>' if mtype else ""
+                type_badge = f' <span style="color:#b0bec5;font-size:10px;">({mtype})</span>' if mtype else ""
                 st.markdown(
-                    f'<div style="padding:6px 12px;background:#f5f5f5;border-radius:5px;'
-                    f'margin-bottom:4px;font-size:12px;color:#333 !important;">'
-                    f'<span style="font-weight:600;color:#333 !important;">{name}</span>{type_badge}'
+                    f'<div style="padding:6px 12px;background:#37474f;border-radius:5px;'
+                    f'margin-bottom:4px;font-size:12px;border-left:3px solid {color};">'
+                    f'<span style="font-weight:600;color:#ffffff;">{name}</span>'
+                    f'{type_badge}'
                     f'</div>',
                     unsafe_allow_html=True
                 )
