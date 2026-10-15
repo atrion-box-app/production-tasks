@@ -2536,14 +2536,35 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
                 if not t_users:
                     t_users = [t.get("user", "- Χωρίς Ανάθεση -")]
                 
+                # Partial status
+                is_partial = t.get("is_partial", False)
+                done_q = t.get("done_qty", 0)
+                total_q = t.get("total_qty", 0)
+                
+                if is_partial:
+                    pct = int((done_q / total_q) * 100) if total_q > 0 else 0
+                    status_display = f"🔄 {done_q}/{total_q} ({pct}%)"
+                elif t.get("done", False):
+                    status_display = "✅"
+                else:
+                    status_display = "⏳"
+                
                 all_tasks.append({
-                    "type": "item", "u_key": unique_key, "t_idx": t_idx,
-                    "Project": project_name, "Υλικό": material, "ID": item_id,
-                    "Ποσότητα": qty, "Εργασία": t["task"],
+                    "type": "item",
+                    "u_key": unique_key,
+                    "t_idx": t_idx,
+                    "Project": project_name,
+                    "Υλικό": material,
+                    "ID": item_id,
+                    "Ποσότητα": qty,
+                    "Εργασία": t["task"],
                     "Υπεύθυνος": ", ".join(t_users),
                     "Ημερομηνία": t.get("date", date.today()),
-                    "Status": "✅" if t.get("done", False) else "⏳",
+                    "Status": status_display,
                     "done": t.get("done", False),
+                    "is_partial": is_partial,
+                    "done_qty": done_q,
+                    "total_qty": total_q,
                     "Ώρες": round(hrs, 2),
                     "status_proc": status_proc
                 })
@@ -2568,14 +2589,34 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
                     if not t_users:
                         t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
                     
+                    is_partial_p = p_data.get("is_partial", False)
+                    done_q_p = p_data.get("done_qty", 0)
+                    total_q_p = p_data.get("total_qty", 0)
+                    
+                    if is_partial_p:
+                        pct_p = int((done_q_p / total_q_p) * 100) if total_q_p > 0 else 0
+                        status_display_p = f"🔄 {done_q_p}/{total_q_p} ({pct_p}%)"
+                    elif p_data.get("done", False):
+                        status_display_p = "✅"
+                    else:
+                        status_display_p = "⏳"
+                    
                     all_tasks.append({
-                        "type": "project", "p_key": p_key, "task_name": task_name,
-                        "Project": proj_name, "Υλικό": "Γενική Σύνθεση", "ID": "-",
-                        "Ποσότητα": proj_qty, "Εργασία": task_name,
+                        "type": "project",
+                        "p_key": p_key,
+                        "task_name": task_name,
+                        "Project": proj_name,
+                        "Υλικό": "Γενική Σύνθεση",
+                        "ID": "-",
+                        "Ποσότητα": proj_qty,
+                        "Εργασία": task_name,
                         "Υπεύθυνος": ", ".join(t_users),
                         "Ημερομηνία": p_data.get("date", date.today()),
-                        "Status": "✅" if p_data.get("done", False) else "⏳",
+                        "Status": status_display_p,
                         "done": p_data.get("done", False),
+                        "is_partial": is_partial_p,
+                        "done_qty": done_q_p,
+                        "total_qty": total_q_p,
                         "Ώρες": round(hrs, 2),
                         "status_proc": "READY"
                     })
@@ -3007,7 +3048,16 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
             mark_unsaved_changes()
             st.rerun()
         
-        c6.markdown(t['Status'])
+        if t.get("is_partial", False):
+            c6.markdown(
+                f'<span style="background:#fff3e0;color:#e65100;padding:2px 6px;'
+                f'border-radius:4px;font-size:11px;font-weight:700;">'
+                f'🔄 {t["done_qty"]}/{t["total_qty"]}'
+                f'</span>',
+                unsafe_allow_html=True
+            )
+        else:
+            c6.markdown(t['Status'])
         
         if t["type"] == "item":
             del_key = f"mv_del_item_{t['u_key']}_{t['t_idx']}"
@@ -3111,13 +3161,26 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
                     hours_total = (auto_time * qty) / 60
                     hours_per_user = hours_total / num_users
                     
+                    is_partial = t_data.get("is_partial", False)
+                    
                     daily_tasks_raw.append({
-                        "type": "item", "u_key": unique_item_key, "t_idx": t_idx,
-                        "Project": project_name, "Υλικό": material, "Ποσότητα": qty,
-                        "Εργασία": t_task, "Υπεύθυνος": ", ".join(t_users),
+                        "type": "item",
+                        "u_key": unique_item_key,
+                        "t_idx": t_idx,
+                        "Project": project_name,
+                        "Υλικό": material,
+                        "Ποσότητα": qty,
+                        "Εργασία": t_task,
+                        "Υπεύθυνος": ", ".join(t_users),
                         "Υπεύθυνος_list": t_users,
-                        "Ώρες": round(hours_total, 2), "Ώρες/άτομο": round(hours_per_user, 2),
-                        "num_users": num_users, "done": t_done, "status_proc": proc_status
+                        "Ώρες": round(hours_total, 2),
+                        "Ώρες/άτομο": round(hours_per_user, 2),
+                        "num_users": num_users,
+                        "done": t_done,
+                        "is_partial": is_partial,
+                        "done_qty": t_data.get("done_qty", 0),
+                        "total_qty": t_data.get("total_qty", 0),
+                        "status_proc": proc_status
                     })
 
     available_projects = ["Όλα τα Projects"] + sorted(list(set(d["Project"] for d in daily_tasks_raw))) if daily_tasks_raw else ["Όλα τα Projects"]
@@ -3200,7 +3263,19 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
                 is_done = col_chk.checkbox("Done", value=dt["done"], key=chk_k, on_change=toggle_item_task, args=(dt['u_key'], dt['t_idx'], chk_k))
             col_p.markdown(f"**{dt['Project']}**")
             col_mat.caption(f"{dt['Υλικό']} ({dt['Ποσότητα']} τμχ)")
-            col_tsk.markdown(f"~~{dt['Εργασία']}~~" if is_done else f"**{dt['Εργασία']}**")
+            if dt.get("is_partial", False):
+                done_q = dt.get("done_qty", 0)
+                total_q = dt.get("total_qty", 0)
+                pct = int((done_q / total_q) * 100) if total_q > 0 else 0
+                col_tsk.markdown(
+                    f'<div style="font-weight:700;color:#333;">{dt["Εργασία"]}</div>'
+                    f'<div style="background:#fff3e0;color:#e65100;padding:2px 6px;'
+                    f'border-radius:4px;font-size:10px;font-weight:700;margin-top:2px;">'
+                    f'🔄 {done_q}/{total_q} ({pct}%)</div>',
+                    unsafe_allow_html=True
+                )
+            else:
+                col_tsk.markdown(f"~~{dt['Εργασία']}~~" if is_done else f"**{dt['Εργασία']}**")
             col_user.caption(dt['Υπεύθυνος'])
             
             if dt['num_users'] > 1:
@@ -4172,7 +4247,7 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
                 st.progress(min(pct_preview / 100, 1.0))
                 st.caption(f"📊 Πρόοδος: **{done_val}/{total_val}** ({pct_preview}%)")
             
-            col_save, col_cancel = st.columns(2)
+            col_save, col_cancel, col_reset = st.columns([1, 1, 1])
             
             with col_save:
                 if st.button("💾 Αποθήκευση", key=f"{state_key}_save", 
@@ -4215,6 +4290,32 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
             with col_cancel:
                 if st.button("✕ Ακύρωση", key=f"{state_key}_cancel", 
                             use_container_width=True):
+                    st.session_state[state_key] = False
+                    st.rerun()
+
+            with col_reset:
+                if st.button("🔄 Reset", key=f"{state_key}_reset", 
+                            use_container_width=True,
+                            help="Καθαρίζει το partial και επιστρέφει σε κανονικό task"):
+                    if task_type == "item":
+                        if u_key_or_p_key in st.session_state["tasks_store"]:
+                            if t_idx_or_task_name < len(st.session_state["tasks_store"][u_key_or_p_key]):
+                                t = st.session_state["tasks_store"][u_key_or_p_key][t_idx_or_task_name]
+                                t["is_partial"] = False
+                                t["done_qty"] = ""
+                                t["total_qty"] = ""
+                                t["partial_reason"] = ""
+                                mark_unsaved_changes()
+                    else:
+                        if u_key_or_p_key in st.session_state["project_tasks_store"]:
+                            if t_idx_or_task_name in st.session_state["project_tasks_store"][u_key_or_p_key]:
+                                t = st.session_state["project_tasks_store"][u_key_or_p_key][t_idx_or_task_name]
+                                t["is_partial"] = False
+                                t["done_qty"] = ""
+                                t["total_qty"] = ""
+                                t["partial_reason"] = ""
+                                mark_unsaved_changes()
+                    
                     st.session_state[state_key] = False
                     st.rerun()
 
