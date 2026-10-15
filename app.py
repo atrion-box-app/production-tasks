@@ -150,6 +150,8 @@ TIMES_GID = "2126316973"
 TEAM_MEMBERS_GID = "1035290737"
 AVAILABILITY_WEEKLY_GID = "1303086311"
 AVAILABILITY_OVERRIDES_GID = "1438091482"
+PARTIAL_HISTORY_GID = "601876035"  # ← ΒΑΛΕ ΤΟ GID ΠΟΥ ΘΑ ΜΟΥ ΣΤΕΙΛΕΙΣ
+PARTIAL_HISTORY_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={PARTIAL_HISTORY_GID}"
 
 TIMES_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TIMES_GID}"
 TEAM_MEMBERS_CSV_URL = f"https://docs.google.com/spreadsheets/d/{MY_SHEET_ID}/export?format=csv&gid={TEAM_MEMBERS_GID}"
@@ -248,6 +250,125 @@ def get_location_display(project_name):
     if loc == LOCATION_WAREHOUSE:
         return loc, "#ff9800"
     return loc, "#1e88e5"
+
+def get_partial_percentage(task):
+    """
+    Επιστρέφει το ποσοστό progress ενός partial task.
+    Αν δεν είναι partial → None
+    """
+    if not task.get("is_partial", False):
+        return None
+    
+    done = task.get("done_qty", 0)
+    total = task.get("total_qty", 0)
+    
+    if total == 0:
+        return None
+    
+    return int((done / total) * 100)
+
+
+def is_partial_complete(task):
+    """Ελέγχει αν το partial task ολοκληρώθηκε."""
+    if not task.get("is_partial", False):
+        return False
+    
+    done = task.get("done_qty", 0)
+    total = task.get("total_qty", 0)
+    
+    return done >= total
+
+
+def get_all_partial_tasks():
+    """
+    Επιστρέφει λίστα με όλα τα partial tasks (ενεργά).
+    Each entry: dict με type, project, task_name, u_key/p_key, t_idx/task_name, done_qty, total_qty, reason
+    """
+    result = []
+    
+    # Item tasks
+    for u_key, task_list in st.session_state.get("tasks_store", {}).items():
+        for t_idx, t in enumerate(task_list):
+            if t.get("is_partial", False) and not is_partial_complete(t):
+                # Πάρε project name
+                item_id = u_key.split("_")[0]
+                proj_name = "-"
+                if 'procurement_df' in st.session_state:
+                    for _, r in st.session_state.procurement_df.iterrows():
+                        if str(r["ID"]) == item_id:
+                            proj_name = str(r["Project"])
+                            break
+                
+                result.append({
+                    "type": "item",
+                    "project": proj_name,
+                    "task_name": t.get("task", "?"),
+                    "item_id": item_id,
+                    "u_key": u_key,
+                    "t_idx": t_idx,
+                    "done_qty": t.get("done_qty", 0),
+                    "total_qty": t.get("total_qty", 0),
+                    "reason": t.get("partial_reason", ""),
+                    "date": t.get("date", date.today()),
+                })
+    
+    # Project tasks
+    for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
+        if isinstance(p_dict, dict):
+            proj_name = p_key.replace("proj_", "")
+            for task_name, p_data in p_dict.items():
+                if isinstance(p_data, dict) and p_data.get("is_partial", False) and not is_partial_complete(p_data):
+                    result.append({
+                        "type": "project",
+                        "project": proj_name,
+                        "task_name": task_name,
+                        "item_id": "-",
+                        "p_key": p_key,
+                        "task_name_key": task_name,
+                        "done_qty": p_data.get("done_qty", 0),
+                        "total_qty": p_data.get("total_qty", 0),
+                        "reason": p_data.get("partial_reason", ""),
+                        "date": p_data.get("date", date.today()),
+                    })
+    
+    return result
+
+
+def save_partial_to_history(project, task_name, item_id, done_qty, total_qty, reason):
+    """Αποθηκεύει partial event στο Sheet."""
+    gc, _ = get_gspread_client()
+    if not gc:
+        return False
+    
+    try:
+        sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Partial_History")
+        
+        row = [
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            project,
+            task_name,
+            item_id,
+            done_qty,
+            total_qty,
+            reason,
+        ]
+        
+        sheet.append_row(row)
+        return True
+    except Exception as e:
+        st.warning(f"Could not save partial to history: {e}")
+        return False
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def load_partial_history(version=0):
+    """Φορτώνει το Partial_History sheet."""
+    try:
+        df = pd.read_csv(PARTIAL_HISTORY_CSV_URL)
+        df.columns = [str(c).strip() for c in df.columns]
+        return df
+    except Exception:
+        return pd.DataFrame()
 
 
 # --- HELPERS ---
@@ -736,6 +857,21 @@ def load_assignments_from_sheet():
             if assign_date is None:
                 assign_date = date.today()
 
+            # Partial data
+            done_qty = r.get("Done_Qty", "")
+            total_qty = r.get("Total_Qty", "")
+            partial_reason = r.get("Partial_Reason", "")
+            
+            is_partial = False
+            try:
+                if done_qty and total_qty:
+                    done_qty_val = int(float(str(done_qty).replace(',', '.')))
+                    total_qty_val = int(float(str(total_qty).replace(',', '.')))
+                    if done_qty_val < total_qty_val:
+                        is_partial = True
+            except:
+                pass
+
             if task_type == "PROJECT":
                 p_key = f"proj_{p_name}"
                 if p_key not in assignments_proj:
@@ -745,7 +881,11 @@ def load_assignments_from_sheet():
                     "done": done,
                     "user": users_list[0] if users_list else "- Χωρίς Ανάθεση -",
                     "users": users_list,
-                    "date": assign_date
+                    "date": assign_date,
+                    "is_partial": is_partial,
+                    "done_qty": done_qty,
+                    "total_qty": total_qty,
+                    "partial_reason": partial_reason,
                 }
             else:
                 if item_id not in assignments_item:
@@ -765,7 +905,11 @@ def load_assignments_from_sheet():
                         "task": task_name,
                         "user": users_list[0] if users_list else "- Χωρίς Ανάθεση -",
                         "users": users_list,
-                        "date": assign_date
+                        "date": assign_date,
+                        "is_partial": is_partial,
+                        "done_qty": done_qty,
+                        "total_qty": total_qty,
+                        "partial_reason": partial_reason,
                     })
                     
     except Exception as e:
@@ -825,7 +969,8 @@ def save_all_assignments_to_sheet():
             st.session_state["tasks_store"] = cleaned_store
 
         sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
-        rows = [["Project", "Item_ID", "Task_Name", "Assigned_User", "Assigned_Date", "Status_Done", "Task_Type"]]
+        rows = [["Project", "Item_ID", "Task_Name", "Assigned_User", "Assigned_Date", "Status_Done", "Task_Type",
+                 "Done_Qty", "Total_Qty", "Partial_Reason"]]
 
         item_to_project = {}
         if 'procurement_df' in st.session_state and st.session_state.procurement_df is not None:
@@ -847,12 +992,18 @@ def save_all_assignments_to_sheet():
                     ])
                     if not users_str:
                         users_str = "- Χωρίς Ανάθεση -"
+
+                    # Partial data
+                    partial_done = t.get("done_qty", "")
+                    partial_total = t.get("total_qty", "")
+                    partial_reason = t.get("partial_reason", "")
                     
                     rows.append([
                         proj_name, item_id, strip_all_fields(t.get("task")), 
-                        users_str, str(t.get("date")), str(t.get("done")), "ITEM"
+                        users_str, str(t.get("date")), str(t.get("done")), "ITEM",
+                        partial_done, partial_total, partial_reason
                     ])
-
+                    
         for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
             proj_name = strip_all_fields(p_key.replace("proj_", ""))
             if isinstance(p_dict, dict):
@@ -871,7 +1022,8 @@ def save_all_assignments_to_sheet():
                         
                         rows.append([
                             proj_name, "-", strip_all_fields(t_name), 
-                            users_str, str(p_data.get("date")), str(p_data.get("done")), "PROJECT"
+                            users_str, str(p_data.get("date")), str(p_data.get("done")), "PROJECT",
+                            p_data.get("done_qty", ""), p_data.get("total_qty", ""), p_data.get("partial_reason", "")
                         ])
 
         seen = set()
@@ -3745,6 +3897,101 @@ def render_location_dashboard(procurement_df, tasks_database, team_members_list,
             use_container_width=True
         )
 
+def render_pending_partial(procurement_df, team_members_list):
+    """Σελίδα με όλα τα ενεργά partial tasks."""
+    st.header("🚨 Εκκρεμότητες")
+    st.caption("Tasks που δηλώθηκαν ως μερικώς ολοκληρωμένα")
+    
+    partial_tasks = get_all_partial_tasks()
+    
+    if not partial_tasks:
+        st.success("✅ Δεν υπάρχουν εκκρεμότητες!")
+        return
+    
+    # Metrics
+    total_partial = len(partial_tasks)
+    total_remaining = sum(t["total_qty"] - t["done_qty"] for t in partial_tasks if t["total_qty"] and t["done_qty"])
+    unique_projects = len(set(t["project"] for t in partial_tasks))
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("🚨 Εκκρεμότητες", total_partial)
+    c2.metric("📦 Υπόλοιπο τμχ", int(total_remaining))
+    c3.metric("📁 Projects", unique_projects)
+    
+    st.divider()
+    
+    # Group by project
+    by_project = {}
+    for t in partial_tasks:
+        proj = t["project"]
+        if proj not in by_project:
+            by_project[proj] = []
+        by_project[proj].append(t)
+    
+    for proj_name, tasks in sorted(by_project.items()):
+        with st.expander(f"📁 **{proj_name}** — {len(tasks)} εκκρεμότητες", expanded=True):
+            for t in tasks:
+                # Progress
+                done = t["done_qty"]
+                total = t["total_qty"]
+                pct = int((done / total) * 100) if total > 0 else 0
+                remaining = total - done
+                
+                col_info, col_action = st.columns([5, 1])
+                
+                with col_info:
+                    st.markdown(
+                        f'<div style="background:#fff3e0;border-left:4px solid #ff9800;'
+                        f'padding:12px 15px;border-radius:6px;margin-bottom:5px;">'
+                        f'<div style="font-weight:700;color:#e65100;font-size:14px;">'
+                        f'⏳ {t["task_name"]}'
+                        f'</div>'
+                        f'<div style="font-size:12px;color:#555;margin-top:5px;">'
+                        f'📊 Πρόοδος: <b>{done}/{total}</b> ({pct}%) · '
+                        f'Υπόλοιπο: <b>{remaining}</b>'
+                        f'</div>'
+                        + (f'<div style="font-size:11px;color:#666;margin-top:3px;font-style:italic;">'
+                           f'📝 Αιτία: {t["reason"]}</div>' if t["reason"] else '')
+                        + f'<div style="font-size:11px;color:#666;margin-top:3px;">'
+                        f'📅 {t["date"].strftime("%d/%m/%Y") if isinstance(t["date"], date) else t["date"]}'
+                        f'</div>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+                
+                with col_action:
+                    if t["type"] == "item":
+                        btn_key = f"complete_partial_item_{t['u_key']}_{t['t_idx']}"
+                        if st.button("✅", key=btn_key, help="Ολοκληρώθηκε", use_container_width=True):
+                            if t["u_key"] in st.session_state["tasks_store"]:
+                                if t["t_idx"] < len(st.session_state["tasks_store"][t["u_key"]]):
+                                    st.session_state["tasks_store"][t["u_key"]][t["t_idx"]]["done_qty"] = t["total_qty"]
+                                    st.session_state["tasks_store"][t["u_key"]][t["t_idx"]]["is_partial"] = False
+                                    st.session_state["tasks_store"][t["u_key"]][t["t_idx"]]["done"] = True
+                                    # Save to history
+                                    save_partial_to_history(
+                                        t["project"], t["task_name"], t["item_id"],
+                                        t["total_qty"], t["total_qty"], "Ολοκληρώθηκε από Εκκρεμότητες"
+                                    )
+                                    mark_unsaved_changes()
+                                    st.rerun()
+                    else:
+                        btn_key = f"complete_partial_proj_{t['p_key']}_{t['task_name_key']}"
+                        if st.button("✅", key=btn_key, help="Ολοκληρώθηκε", use_container_width=True):
+                            if t["p_key"] in st.session_state["project_tasks_store"]:
+                                if t["task_name_key"] in st.session_state["project_tasks_store"][t["p_key"]]:
+                                    st.session_state["project_tasks_store"][t["p_key"]][t["task_name_key"]]["done_qty"] = t["total_qty"]
+                                    st.session_state["project_tasks_store"][t["p_key"]][t["task_name_key"]]["is_partial"] = False
+                                    st.session_state["project_tasks_store"][t["p_key"]][t["task_name_key"]]["done"] = True
+                                    save_partial_to_history(
+                                        t["project"], t["task_name"], "-",
+                                        t["total_qty"], t["total_qty"], "Ολοκληρώθηκε από Εκκρεμότητες"
+                                    )
+                                    mark_unsaved_changes()
+                                    st.rerun()
+    
+    st.divider()
+    st.caption(f"💾 **Σημείωση:** Πατήστε **Αποθήκευση** στο sidebar για να σωθούν οι αλλαγές στο Sheet.")
 
 # --- RENDER SETTINGS ---
 def render_settings():
