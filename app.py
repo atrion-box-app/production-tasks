@@ -3580,17 +3580,26 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     hrs_total = round((auto_time * proj_qty) / 60, 2)
                     hrs_per_user = round(hrs_total / num_users, 2)
                     
+                    # Partial info
+                    is_partial = p_data.get("is_partial", False)
+                    done_q = p_data.get("done_qty", 0)
+                    total_q = p_data.get("total_qty", 0)
+                    pct_display = int((done_q / total_q) * 100) if total_q > 0 else 0
+                    
                     item_info = {
                         "Project": proj_name, "Εργασία": task_name,
                         "Υλικό / Είδος": "Γενική Σύνθεση / Box",
                         "Υπεύθυνος": ", ".join(t_users), "Ώρες": hrs_total,
-                        "Ώρες/άτομο": hrs_per_user, "num_users": num_users
+                        "Ώρες/άτομο": hrs_per_user, "num_users": num_users,
+                        "is_partial": is_partial,
+                        "done_qty": done_q,
+                        "total_qty": total_q,
+                        "pct_display": pct_display,
                     }
                     if p_data.get("done", False):
                         rep_completed.append(item_info)
                     else:
                         rep_pending.append(item_info)
-
     if not procurement_df.empty:
         for idx, row in procurement_df.iterrows():
             item_id = str(row["ID"])
@@ -3609,11 +3618,21 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     hrs_total = round((auto_time * qty) / 60, 2)
                     hrs_per_user = round(hrs_total / num_users, 2)
                     
+                    # Partial info
+                    is_partial = t_data.get("is_partial", False)
+                    done_q = t_data.get("done_qty", 0)
+                    total_q = t_data.get("total_qty", 0)
+                    pct_display = int((done_q / total_q) * 100) if total_q > 0 else 0
+                    
                     item_info = {
                         "Project": project_name, "Εργασία": t_data["task"],
                         "Υλικό / Είδος": f"[{item_id}] {material}",
                         "Υπεύθυνος": ", ".join(t_users), "Ώρες": hrs_total,
-                        "Ώρες/άτομο": hrs_per_user, "num_users": num_users
+                        "Ώρες/άτομο": hrs_per_user, "num_users": num_users,
+                        "is_partial": is_partial,
+                        "done_qty": done_q,
+                        "total_qty": total_q,
+                        "pct_display": pct_display,
                     }
                     if t_data.get("done", False):
                         rep_completed.append(item_info)
@@ -3646,15 +3665,40 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
     st.divider()
     st.subheader("Εκκρεμότητες")
     if rep_pending:
-        display_data = []
-        for item in rep_pending:
-            display_data.append({
-                "Project": item["Project"], "Εργασία": item["Εργασία"],
-                "Υλικό / Είδος": item["Υλικό / Είδος"], "Υπεύθυνος": item["Υπεύθυνος"],
-                "Ώρες": item["Ώρες"],
-                "Ώρες/άτομο": item["Ώρες/άτομο"] if item["num_users"] > 1 else ""
-            })
-        st.dataframe(pd.DataFrame(display_data), use_container_width=True, hide_index=True)
+        # Διαχώρισε partial από πλήρως εκκρεμή
+        partial_items = [x for x in rep_pending if x.get("is_partial", False)]
+        pure_pending_items = [x for x in rep_pending if not x.get("is_partial", False)]
+        
+        # === Partial section ===
+        if partial_items:
+            st.markdown("##### 🔄 Μερικώς Ολοκληρωμένα")
+            display_data = []
+            for item in partial_items:
+                display_data.append({
+                    "Project": item["Project"],
+                    "Εργασία": item["Εργασία"],
+                    "Υλικό / Είδος": item["Υλικό / Είδος"],
+                    "Υπεύθυνος": item["Υπεύθυνος"],
+                    "Πρόοδος": f"🔄 {item['done_qty']}/{item['total_qty']} ({item['pct_display']}%)",
+                    "Ώρες": item["Ώρες"],
+                })
+            st.dataframe(pd.DataFrame(display_data), use_container_width=True, hide_index=True)
+            st.caption("")
+        
+        # === Pure pending section ===
+        if pure_pending_items:
+            st.markdown("##### ⏳ Πλήρως Εκκρεμή")
+            display_data = []
+            for item in pure_pending_items:
+                display_data.append({
+                    "Project": item["Project"],
+                    "Εργασία": item["Εργασία"],
+                    "Υλικό / Είδος": item["Υλικό / Είδος"],
+                    "Υπεύθυνος": item["Υπεύθυνος"],
+                    "Ώρες": item["Ώρες"],
+                    "Ώρες/άτομο": item["Ώρες/άτομο"] if item["num_users"] > 1 else ""
+                })
+            st.dataframe(pd.DataFrame(display_data), use_container_width=True, hide_index=True)
     else:
         st.success("Όλες οι εργασίες έχουν ολοκληρωθεί!")
 
