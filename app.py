@@ -3842,7 +3842,8 @@ def render_location_dashboard(procurement_df, tasks_database, team_members_list,
     
     st.divider()
     
-    # Υπολογισμός για κάθε location
+    incoming_df_local = st.session_state.get("incoming_df", pd.DataFrame())
+    
     def compute_location_stats(location):
         # Φιλτράρισμα members
         members = [m for m in team_members_list 
@@ -3852,6 +3853,16 @@ def render_location_dashboard(procurement_df, tasks_database, team_members_list,
         proj_df = procurement_df[
             procurement_df["Project"].apply(lambda p: detect_location(p) == location)
         ].copy()
+        
+        # === ΝΕΟ: Φιλτράρισμα ΜΟΝΟ ενεργών projects ===
+        if not proj_df.empty:
+            active_projects = []
+            for p_name in proj_df["Project"].unique():
+                proj_data = get_project_details(p_name, procurement_df, tasks_database, incoming_df)
+                if proj_data['is_active']:
+                    active_projects.append(p_name)
+            
+            proj_df = proj_df[proj_df["Project"].isin(active_projects)].copy()
         
         # Υπολογισμός tasks + ωρών
         total_tasks = 0
