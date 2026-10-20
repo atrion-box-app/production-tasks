@@ -5093,6 +5093,12 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
         for p_key, p_tasks_dict in st.session_state.get("project_tasks_store", {}).items():
             if isinstance(p_tasks_dict, dict):
                 proj_name = p_key.replace("proj_", "")
+                
+                # === ΝΕΟ: Φίλτρο location ===
+                if current_location != LOCATION_ALL:
+                    if detect_location(proj_name) != current_location:
+                        continue
+                
                 proj_qty = 1
                 p_items = procurement_df[procurement_df["Project"] == proj_name]
                 for _, r in p_items.iterrows():
