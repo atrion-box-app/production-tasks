@@ -1963,6 +1963,17 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 if t_data.get("is_partial", False):
                                     done_q = t_data.get("done_qty", 0)
                                     total_q = t_data.get("total_qty", 0)
+                                    
+                                    # === ΝΕΟ: Safe parsing ===
+                                    try:
+                                        done_q = int(float(str(done_q).replace(',', '.'))) if done_q != "" else 0
+                                    except:
+                                        done_q = 0
+                                    try:
+                                        total_q = int(float(str(total_q).replace(',', '.'))) if total_q != "" else 0
+                                    except:
+                                        total_q = 0
+                                    
                                     if total_q > 0:
                                         pct = int((done_q / total_q) * 100)
                                         reason_text = f' · 📝 {t_data.get("partial_reason", "")[:40]}' if t_data.get("partial_reason") else ''
@@ -5690,6 +5701,17 @@ def main():
             for pt in partial_tasks_sidebar:
                 done = pt["done_qty"]
                 total = pt["total_qty"]
+                
+                # === ΝΕΟ: Safe parsing ===
+                try:
+                    done = int(float(str(done).replace(',', '.'))) if done != "" else 0
+                except:
+                    done = 0
+                try:
+                    total = int(float(str(total).replace(',', '.'))) if total != "" else 0
+                except:
+                    total = 0
+                
                 pct = int((done / total) * 100) if total > 0 else 0
                 
                 st.markdown(
