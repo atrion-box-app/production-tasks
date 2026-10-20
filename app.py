@@ -1740,7 +1740,6 @@ def get_project_details(project_name, procurement_df, tasks_database, incoming_d
         "project_tasks": project_tasks
     }
 
-
 # --- RENDER PROJECTS ---
 def render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df):
     st.header("Projects")
@@ -3330,17 +3329,6 @@ def render_technician(procurement_df, tasks_database, team_database, availabilit
                 for _, r in p_items.iterrows():
                     if str(r["Ποσότητα"]).isdigit():
                         proj_qty = max(proj_qty, int(r["Ποσότητα"]))
-            
-            for task_name, p_data in p_tasks_dict.items():
-                if isinstance(p_data, dict) and p_data.get("active", False) and p_data.get("date") == target_date:
-                    t_users = p_data.get("users", [])
-                    if not t_users:
-                        t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
-                    if selected_member in t_users:
-                        auto_time = tasks_database.get(task_name, 0.0)
-                        num_users = max(len(t_users), 1)
-                        hours = (auto_time * proj_qty) / 60 / num_users
-                        worker_tasks.append({"type": "project", "p_key": p_key, "task_name": task_name, "project": proj_name, "item": "Γενική Σύνθεση / Box", "qty": proj_qty, "task": task_name, "hours": round(hours, 2), "done": p_data.get("done", False), "status_proc": "READY"})
             for task_name, p_data in p_tasks_dict.items():
                 if isinstance(p_data, dict) and p_data.get("active", False) and p_data.get("date") == target_date:
                     t_users = p_data.get("users", [])
@@ -3428,6 +3416,7 @@ def render_technician(procurement_df, tasks_database, team_database, availabilit
     else:
         st.success(f"Δεν έχουν ανατεθεί εργασίες στον/στην {selected_member} για τις {target_date.strftime('%d/%m/%Y')}.")
 
+
 # --- RENDER PROJECTION ---
 def render_projection(procurement_df, tasks_database, team_database, availability_database):
     st.header("Πρόβλεψη Φόρτου Εργασίας")
@@ -3483,41 +3472,17 @@ def render_projection(procurement_df, tasks_database, team_database, availabilit
     for w_num, w_monday, w_days in weeks_days_list:
         w_matrix = {m: {f"{WEEKDAYS_SHORT_GREEK[d.weekday()]} {d.strftime('%d/%m')}": 0.0 for d in w_days} for m in team_database_filtered}
         d_totals = {f"{WEEKDAYS_SHORT_GREEK[d.weekday()]} {d.strftime('%d/%m')}": 0.0 for d in w_days}
-    for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
-        if isinstance(p_tasks_dict, dict):
-            proj_name = p_key.replace("proj_", "")
-            
-            # === ΝΕΟ: Φίλτρο location ===
-            if current_location != LOCATION_ALL:
-                if detect_location(proj_name) != current_location:
-                    continue
-                    
-            proj_qty = 1
-            if not procurement_df.empty:
-                p_items = procurement_df[procurement_df["Project"] == proj_name]
-                for _, r in p_items.iterrows():
-                    if str(r["Ποσότητα"]).isdigit():
-                        proj_qty = max(proj_qty, int(r["Ποσότητα"]))
-            
-            for task_name, p_data in p_tasks_dict.items():
-                if isinstance(p_data, dict) and p_data.get("active", False) and p_data.get("date") == target_date:
-                    t_users = p_data.get("users", [])
-                    if not t_users:
-                        t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
-                    t_done = p_data.get("done", False)
-                    auto_time = tasks_database.get(task_name, 0.0)
-                    num_users = max(len(t_users), 1)
-                    hours_total = (auto_time * proj_qty) / 60
-                    hours_per_user = hours_total / num_users
-                    
-                    daily_tasks_raw.append({
-                        "type": "project", "p_key": p_key, "task_name": task_name,
-                        "Project": proj_name, "Υλικό": "Γενική Σύνθεση / Box",
-                        "Ποσότητα": proj_qty, "Εργασία": task_name,
-                        "Υπεύθυνος": ", ".join(t_users), "Υπεύθυνος_list": t_users,
-                        "Ώρες": round(hours_total, 2), "Ώρες/άτομο": round(hours_per_user, 2),
-                        "num_users": num_users, "done": t_done, "status_proc": "READY"
-                    })
+        for p_key, p_tasks_dict in st.session_state["project_tasks_store"].items():
+            if isinstance(p_tasks_dict, dict):
+                proj_name = p_key.replace("proj_", "")
+                proj_qty = 1
+                if not procurement_df.empty:
+                    p_items = procurement_df[procurement_df["Project"] == proj_name]
+                    for _, r in p_items.iterrows():
+                        if str(r["Ποσότητα"]).isdigit():
+                            proj_qty = max(proj_qty, int(r["Ποσότητα"]))
+                for task_name, p_data in p_tasks_dict.items():
+                    if isinstance(p_data, dict) and p_data.get("active", False):
                         t_date = p_data.get("date")
                         t_users = p_data.get("users", [])
                         if not t_users:
@@ -3623,36 +3588,6 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                 for _, r in p_items.iterrows():
                     if str(r["Ποσότητα"]).isdigit():
                         proj_qty = max(proj_qty, int(r["Ποσότητα"]))
-            
-            for task_name, p_data in p_tasks_dict.items():
-                if isinstance(p_data, dict) and p_data.get("active", False) and p_data.get("date") == rep_date:
-                    auto_time = tasks_database.get(task_name, 0.0)
-                    t_users = p_data.get("users", [])
-                    if not t_users:
-                        t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
-                    num_users = max(len(t_users), 1)
-                    hrs_total = round((auto_time * proj_qty) / 60, 2)
-                    hrs_per_user = round(hrs_total / num_users, 2)
-                    
-                    is_partial = p_data.get("is_partial", False)
-                    done_q = p_data.get("done_qty", 0)
-                    total_q = p_data.get("total_qty", 0)
-                    pct_display = int((done_q / total_q) * 100) if total_q > 0 else 0
-                    
-                    item_info = {
-                        "Project": proj_name, "Εργασία": task_name,
-                        "Υλικό / Είδος": "Γενική Σύνθεση / Box",
-                        "Υπεύθυνος": ", ".join(t_users), "Ώρες": hrs_total,
-                        "Ώρες/άτομο": hrs_per_user, "num_users": num_users,
-                        "is_partial": is_partial,
-                        "done_qty": done_q,
-                        "total_qty": total_q,
-                        "pct_display": pct_display,
-                    }
-                    if p_data.get("done", False):
-                        rep_completed.append(item_info)
-                    else:
-                        rep_pending.append(item_info)
             for task_name, p_data in p_tasks_dict.items():
                 if isinstance(p_data, dict) and p_data.get("active", False) and p_data.get("date") == rep_date:
                     auto_time = tasks_database.get(task_name, 0.0)
