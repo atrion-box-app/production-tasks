@@ -5123,6 +5123,12 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
                 shipping_date = parse_date_safe(inc_row.get("Shipping Date", ""))
                 if shipping_date == day:
                     proj_name = str(inc_row["Project"]).strip()
+                    
+                    # === ΝΕΟ: Φίλτρο location ===
+                    if current_location != LOCATION_ALL:
+                        if detect_location(proj_name) != current_location:
+                            continue
+                    
                     if proj_name not in day_data["projects"]:
                         day_data["projects"][proj_name] = {"shipping": False, "tasks": []}
                     day_data["projects"][proj_name]["shipping"] = True
