@@ -1967,10 +1967,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                         pct = int((done_q / total_q) * 100)
                                         reason_text = f' · 📝 {t_data.get("partial_reason", "")[:40]}' if t_data.get("partial_reason") else ''
                                         st.markdown(
-                                            f'<div style="background:#fff3e0;padding:6px 10px;'
-                                            f'border-radius:5px;margin:5px 0;font-size:11px;'
-                                            f'border-left:3px solid #ff9800;">'
-                                            f'<span style="color:#e65100 !important;font-weight:600;">'
+                                            f'<div style="background:#e65100;padding:6px 10px;'
+                                            f'border-radius:5px;margin:5px 0;font-size:11px;">'
+                                            f'<span style="color:#ffffff !important;font-weight:600;">'
                                             f'⏳ {done_q}/{total_q} ({pct}%){reason_text}'
                                             f'</span>'
                                             f'</div>',
