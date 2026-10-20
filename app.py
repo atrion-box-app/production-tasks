@@ -5192,7 +5192,9 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
     header_cols = st.columns(num_days_shown)
     for i, day_name in enumerate(weekday_names):
         header_cols[i].markdown(
-            f'<div style="text-align:center;font-weight:700;padding:8px;background:#f5f5f5;border-radius:6px;font-size:12px;">{day_name}</div>',
+            f'<div style="text-align:center;font-weight:700;padding:8px;background:#37474f;border-radius:6px;font-size:12px;border:1px solid #546e7a;">'
+            f'<span style="color:#ffffff !important;font-weight:700;">{day_name}</span>'
+            f'</div>',
             unsafe_allow_html=True
         )
     
