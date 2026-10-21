@@ -3646,7 +3646,7 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
             material = row["Υλικό / Προϊόν"]
             qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
             item_tasks = st.session_state["tasks_store"].get(unique_item_key, [])
-            for t_data in item_tasks:
+for t_data in item_tasks:
                 if t_data.get("task") != "- Επιλογή Εργασίας -" and t_data.get("date") == rep_date:
                     auto_time = tasks_database.get(t_data["task"], 0.0)
                     t_users = t_data.get("users", [])
@@ -3657,9 +3657,9 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     hrs_per_user = round(hrs_total / num_users, 2)
                     
                     # Partial info
-                    is_partial = p_data.get("is_partial", False)
-                    done_q = p_data.get("done_qty", 0)
-                    total_q = p_data.get("total_qty", 0)
+                    is_partial = t_data.get("is_partial", False)
+                    done_q = t_data.get("done_qty", 0)
+                    total_q = t_data.get("total_qty", 0)
                     
                     # === ΝΕΟ: Safe parsing ===
                     try:
