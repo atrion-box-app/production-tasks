@@ -5745,16 +5745,14 @@ def main():
             "👥 Ομάδα", "📊 Location Dashboard", "🚨 Εκκρεμότητες", "📊 Database", "⚙️ Settings"
         ]
         
-        # Βεβαιωνόμαστε ότι η τρέχουσα σελίδα είναι έγκυρη
+        # Παίρνουμε την τρέχουσα σελίδα από το state
         current_page = st.session_state.get("page", "📦 Projects")
         if current_page not in pages_list:
             current_page = "📦 Projects"
         page_index = pages_list.index(current_page)
 
-        # Αν το state του radio διαφέρει από τη σελίδα μας, το συγχρονίζουμε
-        if "sidebar_page_radio" not in st.session_state or st.session_state["sidebar_page_radio"] != current_page:
-            st.session_state["sidebar_page_radio"] = current_page
-
+        # Το st.radio διαχειρίζεται μόνο του το state του.
+        # Απλά του λέμε ποια είναι η σωστή αρχική τιμή.
         page = st.radio(
             "Select Page", 
             pages_list, 
@@ -5763,7 +5761,7 @@ def main():
             key="sidebar_page_radio"
         )
         
-        # Ενημερώνουμε το page state με ό,τι επέλεξε ο χρήστης
+        # Αν ο χρήστης επέλεξε νέα σελίδα, την αποθηκεύουμε
         if page != st.session_state.page:
             st.session_state.page = page
             st.rerun()
