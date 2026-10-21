@@ -5732,6 +5732,9 @@ def main():
             
             if st.button("Δες όλα", key="see_all_partial", use_container_width=True):
                 st.session_state.page = "🚨 Εκκρεμότητες"
+                # Διαγράφουμε το key του radio για να αλλάξει σελίδα
+                if "sidebar_page_radio" in st.session_state:
+                    del st.session_state["sidebar_page_radio"]
                 st.rerun()
             
             st.divider()
@@ -5743,16 +5746,21 @@ def main():
             "👥 Ομάδα", "📊 Location Dashboard", "🚨 Εκκρεμότητες", "📊 Database", "⚙️ Settings"
         ]
         
-        current_page = st.session_state.get("page", "📦 Projects")
-        if current_page not in pages_list:
-            current_page = "📦 Projects"
-        page_index = pages_list.index(current_page)
-        
-        page = st.radio(
-            "Select Page", pages_list, index=page_index,
-            label_visibility="collapsed", key="sidebar_page_radio"
-        )
-        st.session_state.page = page
+current_page = st.session_state.get("page", "📦 Projects")
+if current_page not in pages_list:
+    current_page = "📦 Projects"
+page_index = pages_list.index(current_page)
+
+# Αν η σελίδα άλλαξε από αλλού (π.χ. κουμπί "Δες όλα"), 
+# διαγράφουμε το προηγούμενο state του radio για να αναγκαστεί να πάρει τη νέα τιμή
+if "sidebar_page_radio" in st.session_state and st.session_state["sidebar_page_radio"] != current_page:
+    del st.session_state["sidebar_page_radio"]
+
+page = st.radio(
+    "Select Page", pages_list, index=page_index,
+    label_visibility="collapsed", key="sidebar_page_radio"
+)
+st.session_state.page = page
         
         st.divider()
         
