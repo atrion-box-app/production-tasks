@@ -561,6 +561,62 @@ def get_team_options_for_date(target_date, team_members_list, availability_datab
         target_date, availability_database, availability_overrides, team_members_list
     )
     
+    # === ΝΕΟ: Υπολογισμός δεσμευμένων ωρών ανά τεχνίτη για τη συγκεκριμένη ημέρα ===
+    assigned_hours_per_user = {}
+    tasks_db = st.session_state.get("_tasks_db_cache", {})
+    procurement_df = st.session_state.get("procurement_df", pd.DataFrame())
+    
+    # 1. Item Tasks
+    for u_key, task_list in st.session_state.get("tasks_store", {}).items():
+        for t in task_list:
+            if t.get("task") and t["task"] != "- Επιλογή Εργασίας -" and t.get("date") == target_date:
+                t_users = t.get("users", [])
+                if not t_users:
+                    t_users = [t.get("user", "- Χωρίς Ανάθεση -")]
+                num_users = max(len(t_users), 1)
+                
+                qty = 1
+                try:
+                    parts = u_key.split("_")
+                    item_id = parts[0]
+                    idx_part = int(parts[1]) if len(parts) > 1 else 0
+                    if not procurement_df.empty and idx_part < len(procurement_df):
+                        row = procurement_df.iloc[idx_part]
+                        if str(row["ID"]) == item_id:
+                            qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+                except:
+                    pass
+                
+                auto_time = tasks_db.get(t["task"], 0.0)
+                hrs_per_user = (auto_time * qty / 60) / num_users if auto_time else 0
+                for user in t_users:
+                    if user and user != "- Χωρίς Ανάθεση -":
+                        assigned_hours_per_user[user] = assigned_hours_per_user.get(user, 0.0) + hrs_per_user
+
+    # 2. Project Tasks
+    for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
+        if isinstance(p_dict, dict):
+            proj_name = p_key.replace("proj_", "")
+            proj_qty = 1
+            if not procurement_df.empty:
+                p_items = procurement_df[procurement_df["Project"] == proj_name]
+                for _, r in p_items.iterrows():
+                    if str(r["Ποσότητα"]).isdigit():
+                        proj_qty = max(proj_qty, int(r["Ποσότητα"]))
+            
+            for t_name, p_data in p_dict.items():
+                if isinstance(p_data, dict) and p_data.get("active", False) and p_data.get("date") == target_date:
+                    t_users = p_data.get("users", [])
+                    if not t_users:
+                        t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
+                    num_users = max(len(t_users), 1)
+                    auto_time = tasks_db.get(t_name, 0.0)
+                    hrs_per_user = (auto_time * proj_qty / 60) / num_users if auto_time else 0
+                    for user in t_users:
+                        if user and user != "- Χωρίς Ανάθεση -":
+                            assigned_hours_per_user[user] = assigned_hours_per_user.get(user, 0.0) + hrs_per_user
+    # =================================================================================
+    
     display_options = []
     display_to_value = {}
     value_to_display = {}
@@ -599,12 +655,24 @@ def get_team_options_for_date(target_date, team_members_list, availability_datab
                     break
         
         hrs = day_avail.get(name, 0.0)
+        assigned_hrs = assigned_hours_per_user.get(name, 0.0)
+        
+        # === ΝΕΟ: Δημιουργία του suffix με τις ώρες ===
+        hours_suffix = ""
+        if assigned_hrs > 0:
+            if assigned_hrs > hrs:
+                hours_suffix = f" | 🔴 {assigned_hrs:.1f}h / {hrs:.1f}h"
+            else:
+                hours_suffix = f" | 🟢 {assigned_hrs:.1f}h / {hrs:.1f}h"
+        else:
+            hours_suffix = f" | ⚪ 0h / {hrs:.1f}h"
+        # ==========================================
         
         if has_override and hrs == 0:
             reason_str = f" ⚠️ {override_reason}" if override_reason else " ⚠️ Άδεια"
-            display = f"{name}{type_suffix}{location_suffix}{reason_str}"
+            display = f"{name}{type_suffix}{location_suffix}{reason_str}{hours_suffix}"
         else:
-            display = f"{name}{type_suffix}{location_suffix}"
+            display = f"{name}{type_suffix}{location_suffix}{hours_suffix}"
         
         display_options.append(display)
         display_to_value[display] = name
