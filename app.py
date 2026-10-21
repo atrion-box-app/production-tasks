@@ -929,6 +929,7 @@ def load_assignments_from_sheet():
                     "done_qty": done_qty,
                     "total_qty": total_qty,
                     "partial_reason": partial_reason,
+                    "progress_logs": [],
                 }
             else:
                 if item_id not in assignments_item:
@@ -953,6 +954,7 @@ def load_assignments_from_sheet():
                         "done_qty": done_qty,
                         "total_qty": total_qty,
                         "partial_reason": partial_reason,
+                        "progress_logs": [],
                     })
                     
     except Exception as e:
@@ -2096,7 +2098,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             
                             st.session_state["tasks_store"][unique_key].append({
                                 "done": False, "task": "- Επιλογή Εργασίας -", 
-                                "user": "- Χωρίς Ανάθεση -", "users": [], "date": auto_date
+                                "user": "- Χωρίς Ανάθεση -", "users": [], "date": auto_date,
+                                "is_partial": False, "done_qty": 0, "total_qty": 0, "partial_reason": "",
+                                "progress_logs": []
                             })
                             mark_unsaved_changes()
                             st.rerun()
@@ -2114,7 +2118,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
             
             proj_key = f"proj_{selected_project}"
             if proj_key not in st.session_state["project_tasks_store"] or not isinstance(st.session_state["project_tasks_store"][proj_key], dict):
-                st.session_state["project_tasks_store"][proj_key] = {t_name: {"active": False, "done": False, "user": "- Χωρίς Ανάθεση -", "users": [], "date": date.today()} for t_name in FIXED_PROJECT_TASKS}
+                st.session_state["project_tasks_store"][proj_key] = {t_name: {"active": False, "done": False, "user": "- Χωρίς Ανάθεση -", "users": [], "date": date.today(), "is_partial": False, "done_qty": 0, "total_qty": 0, "partial_reason": "", "progress_logs": []} for t_name in FIXED_PROJECT_TASKS}
             
             proj_tasks_dict = st.session_state["project_tasks_store"][proj_key]
             
@@ -2124,7 +2128,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     project_main_qty = max(project_main_qty, int(r["Ποσότητα"]))
             
             for task_name in FIXED_PROJECT_TASKS:
-                t_data = proj_tasks_dict.get(task_name, {"active": False, "done": False, "user": "- Χωρίς Ανάθεση -", "users": [], "date": date.today()})
+                t_data = proj_tasks_dict.get(task_name, {"active": False, "done": False, "user": "- Χωρίς Ανάθεση -", "users": [], "date": date.today(), "is_partial": False, "done_qty": 0, "total_qty": 0, "partial_reason": "", "progress_logs": []})
                 
                 with st.container(border=True):
                     c_active, c_name, c_done, c_partial = st.columns([0.08, 0.55, 0.25, 0.12])
@@ -3127,7 +3131,6 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
     st.download_button("Εξαγωγή CSV", data=csv_data, file_name=f"Master_View_{date.today().strftime('%Y-%m-%d')}.csv", mime="text/csv", use_container_width=True)
 
-
 # --- RENDER DAILY PLAN ---
 def render_daily_plan(procurement_df, tasks_database, team_database, availability_database):
     st.header("Συγκεντρωτικό Πλάνο Παραγωγής")
@@ -3760,6 +3763,18 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
             st.markdown("##### 🔄 Μερικώς Ολοκληρωμένα")
             display_data = []
             for item in partial_items:
+                # Παίρνουμε τα logs από το task
+                logs_str = ""
+                if item["type"] == "item":
+                    task_obj = st.session_state["tasks_store"].get(item["u_key"], [])
+                    if item["t_idx"] < len(task_obj):
+                        logs = task_obj[item["t_idx"]].get("progress_logs", [])
+                        logs_str = " | ".join([f"{l['date']}: +{l['qty']}" for l in logs])
+                else:
+                    task_obj = st.session_state["project_tasks_store"].get(item["p_key"], {}).get(item["task_name"], {})
+                    logs = task_obj.get("progress_logs", [])
+                    logs_str = " | ".join([f"{l['date']}: +{l['qty']}" for l in logs])
+
                 display_data.append({
                     "Project": item["Project"],
                     "Εργασία": item["Εργασία"],
@@ -3767,7 +3782,7 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     "Υπεύθυνος": item["Υπεύθυνος"],
                     "Πρόοδος": f"🔄 {item['done_qty']}/{item['total_qty']} ({item['pct_display']}%)",
                     "Ώρες": item["Ώρες"],
-                    "Κατάσταση": "Μεταφέρθηκε" if item.get("date") == date.today() else "Ενεργό"
+                    "Ιστορικό": logs_str if logs_str else "-"
                 })
             st.dataframe(pd.DataFrame(display_data), use_container_width=True, hide_index=True)
             st.caption("")
@@ -3788,7 +3803,6 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
             st.dataframe(pd.DataFrame(display_data), use_container_width=True, hide_index=True)
     else:
         st.success("Όλες οι εργασίες έχουν ολοκληρωθεί!")
-
 
 # --- RENDER TEAM MEMBERS ---
 def render_team_members(team_members_list, availability_database, availability_overrides):
@@ -4334,14 +4348,38 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
                            total_qty_default, current_done, current_reason, 
                            project_name, task_name):
     """
-    Render dialog για δήλωση partial.
-    task_type: "item" ή "project"
+    Render dialog για δήλωση partial με ιστορικό προόδου (logs).
     """
-    # State key για να θυμάται αν είναι ανοιχτό
     state_key = f"_partial_dialog_{task_type}_{u_key_or_p_key}_{t_idx_or_task_name}"
     
     if st.session_state.get(state_key, False):
-        with st.expander(f"⏳ Δήλωση Μερικής Ολοκλήρωσης — {task_name}", expanded=True):
+        with st.expander(f"⏳ Διαχείριση Μερικής Ολοκλήρωσης — {task_name}", expanded=True):
+            # Παίρνουμε το task για να δούμε τα τρέχοντα δεδομένα
+            if task_type == "item":
+                task_data = st.session_state["tasks_store"].get(u_key_or_p_key, [])
+                if t_idx_or_task_name < len(task_data):
+                    current_task = task_data[t_idx_or_task_name]
+                else:
+                    st.error("Το task δεν βρέθηκε.")
+                    return
+            else:
+                current_task = st.session_state["project_tasks_store"].get(u_key_or_p_key, {}).get(t_idx_or_task_name, {})
+            
+            # Υπολογισμός τρέχοντος συνόλου από τα logs (αν υπάρχουν)
+            logs = current_task.get("progress_logs", [])
+            total_done_from_logs = sum(log.get("qty", 0) for log in logs)
+            
+            # Αν το current_done είναι μεγαλύτερο από τα logs (π.χ. παλιά δεδομένα), το προσθέτουμε ως αρχικό log
+            if current_done > total_done_from_logs and not logs:
+                logs.append({
+                    "date": str(date.today()),
+                    "qty": current_done,
+                    "note": "Αρχική καταχώρηση"
+                })
+                current_task["progress_logs"] = logs
+                total_done_from_logs = current_done
+
+            # Εμφάνιση πληροφοριών
             st.markdown(
                 f'<div style="background:#fff3e0;padding:10px;border-radius:6px;'
                 f'border-left:4px solid #ff9800;margin-bottom:10px;">'
@@ -4349,114 +4387,101 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
                 f'<div style="color:#333;font-size:12px;margin-top:3px;">'
                 f'Εργασία: <b>{task_name}</b></div>'
                 f'<div style="color:#333;font-size:12px;">'
-                f'Συνολική ποσότητα: <b>{total_qty_default}</b></div>'
+                f'Συνολική ποσότητα: <b>{total_qty_default}</b> | Έχουν γίνει: <b>{total_done_from_logs}</b></div>'
                 f'</div>',
                 unsafe_allow_html=True
             )
             
-            col_done, col_total = st.columns(2)
-            with col_done:
-                done_val = st.number_input(
-                    "Πόσα έγιναν:",
-                    min_value=0,
-                    max_value=int(total_qty_default) if total_qty_default else 9999,
-                    value=int(current_done) if current_done else 0,
-                    step=1,
-                    key=f"{state_key}_done"
-                )
-            with col_total:
-                total_val = st.number_input(
-                    "Από πόσα:",
-                    min_value=1,
-                    max_value=99999,
-                    value=int(total_qty_default) if total_qty_default else 1,
-                    step=1,
-                    key=f"{state_key}_total"
-                )
-            
-            reason_val = st.text_area(
-                "Αιτία (προαιρετικό):",
-                value=current_reason or "",
-                height=70,
-                key=f"{state_key}_reason",
-                placeholder="π.χ. Έλλειψη χρόνου, πρόβλημα υλικού..."
-            )
-            
-            # Preview progress
-            if total_val > 0:
-                pct_preview = int((done_val / total_val) * 100)
-                st.progress(min(pct_preview / 100, 1.0))
-                st.caption(f"📊 Πρόοδος: **{done_val}/{total_val}** ({pct_preview}%)")
-            
-            col_save, col_cancel, col_reset = st.columns([1, 1, 1])
-            
-            with col_save:
-                if st.button("💾 Αποθήκευση", key=f"{state_key}_save", 
-                            type="primary", use_container_width=True):
-                    if done_val <= 0:
-                        st.error("⚠️ Πρέπει να βάλεις τουλάχιστον 1")
-                    elif done_val > total_val:
-                        st.error("⚠️ Τα 'έγιναν' δεν μπορούν να είναι > 'από πόσα'")
-                    else:
-                        # Save
-                        if task_type == "item":
-                            success = update_partial_status_item(
-                                u_key_or_p_key, t_idx_or_task_name, 
-                                done_val, total_val, reason_val
-                            )
-                        else:
-                            success = update_partial_status_project(
-                                u_key_or_p_key, t_idx_or_task_name, 
-                                done_val, total_val, reason_val
-                            )
-                        
-                        if success:
-                            # Save to history
-                            item_id_for_history = "-"
-                            if task_type == "item":
-                                item_id_for_history = u_key_or_p_key.split("_")[0]
-                            
-                            save_partial_to_history(
-                                project_name, task_name, 
-                                item_id_for_history, 
-                                done_val, total_val, reason_val
-                            )
-                            
-                            # Close dialog
-                            st.session_state[state_key] = False
+            # Ιστορικό Logs
+            if logs:
+                st.markdown("##### 📜 Ιστορικό Προόδου")
+                for i, log in enumerate(logs):
+                    col_log, col_del = st.columns([5, 1])
+                    with col_log:
+                        st.markdown(
+                            f'<div style="background:#e3f2fd;padding:6px 10px;border-radius:5px;font-size:12px;">'
+                            f'📅 <b>{log.get("date", "-")}</b>: +{log.get("qty", 0)} τμχ'
+                            + (f' <span style="color:#666;font-size:11px;">({log.get("note", "")})</span>' if log.get("note") else '')
+                            + f'</div>',
+                            unsafe_allow_html=True
+                        )
+                    with col_del:
+                        if st.button("🗑️", key=f"del_log_{state_key}_{i}"):
+                            logs.pop(i)
+                            current_task["progress_logs"] = logs
+                            mark_unsaved_changes()
                             st.rerun()
-                        else:
-                            st.error("❌ Σφάλμα κατά την αποθήκευση")
+                st.divider()
+
+            # Φόρμα προσθήκης νέου log
+            st.markdown("##### ➕ Προσθήκη Προόδου για Σήμερα")
             
-            with col_cancel:
-                if st.button("✕ Ακύρωση", key=f"{state_key}_cancel", 
-                            use_container_width=True):
-                    st.session_state[state_key] = False
+            col_date, col_qty, col_note = st.columns([1, 1, 2])
+            with col_date:
+                log_date = st.date_input("Ημερομηνία:", value=date.today(), format="DD/MM/YYYY", key=f"{state_key}_log_date")
+            with col_qty:
+                remaining_qty = total_qty_default - total_done_from_logs
+                log_qty = st.number_input(
+                    "Ποσότητα που έγινε:", 
+                    min_value=0, 
+                    max_value=int(remaining_qty) if remaining_qty > 0 else 9999,
+                    value=0, 
+                    step=1, 
+                    key=f"{state_key}_log_qty"
+                )
+            with col_note:
+                log_note = st.text_input("Σημείωση (προαιρετικό):", key=f"{state_key}_log_note", placeholder="π.χ. Πρωινή βάρδια")
+            
+            if st.button("➕ Προσθήκη στο Ιστορικό", key=f"{state_key}_add_log", type="secondary", use_container_width=True):
+                if log_qty <= 0:
+                    st.warning("⚠️ Η ποσότητα πρέπει να είναι > 0.")
+                elif log_qty > remaining_qty:
+                    st.warning(f"⚠️ Η ποσότητα δεν μπορεί να υπερβαίνει το υπόλοιπο ({remaining_qty}).")
+                else:
+                    logs.append({
+                        "date": log_date.strftime("%d/%m/%Y"),
+                        "qty": log_qty,
+                        "note": log_note
+                    })
+                    current_task["progress_logs"] = logs
+                    
+                    # Ενημέρωση του done_qty και is_partial
+                    new_total_done = total_done_from_logs + log_qty
+                    current_task["done_qty"] = new_total_done
+                    current_task["total_qty"] = total_qty_default
+                    
+                    if new_total_done >= total_qty_default:
+                        current_task["is_partial"] = False
+                        current_task["done"] = True
+                        st.success("✅ Το task ολοκληρώθηκε!")
+                    else:
+                        current_task["is_partial"] = True
+                        current_task["done"] = False
+                    
+                    mark_unsaved_changes()
                     st.rerun()
 
+            st.divider()
+            
+            # Κουμπιά ενεργειών
+            col_save, col_cancel, col_reset = st.columns([1, 1, 1])
+            with col_save:
+                if st.button("💾 Κλείσιμο", key=f"{state_key}_close", type="primary", use_container_width=True):
+                    st.session_state[state_key] = False
+                    st.rerun()
+            with col_cancel:
+                if st.button("✕ Ακύρωση", key=f"{state_key}_cancel", use_container_width=True):
+                    st.session_state[state_key] = False
+                    st.rerun()
             with col_reset:
-                if st.button("🔄 Reset", key=f"{state_key}_reset", 
-                            use_container_width=True,
-                            help="Καθαρίζει το partial και επιστρέφει σε κανονικό task"):
-                    if task_type == "item":
-                        if u_key_or_p_key in st.session_state["tasks_store"]:
-                            if t_idx_or_task_name < len(st.session_state["tasks_store"][u_key_or_p_key]):
-                                t = st.session_state["tasks_store"][u_key_or_p_key][t_idx_or_task_name]
-                                t["is_partial"] = False
-                                t["done_qty"] = ""
-                                t["total_qty"] = ""
-                                t["partial_reason"] = ""
-                                mark_unsaved_changes()
-                    else:
-                        if u_key_or_p_key in st.session_state["project_tasks_store"]:
-                            if t_idx_or_task_name in st.session_state["project_tasks_store"][u_key_or_p_key]:
-                                t = st.session_state["project_tasks_store"][u_key_or_p_key][t_idx_or_task_name]
-                                t["is_partial"] = False
-                                t["done_qty"] = ""
-                                t["total_qty"] = ""
-                                t["partial_reason"] = ""
-                                mark_unsaved_changes()
-                    
+                if st.button("🔄 Reset", key=f"{state_key}_reset", use_container_width=True, help="Διαγραφή όλων των logs και επαναφορά σε κανονικό task"):
+                    current_task["is_partial"] = False
+                    current_task["done_qty"] = 0
+                    current_task["total_qty"] = 0
+                    current_task["partial_reason"] = ""
+                    current_task["progress_logs"] = []
+                    current_task["done"] = False
+                    mark_unsaved_changes()
                     st.session_state[state_key] = False
                     st.rerun()
 
@@ -4783,7 +4808,9 @@ def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
                             
                             st.session_state["tasks_store"][unique_key].append({
                                 "done": False, "task": "- Επιλογή Εργασίας -",
-                                "user": "- Χωρίς Ανάθεση -", "users": [], "date": auto_date
+                                "user": "- Χωρίς Ανάθεση -", "users": [], "date": auto_date,
+                                "is_partial": False, "done_qty": 0, "total_qty": 0, "partial_reason": "",
+                                "progress_logs": []
                             })
                             mark_unsaved_changes()
                             st.rerun()
