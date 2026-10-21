@@ -4396,21 +4396,77 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
             if logs:
                 st.markdown("##### 📜 Ιστορικό Προόδου")
                 for i, log in enumerate(logs):
-                    col_log, col_del = st.columns([5, 1])
-                    with col_log:
-                        st.markdown(
-                            f'<div style="background:#263238;padding:8px 12px;border-radius:5px;font-size:12px;border-left:3px solid #4fc3f7;">'
-                            f'<span style="color: #ffffff !important; font-weight: bold;">📅 {log.get("date", "-")}: +{log.get("qty", 0)} τμχ</span>'
-                            + (f' <span style="color: #b0bec5 !important; font-size:11px; font-style:italic;">({log.get("note", "")})</span>' if log.get("note") else '')
-                            + f'</div>',
-                            unsafe_allow_html=True
-                        )
-                    with col_del:
-                        if st.button("🗑️", key=f"del_log_{state_key}_{i}"):
-                            logs.pop(i)
-                            current_task["progress_logs"] = logs
-                            mark_unsaved_changes()
-                            st.rerun()
+                    # Αν το log είναι σε κατάσταση επεξεργασίας
+                    edit_key = f"_edit_log_{state_key}_{i}"
+                    if st.session_state.get(edit_key, False):
+                        with st.container(border=True):
+                            st.markdown(f"**✏️ Επεξεργασία Log {i+1}**")
+                            col_ed_date, col_ed_qty, col_ed_note = st.columns([1, 1, 2])
+                            with col_ed_date:
+                                # Προσπαθούμε να μετατρέψουμε το string σε date object
+                                try:
+                                    current_log_date = datetime.strptime(log.get("date", ""), "%d/%m/%Y").date()
+                                except:
+                                    current_log_date = date.today()
+                                new_log_date = st.date_input("Ημερομηνία:", value=current_log_date, format="DD/MM/YYYY", key=f"{edit_key}_date")
+                            with col_ed_qty:
+                                new_log_qty = st.number_input("Ποσότητα:", min_value=0, value=int(log.get("qty", 0)), step=1, key=f"{edit_key}_qty")
+                            with col_ed_note:
+                                new_log_note = st.text_input("Σημείωση:", value=log.get("note", ""), key=f"{edit_key}_note")
+                            
+                            col_save, col_cancel = st.columns([1, 1])
+                            with col_save:
+                                if st.button("💾 Αποθήκευση", key=f"{edit_key}_save", type="primary", use_container_width=True):
+                                    logs[i]["date"] = new_log_date.strftime("%d/%m/%Y")
+                                    logs[i]["qty"] = new_log_qty
+                                    logs[i]["note"] = new_log_note
+                                    
+                                    # Επαναϋπολογισμός του total_done
+                                    new_total_done = sum(l.get("qty", 0) for l in logs)
+                                    current_task["done_qty"] = new_total_done
+                                    if new_total_done >= total_qty_default:
+                                        current_task["is_partial"] = False
+                                        current_task["done"] = True
+                                    else:
+                                        current_task["is_partial"] = True
+                                        current_task["done"] = False
+                                    
+                                    st.session_state[edit_key] = False
+                                    mark_unsaved_changes()
+                                    st.rerun()
+                            with col_cancel:
+                                if st.button("✕ Ακύρωση", key=f"{edit_key}_cancel", use_container_width=True):
+                                    st.session_state[edit_key] = False
+                                    st.rerun()
+                    else:
+                        col_log, col_edit, col_del = st.columns([5, 0.5, 0.5])
+                        with col_log:
+                            st.markdown(
+                                f'<div style="background:#263238;padding:8px 12px;border-radius:5px;font-size:12px;border-left:3px solid #4fc3f7;">'
+                                f'<span style="color: #ffffff !important; font-weight: bold;">📅 {log.get("date", "-")}: +{log.get("qty", 0)} τμχ</span>'
+                                + (f' <span style="color: #b0bec5 !important; font-size:11px; font-style:italic;">({log.get("note", "")})</span>' if log.get("note") else '')
+                                + f'</div>',
+                                unsafe_allow_html=True
+                            )
+                        with col_edit:
+                            if st.button("✏️", key=f"edit_log_{state_key}_{i}"):
+                                st.session_state[edit_key] = True
+                                st.rerun()
+                        with col_del:
+                            if st.button("🗑️", key=f"del_log_{state_key}_{i}"):
+                                logs.pop(i)
+                                current_task["progress_logs"] = logs
+                                # Επαναϋπολογισμός του total_done
+                                new_total_done = sum(l.get("qty", 0) for l in logs)
+                                current_task["done_qty"] = new_total_done
+                                if new_total_done >= total_qty_default:
+                                    current_task["is_partial"] = False
+                                    current_task["done"] = True
+                                else:
+                                    current_task["is_partial"] = True
+                                    current_task["done"] = False
+                                mark_unsaved_changes()
+                                st.rerun()
                 st.divider()
 
             # Φόρμα προσθήκης νέου log
