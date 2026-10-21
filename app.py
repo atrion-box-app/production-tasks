@@ -1007,8 +1007,6 @@ def save_all_assignments_to_sheet():
         # ======================================================
         
         if 'procurement_df' in st.session_state and not st.session_state.procurement_df.empty:
-            # ... (ο υπόλοιπος κώδικας παραμένει ως έχει)
-        if 'procurement_df' in st.session_state and not st.session_state.procurement_df.empty:
             valid_u_keys = set()
             for idx, row in st.session_state.procurement_df.iterrows():
                 item_id = str(row["ID"])
@@ -1146,7 +1144,6 @@ def save_all_assignments_to_sheet():
     except Exception as e:
         st.error(f"Σφάλμα κατά την αποθήκευση: {e}")
         return False
-
 
 def cleanup_duplicates_in_sheet():
     gc, err = get_gspread_client()
