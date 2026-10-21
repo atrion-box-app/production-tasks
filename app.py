@@ -4384,10 +4384,10 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
                 f'<div style="background:#fff3e0;padding:10px;border-radius:6px;'
                 f'border-left:4px solid #ff9800;margin-bottom:10px;">'
                 f'<div style="font-weight:700;color:#e65100;">📋 {project_name}</div>'
-                f'<div style="color:#333333 !important;font-size:12px;margin-top:3px;">'
-                f'Εργασία: <b>{task_name}</b></div>'
-                f'<div style="color:#333333 !important;font-size:12px;">'
-                f'Συνολική ποσότητα: <b>{total_qty_default}</b> | Έχουν γίνει: <b>{total_done_from_logs}</b></div>'
+                f'<div style="font-size:12px;margin-top:3px;color:#333333;">'
+                f'<span style="color:#333333 !important;">Εργασία: <b>{task_name}</b></span></div>'
+                f'<div style="font-size:12px;color:#333333;">'
+                f'<span style="color:#333333 !important;">Συνολική ποσότητα: <b>{total_qty_default}</b> | Έχουν γίνει: <b>{total_done_from_logs}</b></span></div>'
                 f'</div>',
                 unsafe_allow_html=True
             )
@@ -4399,9 +4399,9 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
                     col_log, col_del = st.columns([5, 1])
                     with col_log:
                         st.markdown(
-                            f'<div style="background:#e3f2fd;padding:6px 10px;border-radius:5px;font-size:12px;color:#333333 !important;">'
-                            f'📅 <b>{log.get("date", "-")}</b>: +{log.get("qty", 0)} τμχ'
-                            + (f' <span style="color:#666;font-size:11px;">({log.get("note", "")})</span>' if log.get("note") else '')
+                            f'<div style="background:#e3f2fd;padding:6px 10px;border-radius:5px;font-size:12px;">'
+                            f'<span style="color:#333333 !important;">📅 <b>{log.get("date", "-")}</b>: +{log.get("qty", 0)} τμχ</span>'
+                            + (f' <span style="color:#666666 !important;font-size:11px;">({log.get("note", "")})</span>' if log.get("note") else '')
                             + f'</div>',
                             unsafe_allow_html=True
                         )
