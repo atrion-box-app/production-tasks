@@ -4400,8 +4400,8 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
                     with col_log:
                         st.markdown(
                             f'<div style="background:#e3f2fd;padding:6px 10px;border-radius:5px;font-size:12px;">'
-                            f'<span style="color:#333333 !important;">📅 <b>{log.get("date", "-")}</b>: +{log.get("qty", 0)} τμχ</span>'
-                            + (f' <span style="color:#666666 !important;font-size:11px;">({log.get("note", "")})</span>' if log.get("note") else '')
+                            f'<span style="color:#333333 !important; font-weight:bold;">📅 {log.get("date", "-")}: +{log.get("qty", 0)} τμχ</span>'
+                            + (f' <span style="color:#555555 !important; font-size:11px; font-style:italic;">({log.get("note", "")})</span>' if log.get("note") else '')
                             + f'</div>',
                             unsafe_allow_html=True
                         )
