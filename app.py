@@ -960,6 +960,38 @@ def load_assignments_from_sheet():
     
     return assignments_item, assignments_proj
 
+def auto_rollover_partial_tasks():
+    """
+    Ελέγχει όλα τα partial tasks. Αν η ημερομηνία τους είναι στο παρελθόν,
+    τα μεταφέρει αυτόματα στη σημερινή ημέρα.
+    """
+    today = date.today()
+    rolled_over_count = 0
+    
+    # 1. Έλεγχος για Item Tasks
+    for u_key, task_list in st.session_state.get("tasks_store", {}).items():
+        for t in task_list:
+            if t.get("is_partial", False) and not is_partial_complete(t):
+                task_date = t.get("date")
+                # Αν η ημερομηνία είναι παρελθόν (και όχι None)
+                if task_date and isinstance(task_date, date) and task_date < today:
+                    t["date"] = today
+                    rolled_over_count += 1
+                    
+    # 2. Έλεγχος για Project Tasks
+    for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
+        if isinstance(p_dict, dict):
+            for task_name, p_data in p_dict.items():
+                if isinstance(p_data, dict) and p_data.get("is_partial", False) and not is_partial_complete(p_data):
+                    task_date = p_data.get("date")
+                    if task_date and isinstance(task_date, date) and task_date < today:
+                        p_data["date"] = today
+                        rolled_over_count += 1
+                        
+    if rolled_over_count > 0:
+        mark_unsaved_changes()
+        
+    return rolled_over_count
 
 def save_all_assignments_to_sheet():
     gc, _ = get_gspread_client()
@@ -968,6 +1000,14 @@ def save_all_assignments_to_sheet():
         return False
     
     try:
+        # === ΝΕΟ: Αυτόματη μεταφορά partial tasks στο παρόν ===
+        rolled = auto_rollover_partial_tasks()
+        if rolled > 0:
+            st.toast(f"🔄 {rolled} partial tasks μεταφέρθηκαν αυτόματα στη σημερινή ημέρα!")
+        # ======================================================
+        
+        if 'procurement_df' in st.session_state and not st.session_state.procurement_df.empty:
+            # ... (ο υπόλοιπος κώδικας παραμένει ως έχει)
         if 'procurement_df' in st.session_state and not st.session_state.procurement_df.empty:
             valid_u_keys = set()
             for idx, row in st.session_state.procurement_df.iterrows():
@@ -3730,6 +3770,7 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     "Υπεύθυνος": item["Υπεύθυνος"],
                     "Πρόοδος": f"🔄 {item['done_qty']}/{item['total_qty']} ({item['pct_display']}%)",
                     "Ώρες": item["Ώρες"],
+                    "Κατάσταση": "Μεταφέρθηκε" if item.get("date") == date.today() else "Ενεργό"
                 })
             st.dataframe(pd.DataFrame(display_data), use_container_width=True, hide_index=True)
             st.caption("")
