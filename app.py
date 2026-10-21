@@ -2083,27 +2083,54 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
                         if col_add.button("Προσθήκη Εργασίας", key=f"mat_add_{unique_key}", use_container_width=True):
-                            auto_date = date.today()
-                            try:
-                                due_date_str = str(row["Αναμενόμενη Ημ. Παραλαβής"]).strip()
-                                if due_date_str and due_date_str not in ["-", "nan", ""]:
-                                    for fmt in ["%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%Y-%m-%d %H:%M:%S"]:
-                                        try:
-                                            auto_date = datetime.strptime(due_date_str.split(" ")[0], fmt.split(" ")[0]).date()
-                                            break
-                                        except:
-                                            continue
-                            except:
-                                pass
-                            
-                            st.session_state["tasks_store"][unique_key].append({
-                                "done": False, "task": "- Επιλογή Εργασίας -", 
-                                "user": "- Χωρίς Ανάθεση -", "users": [], "date": auto_date,
-                                "is_partial": False, "done_qty": 0, "total_qty": 0, "partial_reason": "",
-                                "progress_logs": []
-                            })
-                            mark_unsaved_changes()
-                            st.rerun()
+                            # Αντί να προσθέσουμε απευθείας, ανοίγουμε ένα state για τη φόρμα
+                            st.session_state[f"_add_task_form_{unique_key}"] = True
+
+                        # Αν είναι ανοιχτή η φόρμα προσθήκης, την εμφανίζουμε
+                        if st.session_state.get(f"_add_task_form_{unique_key}", False):
+                            with st.container(border=True):
+                                st.markdown("**➕ Νέα Εργασία**")
+                                col_new_task, col_new_qty = st.columns([3, 1])
+                                
+                                task_options_new = ["- Επιλογή Εργασίας -"] + sorted(list(tasks_database.keys()))
+                                new_task_name = col_new_task.selectbox("Εργασία:", task_options_new, key=f"_new_task_name_{unique_key}")
+                                
+                                # Default ποσότητα = η ποσότητα του υλικού (qty)
+                                new_task_qty = col_new_qty.number_input("Ποσότητα:", min_value=1, value=int(qty), step=1, key=f"_new_task_qty_{unique_key}")
+                                
+                                col_save_new, col_cancel_new = st.columns([1, 1])
+                                with col_save_new:
+                                    if st.button("💾 Δημιουργία", key=f"_save_new_task_{unique_key}", type="primary", use_container_width=True):
+                                        if new_task_name == "- Επιλογή Εργασίας -":
+                                            st.warning("⚠️ Διάλεξε εργασία.")
+                                        else:
+                                            auto_date = date.today()
+                                            try:
+                                                due_date_str = str(row["Αναμενόμενη Ημ. Παραλαβής"]).strip()
+                                                if due_date_str and due_date_str not in ["-", "nan", ""]:
+                                                    for fmt in ["%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%Y-%m-%d %H:%M:%S"]:
+                                                        try:
+                                                            auto_date = datetime.strptime(due_date_str.split(" ")[0], fmt.split(" ")[0]).date()
+                                                            break
+                                                        except:
+                                                            continue
+                                            except:
+                                                pass
+                                            
+                                            st.session_state["tasks_store"][unique_key].append({
+                                                "done": False, "task": new_task_name, 
+                                                "user": "- Χωρίς Ανάθεση -", "users": [], "date": auto_date,
+                                                "is_partial": False, "done_qty": 0, "total_qty": new_task_qty, 
+                                                "partial_reason": "", "progress_logs": []
+                                            })
+                                            st.session_state[f"_add_task_form_{unique_key}"] = False
+                                            mark_unsaved_changes()
+                                            st.rerun()
+                                with col_cancel_new:
+                                    if st.button("✕ Ακύρωση", key=f"_cancel_new_task_{unique_key}", use_container_width=True):
+                                        st.session_state[f"_add_task_form_{unique_key}"] = False
+                                        st.rerun()
+
                         if len(item_tasks) > 0 and col_rem.button("Αφαίρεση", key=f"mat_rem_{unique_key}", use_container_width=True):
                             st.session_state["tasks_store"][unique_key].pop()
                             mark_unsaved_changes()
