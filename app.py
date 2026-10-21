@@ -3688,7 +3688,7 @@ for t_data in item_tasks:
                     else:
                         rep_pending.append(item_info)
 
-    rc1, rc2, rc3 = st.columns(3)
+        rc1, rc2, rc3 = st.columns(3)
         tot_done_hrs = sum(x["Ώρες"] for x in rep_completed)
         tot_pend_hrs = sum(x["Ώρες"] for x in rep_pending)
         rc1.metric("Ολοκληρωμένα Tasks", len(rep_completed), delta=f"{round(tot_done_hrs, 1)}h")
