@@ -2029,7 +2029,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 
                                 # Render dialog
                                 if t_data.get("task") and t_data["task"] != "- Επιλογή Εργασίας -":
-                                    (
+                                    render_partial_dialog(
                                         unique_key, t_idx, "item",
                                         qty, t_data.get("done_qty", 0),
                                         t_data.get("partial_reason", ""),
@@ -4399,8 +4399,8 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
                     col_log, col_del = st.columns([5, 1])
                     with col_log:
                         st.markdown(
-                            f'<div style="background:#e3f2fd;padding:6px 10px;border-radius:5px;font-size:12px; color: #000000;">'
-                            f'<b style="color: #000000 !important;">📅 {log.get("date", "-")}: +{log.get("qty", 0)} τμχ</b>'
+                            f'<div style="background:#e3f2fd;padding:6px 10px;border-radius:5px;font-size:12px;">'
+                            f'<span style="color: #000000 !important; font-weight: bold;">📅 {log.get("date", "-")}: +{log.get("qty", 0)} τμχ</span>'
                             + (f' <span style="color: #333333 !important; font-size:11px; font-style:italic;">({log.get("note", "")})</span>' if log.get("note") else '')
                             + f'</div>',
                             unsafe_allow_html=True
