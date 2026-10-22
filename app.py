@@ -572,9 +572,6 @@ def get_team_options_for_date(target_date, team_members_list, availability_datab
     assigned_hours_per_user = {}
     tasks_db = st.session_state.get("_tasks_db_cache", {})
     procurement_df = st.session_state.get("procurement_df", pd.DataFrame())
-
-    # Debug
-    st.write(f"DEBUG: target_date={target_date}, assigned_hours={assigned_hours_per_user}")
     
     # 1. Item Tasks
     for u_key, task_list in st.session_state.get("tasks_store", {}).items():
