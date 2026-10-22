@@ -2130,10 +2130,18 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 current_display = clean_users_to_display(valid_users_clean, val_to_disp)
                                 
                                 user_k = f"mat_users_{unique_key}_{t_idx}"
+                                
+                                # === ΝΕΟ: Παίρνουμε την τρέχουσα τιμή από το state του widget, αν υπάρχει ===
+                                if user_k in st.session_state:
+                                    selected_display = st.session_state[user_k]
+                                else:
+                                    selected_display = current_display
+                                # ========================================================================
+                                
                                 c_user.multiselect(
                                     "Υπεύθυνοι",
                                     options=display_opts,
-                                    default=current_display,
+                                    default=selected_display,
                                     key=user_k,
                                     on_change=update_item_users_mapped,
                                     args=(unique_key, t_idx, user_k, disp_to_val)
@@ -2308,10 +2316,18 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         current_display = clean_users_to_display(valid_users_clean, val_to_disp)
                         
                         puser_k = f"puser_proj_{proj_key}_{task_name}"
+                        
+                        # === ΝΕΟ ===
+                        if puser_k in st.session_state:
+                            selected_display_p = st.session_state[puser_k]
+                        else:
+                            selected_display_p = current_display
+                        # ============
+                        
                         c_user.multiselect(
                             "Υπεύθυνοι",
                             options=display_opts,
-                            default=current_display,
+                            default=selected_display_p,
                             key=puser_k,
                             on_change=update_proj_users_mapped,
                             args=(proj_key, task_name, puser_k, disp_to_val)
