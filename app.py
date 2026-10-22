@@ -2461,7 +2461,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
     c1.metric("Projects" if show_all else "Ενεργά", len(projects_to_show))
     c2.metric("Συνολικές Ώρες", f"{round(tot_all_hours, 1)}h")
     
-    overall_pct = int((tot_done_tasks / tot_tasks_count) * 100) if tot_tasks_cnt > 0 else 0
+    overall_pct = int((tot_done_tasks / tot_tasks_count) * 100) if tot_tasks_count > 0 else 0
     c3.metric("Συνολική Πρόοδος", f"{overall_pct}%")
     c4.metric("Εκκρεμή Tasks", tot_tasks_count - tot_done_tasks)
 
