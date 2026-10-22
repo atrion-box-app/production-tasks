@@ -582,17 +582,19 @@ def get_team_options_for_date(target_date, team_members_list, availability_datab
                     t_users = [t.get("user", "- Χωρίς Ανάθεση -")]
                 num_users = max(len(t_users), 1)
                 
+                # === ΝΕΟ: Βρίσκουμε το qty με βάση το item_id ===
                 qty = 1
                 try:
-                    parts = u_key.split("_")
-                    item_id = parts[0]
-                    idx_part = int(parts[1]) if len(parts) > 1 else 0
-                    if not procurement_df.empty and idx_part < len(procurement_df):
-                        row = procurement_df.iloc[idx_part]
-                        if str(row["ID"]) == item_id:
-                            qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+                    item_id = u_key.split("_")[0]
+                    if not procurement_df.empty:
+                        match = procurement_df[procurement_df["ID"].astype(str) == str(item_id)]
+                        if not match.empty:
+                            qty_str = str(match.iloc[0]["Ποσότητα"])
+                            if qty_str.isdigit():
+                                qty = int(qty_str)
                 except:
                     pass
+                # ==========================================
                 
                 auto_time = tasks_db.get(t["task"], 0.0)
                 hrs_per_user = (auto_time * qty / 60) / num_users if auto_time else 0
