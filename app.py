@@ -1860,6 +1860,17 @@ def get_project_details(project_name, procurement_df, tasks_database, incoming_d
 def render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df):
     st.header("Projects")
 
+    # === ΝΕΟ: Έλεγχος για διαγραφή task ===
+    if "_task_to_delete" in st.session_state:
+        del_key, del_idx = st.session_state["_task_to_delete"]
+        if del_key in st.session_state["tasks_store"]:
+            if 0 <= del_idx < len(st.session_state["tasks_store"][del_key]):
+                st.session_state["tasks_store"][del_key].pop(del_idx)
+                mark_unsaved_changes()
+        del st.session_state["_task_to_delete"]
+        st.rerun()
+    # ========================================
+
     team_members_list = st.session_state.get("team_members_list", [])
     availability_overrides = st.session_state.get("availability_overrides", [])
     current_location = st.session_state.get("_location_filter", LOCATION_ALL)
@@ -2232,7 +2243,11 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                         st.session_state[f"_add_task_form_{unique_key}"] = False
                                         st.rerun()
 
-                        if len(item_tasks) > 0 and col_rem.button("Αφαίρεση", key=f"mat_rem_{unique_key}", use_container_width=True, on_click=_remove_last_item_task, args=(unique_key,)):
+                        if len(item_tasks) > 0 and col_rem.button("Αφαίρεση", key=f"mat_rem_{unique_key}", use_container_width=True):
+                            if len(st.session_state["tasks_store"][unique_key]) > 0:
+                                last_idx = len(st.session_state["tasks_store"][unique_key]) - 1
+                                st.session_state["_task_to_delete"] = (unique_key, last_idx)
+                            st.rerun()=f"mat_rem_{unique_key}", use_container_width=True, on_click=_remove_last_item_task, args=(unique_key,)):
                             st.rerun()
                         if col_close.button("Κλείσιμο", key=f"mat_close_{unique_key}", use_container_width=True):
                             st.session_state.selected_material_expand = None
@@ -4988,9 +5003,8 @@ def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
                                             on_change=update_item_field, args=(unique_key, t_idx, "date", date_k),
                                             label_visibility="collapsed")
                                 
-                                if c5.button("🗑️", key=f"incoming_del_{unique_key}_{t_idx}"):
-                                    st.session_state["tasks_store"][unique_key].pop(t_idx)
-                                    mark_unsaved_changes()
+                                if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}"):
+                                    st.session_state["_task_to_delete"] = (unique_key, t_idx)
                                     st.rerun()
                         else:
                             st.info("Δεν υπάρχουν tasks.")
