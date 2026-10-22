@@ -2121,10 +2121,12 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 
                                 task_date = t_data.get("date", date.today())
                                 
-                                # === ΝΕΟ: Παίρνουμε την ημερομηνία απευθείας από το widget ===
+                                # === ΝΕΟ: Παίρνουμε την ημερομηνία από το widget, αλλά με ασφάλεια ===
                                 date_widget_key = f"mat_date_{unique_key}_{t_idx}"
                                 if date_widget_key in st.session_state:
-                                    task_date = st.session_state[date_widget_key]
+                                    widget_date = st.session_state[date_widget_key]
+                                    if isinstance(widget_date, date):
+                                        task_date = widget_date
                                 # ============================================================
                                 
                                 display_opts, disp_to_val, val_to_disp = get_team_options_for_date(
