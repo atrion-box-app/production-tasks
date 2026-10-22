@@ -2131,22 +2131,30 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 
                                 user_k = f"mat_users_{unique_key}_{t_idx}"
                                 
-                                # === ΝΕΟ: Ελέγχουμε αν η τιμή από το state υπάρχει στις διαθέσιμες επιλογές ===
+                                # Βρίσκουμε ποιες επιλογές είναι διαθέσιμες
                                 if user_k in st.session_state:
                                     selected_display = st.session_state[user_k]
-                                    # Φιλτράρουμε μόνο όσες επιλογές υπάρχουν στο display_opts
                                     selected_display = [d for d in selected_display if d in display_opts]
                                 else:
                                     selected_display = current_display
-                                # ========================================================================
+                                
+                                # Χρησιμοποιούμε on_change για να ενημερώνουμε το tasks_store άμεσα
+                                def _on_users_change(u_key=unique_key, t_idx_local=t_idx, widget_k=user_k, disp_map=disp_to_val):
+                                    new_sel = st.session_state[widget_k]
+                                    new_clean = [disp_map.get(d, d) for d in new_sel]
+                                    st.session_state["tasks_store"][u_key][t_idx_local]["users"] = new_clean
+                                    if new_clean:
+                                        st.session_state["tasks_store"][u_key][t_idx_local]["user"] = new_clean[0]
+                                    else:
+                                        st.session_state["tasks_store"][u_key][t_idx_local]["user"] = "- Χωρίς Ανάθεση -"
+                                    mark_unsaved_changes()
                                 
                                 c_user.multiselect(
                                     "Υπεύθυνοι",
                                     options=display_opts,
                                     default=selected_display,
                                     key=user_k,
-                                    on_change=update_item_users_mapped,
-                                    args=(unique_key, t_idx, user_k, disp_to_val)
+                                    on_change=_on_users_change
                                 )
                                 
                                 date_k = f"mat_date_{unique_key}_{t_idx}"
@@ -2325,13 +2333,22 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         else:
                             selected_display_p = current_display
                         
+                        def _on_proj_users_change(p_key=proj_key, t_name=task_name, widget_k=puser_k, disp_map=disp_to_val):
+                            new_sel = st.session_state[widget_k]
+                            new_clean = [disp_map.get(d, d) for d in new_sel]
+                            st.session_state["project_tasks_store"][p_key][t_name]["users"] = new_clean
+                            if new_clean:
+                                st.session_state["project_tasks_store"][p_key][t_name]["user"] = new_clean[0]
+                            else:
+                                st.session_state["project_tasks_store"][p_key][t_name]["user"] = "- Χωρίς Ανάθεση -"
+                            mark_unsaved_changes()
+                        
                         c_user.multiselect(
                             "Υπεύθυνοι",
                             options=display_opts,
                             default=selected_display_p,
                             key=puser_k,
-                            on_change=update_proj_users_mapped,
-                            args=(proj_key, task_name, puser_k, disp_to_val)
+                            on_change=_on_proj_users_change
                         )
                         
                         pdate_k = f"pdate_proj_{proj_key}_{task_name}"
