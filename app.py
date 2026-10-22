@@ -2190,7 +2190,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 else:
                                     c_time.caption("—")
                                 
-                                if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}", on_click=_delete_item_task, args=(unique_key, t_idx)):
+                                if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}"):
+                                    st.session_state["_task_to_delete"] = (unique_key, t_idx)
                                     st.rerun()
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
