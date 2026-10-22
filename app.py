@@ -1860,17 +1860,6 @@ def get_project_details(project_name, procurement_df, tasks_database, incoming_d
 def render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df):
     st.header("Projects")
 
-    # === ΝΕΟ: Έλεγχος για διαγραφή task ===
-    if "_task_to_delete" in st.session_state:
-        del_key, del_idx = st.session_state["_task_to_delete"]
-        if del_key in st.session_state["tasks_store"]:
-            if 0 <= del_idx < len(st.session_state["tasks_store"][del_key]):
-                st.session_state["tasks_store"][del_key].pop(del_idx)
-                mark_unsaved_changes()
-        del st.session_state["_task_to_delete"]
-        st.rerun()
-    # ========================================
-
     team_members_list = st.session_state.get("team_members_list", [])
     availability_overrides = st.session_state.get("availability_overrides", [])
     current_location = st.session_state.get("_location_filter", LOCATION_ALL)
@@ -1892,6 +1881,17 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         st.session_state.selected_project_drill = None
     if "selected_material_expand" not in st.session_state:
         st.session_state.selected_material_expand = None
+    
+    # === ΝΕΟ: Έλεγχος για διαγραφή task (με deferred deletion) ===
+    if "_task_to_delete" in st.session_state:
+        del_key, del_idx = st.session_state["_task_to_delete"]
+        if del_key in st.session_state["tasks_store"]:
+            if 0 <= del_idx < len(st.session_state["tasks_store"][del_key]):
+                st.session_state["tasks_store"][del_key].pop(del_idx)
+                mark_unsaved_changes()
+        del st.session_state["_task_to_delete"]
+        st.rerun()
+    # ==========================================================
     
     if st.session_state.selected_project_drill is not None:
         selected_project = st.session_state.selected_project_drill
@@ -2064,41 +2064,35 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         if not item_tasks:
                             st.info("Δεν έχουν οριστεί εργασίες. Πάτησε **Προσθήκη Εργασίας** παρακάτω.")
-
-                        # === ΝΕΟ: Callbacks για ασφαλή διαγραφή ===
-                        def _delete_item_task(u_key, t_idx_local):
-                            if u_key in st.session_state["tasks_store"]:
-                                if 0 <= t_idx_local < len(st.session_state["tasks_store"][u_key]):
-                                    st.session_state["tasks_store"][u_key].pop(t_idx_local)
-                                    mark_unsaved_changes()
                         
-                        def _remove_last_item_task(u_key):
-                            if u_key in st.session_state["tasks_store"]:
-                                if len(st.session_state["tasks_store"][u_key]) > 0:
-                                    st.session_state["tasks_store"][u_key].pop()
-                                    mark_unsaved_changes()
-                        # ==========================================                        
+                        # === ΝΕΟ: Μετατροπή της λίστας σε dict με μοναδικά IDs ===
+                        tasks_dict_display = {}
+                        for i, t_data in enumerate(item_tasks):
+                            task_uid = t_data.get("uid", f"task_{i}")
+                            tasks_dict_display[task_uid] = t_data
+                        # ==========================================================
                         
-                        
-                        for t_idx, t_data in enumerate(list(item_tasks)):
+                        for task_uid, t_data in tasks_dict_display.items():
+                            t_idx = item_tasks.index(t_data)  # Βρίσκουμε το πραγματικό index
+                            
                             with st.container(border=True):
                                 c_done, c_task, c_partial = st.columns([0.1, 0.8, 0.1])
                                 
-                                chk_k = f"mat_chk_{unique_key}_{t_idx}"
+                                chk_k = f"mat_chk_{unique_key}_{task_uid}"
                                 c_done.checkbox("Done", value=t_data["done"], key=chk_k, on_change=toggle_item_task, args=(unique_key, t_idx, chk_k))
                                 
                                 # Partial button
                                 is_partial = t_data.get("is_partial", False)
                                 partial_icon = "🔄" if is_partial else "⏳"
                                 partial_help = "Επεξεργασία partial" if is_partial else "Δήλωση μερικής ολοκλήρωσης"
-                                if c_partial.button(partial_icon, key=f"mat_partial_{unique_key}_{t_idx}", 
+                                if c_partial.button(partial_icon, key=f"mat_partial_{unique_key}_{task_uid}", 
                                                    help=partial_help, use_container_width=True):
                                     state_k = f"_partial_dialog_item_{unique_key}_{t_idx}"
                                     st.session_state[state_k] = not st.session_state.get(state_k, False)
                                     st.rerun()
                                 
                                 task_idx = task_options.index(t_data["task"]) if t_data["task"] in task_options else 0
-                                task_k = f"mat_task_{unique_key}_{t_idx}"
+                                task_k = f"mat_task_{unique_key}_{task_uid}"
                                 c_task.selectbox("Εργασία", task_options, index=task_idx, key=task_k, on_change=update_item_field, args=(unique_key, t_idx, "task", task_k))
                                
                                 # Partial info
@@ -2106,7 +2100,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                     done_q = t_data.get("done_qty", 0)
                                     total_q = t_data.get("total_qty", 0)
                                     
-                                    # === ΝΕΟ: Safe parsing ===
                                     try:
                                         done_q = int(float(str(done_q).replace(',', '.'))) if done_q != "" else 0
                                     except:
@@ -2155,16 +2148,13 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 valid_users_clean = [u for u in current_users if u in team_database]
                                 current_display = clean_users_to_display(valid_users_clean, val_to_disp)
                                 
-                                user_k = f"mat_users_{unique_key}_{t_idx}"
+                                user_k = f"mat_users_{unique_key}_{task_uid}"
                                 
-                                # === ΝΕΟ: Ελέγχουμε αν η τιμή από το state υπάρχει στις διαθέσιμες επιλογές ===
                                 if user_k in st.session_state:
                                     selected_display = st.session_state[user_k]
-                                    # Φιλτράρουμε μόνο όσες επιλογές υπάρχουν στο display_opts
                                     selected_display = [d for d in selected_display if d in display_opts]
                                 else:
                                     selected_display = current_display
-                                # ========================================================================
                                 
                                 c_user.multiselect(
                                     "Υπεύθυνοι",
@@ -2175,7 +2165,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                     args=(unique_key, t_idx, user_k, disp_to_val)
                                 )
                                 
-                                date_k = f"mat_date_{unique_key}_{t_idx}"
+                                date_k = f"mat_date_{unique_key}_{task_uid}"
                                 c_date.date_input("Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", key=date_k, on_change=update_item_field, args=(unique_key, t_idx, "date", date_k))
                                 
                                 auto_time = tasks_database.get(t_data["task"], 0.0)
@@ -2190,16 +2180,14 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 else:
                                     c_time.caption("—")
                                 
-                                if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}"):
+                                if c_del.button("🗑️", key=f"mat_del_{unique_key}_{task_uid}"):
                                     st.session_state["_task_to_delete"] = (unique_key, t_idx)
                                     st.rerun()
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
                         if col_add.button("Προσθήκη Εργασίας", key=f"mat_add_{unique_key}", use_container_width=True):
-                            # Αντί να προσθέσουμε απευθείας, ανοίγουμε ένα state για τη φόρμα
                             st.session_state[f"_add_task_form_{unique_key}"] = True
 
-                        # Αν είναι ανοιχτή η φόρμα προσθήκης, την εμφανίζουμε
                         if st.session_state.get(f"_add_task_form_{unique_key}", False):
                             with st.container(border=True):
                                 st.markdown("**➕ Νέα Εργασία**")
@@ -2208,7 +2196,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 task_options_new = ["- Επιλογή Εργασίας -"] + sorted(list(tasks_database.keys()))
                                 new_task_name = col_new_task.selectbox("Εργασία:", task_options_new, key=f"_new_task_name_{unique_key}")
                                 
-                                # Default ποσότητα = η ποσότητα του υλικού (qty)
                                 new_task_qty = col_new_qty.number_input("Ποσότητα:", min_value=1, value=int(qty), step=1, key=f"_new_task_qty_{unique_key}")
                                 
                                 col_save_new, col_cancel_new = st.columns([1, 1])
@@ -2230,7 +2217,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                             except:
                                                 pass
                                             
+                                            new_uid = f"task_{datetime.now().timestamp()}"
                                             st.session_state["tasks_store"][unique_key].append({
+                                                "uid": new_uid,
                                                 "done": False, "task": new_task_name, 
                                                 "user": "- Χωρίς Ανάθεση -", "users": [], "date": auto_date,
                                                 "is_partial": False, "done_qty": 0, "total_qty": new_task_qty, 
@@ -2281,7 +2270,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         pdone_k = f"proj_pdone_proj_{proj_key}_{task_name}"
                         is_done = c_done.checkbox("Done", value=t_data["done"], key=pdone_k, on_change=toggle_project_task, args=(proj_key, task_name, pdone_k))
                         
-                        # Partial button
                         is_partial = t_data.get("is_partial", False)
                         partial_icon = "🔄" if is_partial else "⏳"
                         partial_help = "Επεξεργασία partial" if is_partial else "Δήλωση μερικής ολοκλήρωσης"
@@ -2294,7 +2282,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         c_done.caption("—")
                         c_partial.caption("—")
 
-                    # Partial info (μόνο για active tasks)
                     if is_active and t_data.get("is_partial", False):
                         done_q = t_data.get("done_qty", 0)
                         total_q = t_data.get("total_qty", 0)
@@ -2312,7 +2299,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             )
                             st.progress(pct / 100)
                     
-                    # Render dialog (μόνο για active tasks)
                     if is_active:
                         render_partial_dialog(
                             proj_key, task_name, "project",
@@ -2329,11 +2315,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         task_date = t_data.get("date", date.today())
                         
-                        # === ΝΕΟ: Παίρνουμε την ημερομηνία απευθείας από το widget ===
                         pdate_widget_key = f"pdate_proj_{proj_key}_{task_name}"
                         if pdate_widget_key in st.session_state:
                             task_date = st.session_state[pdate_widget_key]
-                        # ============================================================
                         
                         display_opts, disp_to_val, val_to_disp = get_team_options_for_date(
                             task_date, team_members_list, availability_database, availability_overrides,
@@ -2477,7 +2461,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
     c1.metric("Projects" if show_all else "Ενεργά", len(projects_to_show))
     c2.metric("Συνολικές Ώρες", f"{round(tot_all_hours, 1)}h")
     
-    overall_pct = int((tot_done_tasks / tot_tasks_count) * 100) if tot_tasks_count > 0 else 0
+    overall_pct = int((tot_done_tasks / tot_tasks_count) * 100) if tot_tasks_cnt > 0 else 0
     c3.metric("Συνολική Πρόοδος", f"{overall_pct}%")
     c4.metric("Εκκρεμή Tasks", tot_tasks_count - tot_done_tasks)
 
@@ -2553,7 +2537,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     if proj_data.get("shipping_date"):
                         shipping_date_html = f'<div style="font-size:9px;color:#c62828;margin-top:3px;">📦 {proj_data["shipping_date"]}</div>'
                     
-                    # Tooltip
                     tooltip_lines = [f"📦 {p_name}", "━━━━━━━━━━━━━━━━"]
                     tooltip_lines.append(f"🚚 Αποστολή: {proj_data.get('shipping_date', '-') or '-'}")
                     
@@ -2569,7 +2552,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     tooltip_lines.append(f"📦 Υλικά: {materials}")
                     tooltip_lines.append(f"✅ Tasks: {done_tasks}/{total_tasks}")
                     
-                    # Pending tasks
                     pending_tasks = []
                     filtered_p_items = procurement_df[procurement_df["Project"] == p_name]
                     for idx_t, r_t in filtered_p_items.iterrows():
