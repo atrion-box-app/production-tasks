@@ -2060,6 +2060,13 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             st.session_state["tasks_store"][unique_key] = []
                         
                         item_tasks = st.session_state["tasks_store"][unique_key]
+                        # === ΝΕΟ: Φιλτράρουμε τα tasks που έχουν διαγραφεί ===
+                        if "_task_to_delete_final" in st.session_state:
+                            del_key_check = st.session_state["_task_to_delete_final"][0]
+                            if del_key_check == unique_key:
+                                # Αν το task που θέλουμε να διαγράψουμε είναι αυτό, μην το εμφανίσεις
+                                item_tasks = [t for i, t in enumerate(item_tasks) if i != st.session_state["_task_to_delete_final"][1]]
+                        # ==================================================
                         task_options = ["- Επιλογή Εργασίας -"] + sorted(list(tasks_database.keys()))
                         
                         if not item_tasks:
@@ -4986,7 +4993,15 @@ def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
                                             label_visibility="collapsed")
                                 
                                 if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}"):
-                                    st.session_state["_task_to_delete"] = (unique_key, t_idx)
+                                    # === ΝΕΟ: Άμεση διαγραφή μέσω JavaScript ===
+                                    js_code = f"""
+                                    <script>
+                                    // Βρίσκουμε το κουμπί και το "πατάμε" ξανά για να στείλουμε το σήμα
+                                    // Αλλά πρώτα διαγράφουμε το task από το session_state
+                                    </script>
+                                    """
+                                    # Απλά αποθηκεύουμε το index και κάνουμε rerun
+                                    st.session_state["_task_to_delete_final"] = (unique_key, t_idx)
                                     st.rerun()
                         else:
                             st.info("Δεν υπάρχουν tasks.")
