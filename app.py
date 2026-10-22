@@ -2053,18 +2053,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         if not item_tasks:
                             st.info("Δεν έχουν οριστεί εργασίες. Πάτησε **Προσθήκη Εργασίας** παρακάτω.")
-
-                        # === ΝΕΟ: Έλεγχος για διαγραφή task ===
-                        del_key_check = f"_del_task_{unique_key}"
-                        if del_key_check in st.session_state:
-                            del_idx = st.session_state[del_key_check]
-                            if 0 <= del_idx < len(st.session_state["tasks_store"][unique_key]):
-                                st.session_state["tasks_store"][unique_key].pop(del_idx)
-                                mark_unsaved_changes()
-                            del st.session_state[del_key_check]
-                            st.rerun()
-                        # ========================================
-                        
                         
                         for t_idx, t_data in enumerate(list(item_tasks)):
                             with st.container(border=True):
@@ -2143,30 +2131,22 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 
                                 user_k = f"mat_users_{unique_key}_{t_idx}"
                                 
-                                # Βρίσκουμε ποιες επιλογές είναι διαθέσιμες
+                                # === ΝΕΟ: Ελέγχουμε αν η τιμή από το state υπάρχει στις διαθέσιμες επιλογές ===
                                 if user_k in st.session_state:
                                     selected_display = st.session_state[user_k]
+                                    # Φιλτράρουμε μόνο όσες επιλογές υπάρχουν στο display_opts
                                     selected_display = [d for d in selected_display if d in display_opts]
                                 else:
                                     selected_display = current_display
-                                
-                                # Χρησιμοποιούμε on_change για να ενημερώνουμε το tasks_store άμεσα
-                                def _on_users_change(u_key=unique_key, t_idx_local=t_idx, widget_k=user_k, disp_map=disp_to_val):
-                                    new_sel = st.session_state[widget_k]
-                                    new_clean = [disp_map.get(d, d) for d in new_sel]
-                                    st.session_state["tasks_store"][u_key][t_idx_local]["users"] = new_clean
-                                    if new_clean:
-                                        st.session_state["tasks_store"][u_key][t_idx_local]["user"] = new_clean[0]
-                                    else:
-                                        st.session_state["tasks_store"][u_key][t_idx_local]["user"] = "- Χωρίς Ανάθεση -"
-                                    mark_unsaved_changes()
+                                # ========================================================================
                                 
                                 c_user.multiselect(
                                     "Υπεύθυνοι",
                                     options=display_opts,
                                     default=selected_display,
                                     key=user_k,
-                                    on_change=_on_users_change
+                                    on_change=update_item_users_mapped,
+                                    args=(unique_key, t_idx, user_k, disp_to_val)
                                 )
                                 
                                 date_k = f"mat_date_{unique_key}_{t_idx}"
@@ -2185,7 +2165,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                     c_time.caption("—")
                                 
                                 if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}"):
-                                    st.session_state[f"_del_task_{unique_key}"] = t_idx
+                                    st.session_state["tasks_store"][unique_key].pop(t_idx)
+                                    mark_unsaved_changes()
                                     st.rerun()
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
@@ -2344,22 +2325,13 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         else:
                             selected_display_p = current_display
                         
-                        def _on_proj_users_change(p_key=proj_key, t_name=task_name, widget_k=puser_k, disp_map=disp_to_val):
-                            new_sel = st.session_state[widget_k]
-                            new_clean = [disp_map.get(d, d) for d in new_sel]
-                            st.session_state["project_tasks_store"][p_key][t_name]["users"] = new_clean
-                            if new_clean:
-                                st.session_state["project_tasks_store"][p_key][t_name]["user"] = new_clean[0]
-                            else:
-                                st.session_state["project_tasks_store"][p_key][t_name]["user"] = "- Χωρίς Ανάθεση -"
-                            mark_unsaved_changes()
-                        
                         c_user.multiselect(
                             "Υπεύθυνοι",
                             options=display_opts,
                             default=selected_display_p,
                             key=puser_k,
-                            on_change=_on_proj_users_change
+                            on_change=update_proj_users_mapped,
+                            args=(proj_key, task_name, puser_k, disp_to_val)
                         )
                         
                         pdate_k = f"pdate_proj_{proj_key}_{task_name}"
@@ -3288,7 +3260,6 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
     st.download_button("Εξαγωγή CSV", data=csv_data, file_name=f"Master_View_{date.today().strftime('%Y-%m-%d')}.csv", mime="text/csv", use_container_width=True)
 
-
 # --- RENDER DAILY PLAN ---
 def render_daily_plan(procurement_df, tasks_database, team_database, availability_database):
     st.header("Συγκεντρωτικό Πλάνο Παραγωγής")
@@ -3500,6 +3471,7 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
                 col_st.error(f"{dt['status_proc']}")
     else:
         st.info(f"Δεν βρέθηκαν εργασίες για τις {target_date.strftime('%d/%m/%Y')} με τα συγκεκριμένα φίλτρα.")
+
 
 # --- RENDER TECHNICIAN ---
 def render_technician(procurement_df, tasks_database, team_database, availability_database):
@@ -3822,9 +3794,6 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     pct_display = int((done_q / total_q) * 100) if total_q > 0 else 0
                     
                     item_info = {
-                        "type": "project",
-                        "p_key": p_key,
-                        "task_name": task_name,
                         "Project": proj_name, "Εργασία": task_name,
                         "Υλικό / Είδος": "Γενική Σύνθεση / Box",
                         "Υπεύθυνος": ", ".join(t_users), "Ώρες": hrs_total,
@@ -3846,7 +3815,7 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
             material = row["Υλικό / Προϊόν"]
             qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
             item_tasks = st.session_state["tasks_store"].get(unique_item_key, [])
-            for t_idx, t_data in enumerate(item_tasks):
+            for t_data in item_tasks:
                 if t_data.get("task") != "- Επιλογή Εργασίας -" and t_data.get("date") == rep_date:
                     auto_time = tasks_database.get(t_data["task"], 0.0)
                     t_users = t_data.get("users", [])
@@ -3874,9 +3843,6 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     pct_display = int((done_q / total_q) * 100) if total_q > 0 else 0
                     
                     item_info = {
-                        "type": "item",
-                        "u_key": unique_item_key,
-                        "t_idx": t_idx,
                         "Project": project_name, "Εργασία": t_data["task"],
                         "Υλικό / Είδος": f"[{item_id}] {material}",
                         "Υπεύθυνος": ", ".join(t_users), "Ώρες": hrs_total,
@@ -4141,7 +4107,6 @@ def render_database(tasks_database, team_database, availability_database):
         st.subheader("Ομάδα & Όρια Ωρών")
         avail_data = [{"Ημέρα": day, "Τεχνίτης": member, "Ώρες": hours} for day, members in availability_database.items() for member, hours in members.items()]
         st.dataframe(pd.DataFrame(avail_data), use_container_width=True, hide_index=True)
-
 
 def render_location_dashboard(procurement_df, tasks_database, team_members_list, availability_database, 
                                 availability_overrides, incoming_df):
@@ -4412,7 +4377,6 @@ def render_location_dashboard(procurement_df, tasks_database, team_members_list,
             use_container_width=True
         )
 
-
 def render_pending_partial(procurement_df, team_members_list):
     """Σελίδα με όλα τα ενεργά partial tasks."""
     st.header("🚨 Εκκρεμότητες")
@@ -4508,7 +4472,6 @@ def render_pending_partial(procurement_df, team_members_list):
     
     st.divider()
     st.caption(f"💾 **Σημείωση:** Πατήστε **Αποθήκευση** στο sidebar για να σωθούν οι αλλαγές στο Sheet.")
-
 
 def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type, 
                            total_qty_default, current_done, current_reason, 
@@ -4706,7 +4669,6 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
                     mark_unsaved_changes()
                     st.session_state[state_key] = False
                     st.rerun()
-
 
 # --- RENDER SETTINGS ---
 def render_settings():
