@@ -573,7 +573,7 @@ def get_team_options_for_date(target_date, team_members_list, availability_datab
     tasks_db = st.session_state.get("_tasks_db_cache", {})
     procurement_df = st.session_state.get("procurement_df", pd.DataFrame())
     
-    # 1. Item Tasks
+    # 1. Item Tasks (Από ΟΛΑ τα projects)
     for u_key, task_list in st.session_state.get("tasks_store", {}).items():
         for t in task_list:
             if t.get("task") and t["task"] != "- Επιλογή Εργασίας -" and t.get("date") == target_date:
@@ -600,7 +600,7 @@ def get_team_options_for_date(target_date, team_members_list, availability_datab
                     if user and user != "- Χωρίς Ανάθεση -":
                         assigned_hours_per_user[user] = assigned_hours_per_user.get(user, 0.0) + hrs_per_user
 
-    # 2. Project Tasks
+    # 2. Project Tasks (Από ΟΛΑ τα projects)
     for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
         if isinstance(p_dict, dict):
             proj_name = p_key.replace("proj_", "")
