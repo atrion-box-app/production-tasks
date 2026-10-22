@@ -2247,7 +2247,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             if len(st.session_state["tasks_store"][unique_key]) > 0:
                                 last_idx = len(st.session_state["tasks_store"][unique_key]) - 1
                                 st.session_state["_task_to_delete"] = (unique_key, last_idx)
-                            st.rerun()=f"mat_rem_{unique_key}", use_container_width=True, on_click=_remove_last_item_task, args=(unique_key,)):
                             st.rerun()
                         if col_close.button("Κλείσιμο", key=f"mat_close_{unique_key}", use_container_width=True):
                             st.session_state.selected_material_expand = None
