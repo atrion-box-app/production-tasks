@@ -2053,6 +2053,18 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         if not item_tasks:
                             st.info("Δεν έχουν οριστεί εργασίες. Πάτησε **Προσθήκη Εργασίας** παρακάτω.")
+
+                        # === ΝΕΟ: Έλεγχος για διαγραφή task ===
+                        del_key_check = f"_del_task_{unique_key}"
+                        if del_key_check in st.session_state:
+                            del_idx = st.session_state[del_key_check]
+                            if 0 <= del_idx < len(st.session_state["tasks_store"][unique_key]):
+                                st.session_state["tasks_store"][unique_key].pop(del_idx)
+                                mark_unsaved_changes()
+                            del st.session_state[del_key_check]
+                            st.rerun()
+                        # ========================================
+                        
                         
                         for t_idx, t_data in enumerate(list(item_tasks)):
                             with st.container(border=True):
@@ -2173,8 +2185,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                     c_time.caption("—")
                                 
                                 if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}"):
-                                    st.session_state["tasks_store"][unique_key].pop(t_idx)
-                                    mark_unsaved_changes()
+                                    st.session_state[f"_del_task_{unique_key}"] = t_idx
                                     st.rerun()
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
