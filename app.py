@@ -3260,6 +3260,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
     st.download_button("Εξαγωγή CSV", data=csv_data, file_name=f"Master_View_{date.today().strftime('%Y-%m-%d')}.csv", mime="text/csv", use_container_width=True)
 
+
 # --- RENDER DAILY PLAN ---
 def render_daily_plan(procurement_df, tasks_database, team_database, availability_database):
     st.header("Συγκεντρωτικό Πλάνο Παραγωγής")
@@ -3471,7 +3472,6 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
                 col_st.error(f"{dt['status_proc']}")
     else:
         st.info(f"Δεν βρέθηκαν εργασίες για τις {target_date.strftime('%d/%m/%Y')} με τα συγκεκριμένα φίλτρα.")
-
 
 # --- RENDER TECHNICIAN ---
 def render_technician(procurement_df, tasks_database, team_database, availability_database):
@@ -3794,6 +3794,9 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     pct_display = int((done_q / total_q) * 100) if total_q > 0 else 0
                     
                     item_info = {
+                        "type": "project",
+                        "p_key": p_key,
+                        "task_name": task_name,
                         "Project": proj_name, "Εργασία": task_name,
                         "Υλικό / Είδος": "Γενική Σύνθεση / Box",
                         "Υπεύθυνος": ", ".join(t_users), "Ώρες": hrs_total,
@@ -3815,7 +3818,7 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
             material = row["Υλικό / Προϊόν"]
             qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
             item_tasks = st.session_state["tasks_store"].get(unique_item_key, [])
-            for t_data in item_tasks:
+            for t_idx, t_data in enumerate(item_tasks):
                 if t_data.get("task") != "- Επιλογή Εργασίας -" and t_data.get("date") == rep_date:
                     auto_time = tasks_database.get(t_data["task"], 0.0)
                     t_users = t_data.get("users", [])
@@ -3843,6 +3846,9 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     pct_display = int((done_q / total_q) * 100) if total_q > 0 else 0
                     
                     item_info = {
+                        "type": "item",
+                        "u_key": unique_item_key,
+                        "t_idx": t_idx,
                         "Project": project_name, "Εργασία": t_data["task"],
                         "Υλικό / Είδος": f"[{item_id}] {material}",
                         "Υπεύθυνος": ", ".join(t_users), "Ώρες": hrs_total,
@@ -4107,6 +4113,7 @@ def render_database(tasks_database, team_database, availability_database):
         st.subheader("Ομάδα & Όρια Ωρών")
         avail_data = [{"Ημέρα": day, "Τεχνίτης": member, "Ώρες": hours} for day, members in availability_database.items() for member, hours in members.items()]
         st.dataframe(pd.DataFrame(avail_data), use_container_width=True, hide_index=True)
+
 
 def render_location_dashboard(procurement_df, tasks_database, team_members_list, availability_database, 
                                 availability_overrides, incoming_df):
@@ -4377,6 +4384,7 @@ def render_location_dashboard(procurement_df, tasks_database, team_members_list,
             use_container_width=True
         )
 
+
 def render_pending_partial(procurement_df, team_members_list):
     """Σελίδα με όλα τα ενεργά partial tasks."""
     st.header("🚨 Εκκρεμότητες")
@@ -4472,6 +4480,7 @@ def render_pending_partial(procurement_df, team_members_list):
     
     st.divider()
     st.caption(f"💾 **Σημείωση:** Πατήστε **Αποθήκευση** στο sidebar για να σωθούν οι αλλαγές στο Sheet.")
+
 
 def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type, 
                            total_qty_default, current_done, current_reason, 
@@ -4669,6 +4678,7 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
                     mark_unsaved_changes()
                     st.session_state[state_key] = False
                     st.rerun()
+
 
 # --- RENDER SETTINGS ---
 def render_settings():
