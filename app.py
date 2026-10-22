@@ -2131,9 +2131,11 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 
                                 user_k = f"mat_users_{unique_key}_{t_idx}"
                                 
-                                # === ΝΕΟ: Παίρνουμε την τρέχουσα τιμή από το state του widget, αν υπάρχει ===
+                                # === ΝΕΟ: Ελέγχουμε αν η τιμή από το state υπάρχει στις διαθέσιμες επιλογές ===
                                 if user_k in st.session_state:
                                     selected_display = st.session_state[user_k]
+                                    # Φιλτράρουμε μόνο όσες επιλογές υπάρχουν στο display_opts
+                                    selected_display = [d for d in selected_display if d in display_opts]
                                 else:
                                     selected_display = current_display
                                 # ========================================================================
@@ -2317,12 +2319,11 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         puser_k = f"puser_proj_{proj_key}_{task_name}"
                         
-                        # === ΝΕΟ ===
                         if puser_k in st.session_state:
                             selected_display_p = st.session_state[puser_k]
+                            selected_display_p = [d for d in selected_display_p if d in display_opts]
                         else:
                             selected_display_p = current_display
-                        # ============
                         
                         c_user.multiselect(
                             "Υπεύθυνοι",
