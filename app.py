@@ -2165,9 +2165,16 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                     c_time.caption("—")
                                 
                                 if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}"):
-                                    st.session_state["tasks_store"][unique_key].pop(t_idx)
-                                    mark_unsaved_changes()
+                                    # === ΝΕΟ: Ασφαλής διαγραφή ===
+                                    if unique_key in st.session_state["tasks_store"]:
+                                        # Δημιουργούμε μια νέα λίστα χωρίς το task που θέλουμε να διαγράψουμε
+                                        current_tasks = st.session_state["tasks_store"][unique_key]
+                                        if 0 <= t_idx < len(current_tasks):
+                                            new_tasks = [t for i, t in enumerate(current_tasks) if i != t_idx]
+                                            st.session_state["tasks_store"][unique_key] = new_tasks
+                                            mark_unsaved_changes()
                                     st.rerun()
+                                    # =============================
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
                         if col_add.button("Προσθήκη Εργασίας", key=f"mat_add_{unique_key}", use_container_width=True):
