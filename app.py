@@ -2053,6 +2053,21 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         if not item_tasks:
                             st.info("Δεν έχουν οριστεί εργασίες. Πάτησε **Προσθήκη Εργασίας** παρακάτω.")
+
+                        # === ΝΕΟ: Callbacks για ασφαλή διαγραφή ===
+                        def _delete_item_task(u_key, t_idx_local):
+                            if u_key in st.session_state["tasks_store"]:
+                                if 0 <= t_idx_local < len(st.session_state["tasks_store"][u_key]):
+                                    st.session_state["tasks_store"][u_key].pop(t_idx_local)
+                                    mark_unsaved_changes()
+                        
+                        def _remove_last_item_task(u_key):
+                            if u_key in st.session_state["tasks_store"]:
+                                if len(st.session_state["tasks_store"][u_key]) > 0:
+                                    st.session_state["tasks_store"][u_key].pop()
+                                    mark_unsaved_changes()
+                        # ==========================================                        
+                        
                         
                         for t_idx, t_data in enumerate(list(item_tasks)):
                             with st.container(border=True):
@@ -2164,17 +2179,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 else:
                                     c_time.caption("—")
                                 
-                                if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}"):
-                                    # === ΝΕΟ: Ασφαλής διαγραφή ===
-                                    if unique_key in st.session_state["tasks_store"]:
-                                        # Δημιουργούμε μια νέα λίστα χωρίς το task που θέλουμε να διαγράψουμε
-                                        current_tasks = st.session_state["tasks_store"][unique_key]
-                                        if 0 <= t_idx < len(current_tasks):
-                                            new_tasks = [t for i, t in enumerate(current_tasks) if i != t_idx]
-                                            st.session_state["tasks_store"][unique_key] = new_tasks
-                                            mark_unsaved_changes()
+                                if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}", on_click=_delete_item_task, args=(unique_key, t_idx)):
                                     st.rerun()
-                                    # =============================
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
                         if col_add.button("Προσθήκη Εργασίας", key=f"mat_add_{unique_key}", use_container_width=True):
@@ -2226,9 +2232,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                         st.session_state[f"_add_task_form_{unique_key}"] = False
                                         st.rerun()
 
-                        if len(item_tasks) > 0 and col_rem.button("Αφαίρεση", key=f"mat_rem_{unique_key}", use_container_width=True):
-                            st.session_state["tasks_store"][unique_key].pop()
-                            mark_unsaved_changes()
+                        if len(item_tasks) > 0 and col_rem.button("Αφαίρεση", key=f"mat_rem_{unique_key}", use_container_width=True, on_click=_remove_last_item_task, args=(unique_key,)):
                             st.rerun()
                         if col_close.button("Κλείσιμο", key=f"mat_close_{unique_key}", use_container_width=True):
                             st.session_state.selected_material_expand = None
