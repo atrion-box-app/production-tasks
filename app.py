@@ -2118,6 +2118,13 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                     current_users = [current_users] if current_users else []
                                 
                                 task_date = t_data.get("date", date.today())
+                                
+                                # === ΝΕΟ: Παίρνουμε την ημερομηνία απευθείας από το widget ===
+                                date_widget_key = f"mat_date_{unique_key}_{t_idx}"
+                                if date_widget_key in st.session_state:
+                                    task_date = st.session_state[date_widget_key]
+                                # ============================================================
+                                
                                 display_opts, disp_to_val, val_to_disp = get_team_options_for_date(
                                     task_date, team_members_list, availability_database, availability_overrides,
                                     current_location=current_location
@@ -2288,11 +2295,18 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         if not isinstance(current_users, list):
                             current_users = [current_users] if current_users else []
                         
-                        task_date = t_data.get("date", date.today())
-                        display_opts, disp_to_val, val_to_disp = get_team_options_for_date(
-                            task_date, team_members_list, availability_database, availability_overrides,
-                            current_location=current_location
-                        )
+                    task_date = t_data.get("date", date.today())
+                    
+                    # === ΝΕΟ: Παίρνουμε την ημερομηνία απευθείας από το widget ===
+                    pdate_widget_key = f"pdate_proj_{proj_key}_{task_name}"
+                    if pdate_widget_key in st.session_state:
+                        task_date = st.session_state[pdate_widget_key]
+                    # ============================================================
+                    
+                    display_opts, disp_to_val, val_to_disp = get_team_options_for_date(
+                        task_date, team_members_list, availability_database, availability_overrides,
+                        current_location=current_location
+                    )
                         
                         valid_users_clean = [u for u in current_users if u in team_database]
                         current_display = clean_users_to_display(valid_users_clean, val_to_disp)
