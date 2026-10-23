@@ -1181,10 +1181,16 @@ def save_all_assignments_to_sheet():
                         if not users_str:
                             users_str = "- Χωρίς Ανάθεση -"
                         
+                        # Αν είναι partial, γράψε τις ποσότητες. Αν όχι, άφησε κενό.
+                        is_p = p_data.get("is_partial", False)
+                        done_q = p_data.get("done_qty", "") if is_p else ""
+                        total_q = p_data.get("total_qty", "") if is_p else ""
+                        p_reason = p_data.get("partial_reason", "") if is_p else ""
+
                         rows.append([
                             proj_name, "-", strip_all_fields(t_name), 
                             users_str, str(p_data.get("date")), str(p_data.get("done")), "PROJECT",
-                            p_data.get("done_qty", ""), p_data.get("total_qty", ""), p_data.get("partial_reason", "")
+                            done_q, total_q, p_reason
                         ])
 
         seen = set()
@@ -5026,10 +5032,10 @@ def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
                                 st.session_state["tasks_store"][unique_key] = []
                             
                             st.session_state["tasks_store"][unique_key].append({
-                                "uid": f"task_{datetime.now().timestamp()}",   # ← ΠΡΟΣΘΗΚΗ ΑΥΤΗΣ ΤΗΣ ΓΡΑΜΜΗΣ
+                                "uid": f"task_{datetime.now().timestamp()}",
                                 "done": False, "task": "- Επιλογή Εργασίας -",
                                 "user": "- Χωρίς Ανάθεση -", "users": [], "date": auto_date,
-                                "is_partial": False, "done_qty": 0, "total_qty": 0, "partial_reason": "",
+                                "is_partial": False, "done_qty": 0, "total_qty": m["qty"], "partial_reason": "",
                                 "progress_logs": []
                             })
                             mark_unsaved_changes()
