@@ -1022,6 +1022,7 @@ def load_assignments_from_sheet():
                 
                 if not is_duplicate:
                     assignments_item[item_id].append({
+                        "uid": f"task_{item_id}_{task_name}_{assign_date_str}_{int(time.time() * 1000) % 1000000}",
                         "done": done,
                         "task": task_name,
                         "user": users_list[0] if users_list else "- Χωρίς Ανάθεση -",
@@ -1653,6 +1654,36 @@ def toggle_item_task(u_key, t_idx, chk_key):
     st.session_state["tasks_store"][u_key][t_idx]["done"] = st.session_state[chk_key]
     mark_unsaved_changes()
 
+# --- NEW: DELETE HELPERS (with uid safety) ---
+def ensure_task_uids():
+    """Βεβαιώνεται ότι όλα τα item tasks έχουν μοναδικό uid."""
+    for u_key, task_list in st.session_state.get("tasks_store", {}).items():
+        for i, t in enumerate(task_list):
+            if not t.get("uid"):
+                t["uid"] = f"task_{u_key}_{i}_{int(time.time() * 1000) % 1000000}"
+
+
+def delete_item_task_by_uid(u_key, task_uid):
+    """Διαγράφει item task με βάση το uid."""
+    if u_key not in st.session_state.get("tasks_store", {}):
+        return False
+    tasks = st.session_state["tasks_store"][u_key]
+    for i, t in enumerate(tasks):
+        if t.get("uid") == task_uid:
+            tasks.pop(i)
+            mark_unsaved_changes()
+            return True
+    return False
+
+
+def delete_project_task_by_name(p_key, task_name):
+    """Διαγράφει project task."""
+    if p_key in st.session_state.get("project_tasks_store", {}):
+        if task_name in st.session_state["project_tasks_store"][p_key]:
+            del st.session_state["project_tasks_store"][p_key][task_name]
+            mark_unsaved_changes()
+            return True
+    return False
 
 def update_item_field(u_key, t_idx, field, widget_key):
     st.session_state["tasks_store"][u_key][t_idx][field] = st.session_state[widget_key]
@@ -2050,13 +2081,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             st.session_state["tasks_store"][unique_key] = []
                         
                         item_tasks = st.session_state["tasks_store"][unique_key]
-                        # === ΝΕΟ: Φιλτράρουμε τα tasks που έχουν διαγραφεί ===
-                        if "_task_to_delete_final" in st.session_state:
-                            del_key_check = st.session_state["_task_to_delete_final"][0]
-                            if del_key_check == unique_key:
-                                # Αν το task που θέλουμε να διαγράψουμε είναι αυτό, μην το εμφανίσεις
-                                item_tasks = [t for i, t in enumerate(item_tasks) if i != st.session_state["_task_to_delete_final"][1]]
-                        # ==================================================
                         task_options = ["- Επιλογή Εργασίας -"] + sorted(list(tasks_database.keys()))
                         
                         if not item_tasks:
@@ -2172,10 +2196,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 else:
                                     c_time.caption("—")
                                 
-                                if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}"):
-                                    st.session_state["tasks_store"][unique_key].pop(t_idx)
-                                    mark_unsaved_changes()
-                                    st.rerun()
+                                if c_del.button("🗑️", key=f"mat_del_{unique_key}_{task_uid}"):
+                                    if delete_item_task_by_uid(unique_key, task_uid):
+                                        st.rerun()
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
                         if col_add.button("Προσθήκη Εργασίας", key=f"mat_add_{unique_key}", use_container_width=True):
@@ -2730,6 +2753,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
                     "type": "item",
                     "u_key": unique_key,
                     "t_idx": t_idx,
+                    "uid": t.get("uid"),   # ← ΠΡΟΣΘΗΚΗ
                     "Project": project_name,
                     "Υλικό": material,
                     "ID": item_id,
@@ -3237,16 +3261,21 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
             c6.markdown(t['Status'])
         
         if t["type"] == "item":
-            del_key = f"mv_del_item_{t['u_key']}_{t['t_idx']}"
+            del_key = f"mv_del_item_{t['u_key']}_{t.get('uid', t['t_idx'])}"
         else:
             del_key = f"mv_del_proj_{t['p_key']}_{t['task_name']}"
         
         if c7.button("🗑️", key=del_key):
             if t["type"] == "item":
-                st.session_state["tasks_store"][t["u_key"]].pop(t["t_idx"])
+                task_uid = t.get("uid")
+                if task_uid:
+                    delete_item_task_by_uid(t["u_key"], task_uid)
+                else:
+                    if t["t_idx"] < len(st.session_state["tasks_store"].get(t["u_key"], [])):
+                        st.session_state["tasks_store"][t["u_key"]].pop(t["t_idx"])
+                        mark_unsaved_changes()
             else:
-                del st.session_state["project_tasks_store"][t["p_key"]][t["task_name"]]
-            mark_unsaved_changes()
+                delete_project_task_by_name(t["p_key"], t["task_name"])
             st.rerun()
     
     st.divider()
@@ -4940,15 +4969,17 @@ def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
                         
                         if item_tasks:
                             for t_idx, t_data in enumerate(list(item_tasks)):
+                                task_uid = t_data.get("uid", f"task_{t_idx}")
+                                
                                 c1, c2, c3, c4, c5 = st.columns([0.5, 3, 2, 1.5, 0.5])
                                 
-                                chk_k = f"incoming_chk_{unique_key}_{t_idx}"
+                                chk_k = f"incoming_chk_{unique_key}_{task_uid}"
                                 c1.checkbox("", value=t_data.get("done", False), key=chk_k, 
                                           on_change=toggle_item_task, args=(unique_key, t_idx, chk_k))
                                 
                                 task_options = ["- Επιλογή Εργασίας -"] + sorted(list(tasks_database.keys()))
                                 task_idx = task_options.index(t_data["task"]) if t_data["task"] in task_options else 0
-                                task_k = f"incoming_task_{unique_key}_{t_idx}"
+                                task_k = f"incoming_task_{unique_key}_{task_uid}"
                                 c2.selectbox("Εργασία", task_options, index=task_idx, key=task_k,
                                            on_change=update_item_field, args=(unique_key, t_idx, "task", task_k),
                                            label_visibility="collapsed")
@@ -4966,28 +4997,20 @@ def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
                                 valid_users_clean = [u for u in current_users if u in team_database]
                                 current_display = clean_users_to_display(valid_users_clean, val_to_disp)
                                 
-                                user_k = f"incoming_users_{unique_key}_{t_idx}"
+                                user_k = f"incoming_users_{unique_key}_{task_uid}"
                                 c3.multiselect("Υπεύθυνοι", options=display_opts, default=current_display,
                                              key=user_k, on_change=update_item_users_mapped, args=(unique_key, t_idx, user_k, disp_to_val),
                                              label_visibility="collapsed")
                                 
-                                date_k = f"incoming_date_{unique_key}_{t_idx}"
+                                date_k = f"incoming_date_{unique_key}_{task_uid}"
                                 c4.date_input("Ημερομηνία", value=t_data.get("date", date.today()),
                                             format="DD/MM/YYYY", key=date_k,
                                             on_change=update_item_field, args=(unique_key, t_idx, "date", date_k),
                                             label_visibility="collapsed")
                                 
-                                if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}"):
-                                    # === ΝΕΟ: Άμεση διαγραφή μέσω JavaScript ===
-                                    js_code = f"""
-                                    <script>
-                                    // Βρίσκουμε το κουμπί και το "πατάμε" ξανά για να στείλουμε το σήμα
-                                    // Αλλά πρώτα διαγράφουμε το task από το session_state
-                                    </script>
-                                    """
-                                    # Απλά αποθηκεύουμε το index και κάνουμε rerun
-                                    st.session_state["_task_to_delete_final"] = (unique_key, t_idx)
-                                    st.rerun()
+                                if c5.button("🗑️", key=f"incoming_del_{unique_key}_{task_uid}"):
+                                    if delete_item_task_by_uid(unique_key, task_uid):
+                                        st.rerun()
                         else:
                             st.info("Δεν υπάρχουν tasks.")
                         
@@ -4999,6 +5022,7 @@ def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
                                 st.session_state["tasks_store"][unique_key] = []
                             
                             st.session_state["tasks_store"][unique_key].append({
+                                "uid": f"task_{datetime.now().timestamp()}",   # ← ΠΡΟΣΘΗΚΗ ΑΥΤΗΣ ΤΗΣ ΓΡΑΜΜΗΣ
                                 "done": False, "task": "- Επιλογή Εργασίας -",
                                 "user": "- Χωρίς Ανάθεση -", "users": [], "date": auto_date,
                                 "is_partial": False, "done_qty": 0, "total_qty": 0, "partial_reason": "",
@@ -5843,6 +5867,9 @@ def main():
         st.session_state["_has_unsaved_changes"] = False
     if "incoming_selected_item" not in st.session_state:
         st.session_state["incoming_selected_item"] = None
+        
+    # === ΔΙΟΡΘΩΣΗ: Βεβαιωνόμαστε ότι όλα τα tasks έχουν uid ===
+    ensure_task_uids()
    
     with st.sidebar:
         st.markdown("""
