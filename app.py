@@ -2197,8 +2197,10 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                     c_time.caption("—")
                                 
                                 if c_del.button("🗑️", key=f"mat_del_{unique_key}_{task_uid}"):
-                                    if delete_item_task_by_uid(unique_key, task_uid):
-                                        st.rerun()
+                                    delete_item_task_by_uid(unique_key, task_uid)
+                                    if f"mat_del_{unique_key}_{task_uid}" in st.session_state:
+                                        del st.session_state[f"mat_del_{unique_key}_{task_uid}"]
+                                    st.rerun()
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
                         if col_add.button("Προσθήκη Εργασίας", key=f"mat_add_{unique_key}", use_container_width=True):
@@ -5009,8 +5011,10 @@ def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
                                             label_visibility="collapsed")
                                 
                                 if c5.button("🗑️", key=f"incoming_del_{unique_key}_{task_uid}"):
-                                    if delete_item_task_by_uid(unique_key, task_uid):
-                                        st.rerun()
+                                    delete_item_task_by_uid(unique_key, task_uid)
+                                    if f"incoming_del_{unique_key}_{task_uid}" in st.session_state:
+                                        del st.session_state[f"incoming_del_{unique_key}_{task_uid}"]
+                                    st.rerun()
                         else:
                             st.info("Δεν υπάρχουν tasks.")
                         
