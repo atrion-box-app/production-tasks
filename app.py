@@ -1881,17 +1881,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         st.session_state.selected_project_drill = None
     if "selected_material_expand" not in st.session_state:
         st.session_state.selected_material_expand = None
-    
-    # === ΝΕΟ: Έλεγχος για διαγραφή task (με deferred deletion) ===
-    if "_task_to_delete" in st.session_state:
-        del_key, del_idx = st.session_state["_task_to_delete"]
-        if del_key in st.session_state["tasks_store"]:
-            if 0 <= del_idx < len(st.session_state["tasks_store"][del_key]):
-                st.session_state["tasks_store"][del_key].pop(del_idx)
-                mark_unsaved_changes()
-        del st.session_state["_task_to_delete"]
-        st.rerun()
-    # ==========================================================
+
     
     if st.session_state.selected_project_drill is not None:
         selected_project = st.session_state.selected_project_drill
@@ -2072,15 +2062,10 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         if not item_tasks:
                             st.info("Δεν έχουν οριστεί εργασίες. Πάτησε **Προσθήκη Εργασίας** παρακάτω.")
                         
-                        # === ΝΕΟ: Μετατροπή της λίστας σε dict με μοναδικά IDs ===
-                        tasks_dict_display = {}
-                        for i, t_data in enumerate(item_tasks):
-                            task_uid = t_data.get("uid", f"task_{i}")
-                            tasks_dict_display[task_uid] = t_data
-                        # ==========================================================
-                        
-                        for task_uid, t_data in tasks_dict_display.items():
-                            t_idx = item_tasks.index(t_data)  # Βρίσκουμε το πραγματικό index
+                        # === ΕΠΙΣΤΡΟΦΗ ΣΤΟΝ ΠΑΛΙΟ ΤΡΟΠΟ (δοκιμασμένο) ===
+                        for t_idx, t_data in enumerate(list(item_tasks)):
+                            task_uid = t_data.get("uid", f"task_{t_idx}")
+                        # =====================================================
                             
                             with st.container(border=True):
                                 c_done, c_task, c_partial = st.columns([0.1, 0.8, 0.1])
@@ -2187,8 +2172,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 else:
                                     c_time.caption("—")
                                 
-                                if c_del.button("🗑️", key=f"mat_del_{unique_key}_{task_uid}"):
-                                    st.session_state["_task_to_delete"] = (unique_key, t_idx)
+                                if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}"):
+                                    st.session_state["tasks_store"][unique_key].pop(t_idx)
+                                    mark_unsaved_changes()
                                     st.rerun()
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
@@ -2241,9 +2227,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                         st.rerun()
 
                         if len(item_tasks) > 0 and col_rem.button("Αφαίρεση", key=f"mat_rem_{unique_key}", use_container_width=True):
-                            if len(st.session_state["tasks_store"][unique_key]) > 0:
-                                last_idx = len(st.session_state["tasks_store"][unique_key]) - 1
-                                st.session_state["_task_to_delete"] = (unique_key, last_idx)
+                            st.session_state["tasks_store"][unique_key].pop()
+                            mark_unsaved_changes()
                             st.rerun()
                         if col_close.button("Κλείσιμο", key=f"mat_close_{unique_key}", use_container_width=True):
                             st.session_state.selected_material_expand = None
