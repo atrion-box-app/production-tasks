@@ -2189,19 +2189,18 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 )
                                 
                                 # Mini-Dashboard με τις ώρες (on-the-fly)
-                                # Mini-Dashboard με τις ώρες (on-the-fly)
                                 with c_user.expander("📊 Δες Διαθεσιμότητα Ομάδας", expanded=False):
-                                    # Παίρνουμε την ημερομηνία ΑΠΕΥΘΕΙΑΣ από το widget για να είμαστε σίγουροι
                                     current_task_date = st.session_state.get(f"mat_date_{unique_key}_{task_uid}", task_date)
-                                    
                                     day_avail_map = get_availability_for_date(current_task_date, availability_database, availability_overrides, team_members_list)
                                     
                                     temp_assigned = {}
-                                    # Υπολογισμός Item Tasks
+                                    
+                                    # 1. Item Tasks (Χρησιμοποιούμε το state ΤΗΣ ΣΤΙΓΜΗΣ)
                                     for uk, tlist in st.session_state.get("tasks_store", {}).items():
-                                        for tt in tlist:
+                                        for ti, tt in enumerate(tlist):
                                             if tt.get("task") and tt["task"] != "- Επιλογή Εργασίας -" and tt.get("date") == current_task_date:
-                                                tut = tt.get("users", [])
+                                                # Παίρνουμε τους users απευθείας από το session_state αν είναι το τρέχον task
+                                                tut = st.session_state.get(f"mat_users_{uk}_{tt.get('uid')}", tt.get("users", []))
                                                 if not tut: tut = [tt.get("user", "- Χωρίς Ανάθεση -")]
                                                 nu = max(len(tut), 1)
                                                 
@@ -2221,7 +2220,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                                     if uu and uu != "- Χωρίς Ανάθεση -":
                                                         temp_assigned[uu] = temp_assigned.get(uu, 0.0) + hpu
                                     
-                                    # Υπολογισμός Project Tasks
+                                    # 2. Project Tasks
                                     for pk, pd in st.session_state.get("project_tasks_store", {}).items():
                                         if isinstance(pd, dict):
                                             pn = pk.replace("proj_", "")
@@ -2234,7 +2233,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                             
                                             for tn, pdata in pd.items():
                                                 if isinstance(pdata, dict) and pdata.get("active", False) and pdata.get("date") == current_task_date:
-                                                    tut_p = pdata.get("users", [])
+                                                    tut_p = st.session_state.get(f"puser_proj_{pk}_{tn}", pdata.get("users", []))
                                                     if not tut_p: tut_p = [pdata.get("user", "- Χωρίς Ανάθεση -")]
                                                     nu_p = max(len(tut_p), 1)
                                                     at_p = tasks_database.get(tn, 0.0)
@@ -2445,13 +2444,15 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         )
                         
                         with c_user.expander("📊 Δες Διαθεσιμότητα Ομάδας", expanded=False):
-                            day_avail_map_p = get_availability_for_date(task_date, availability_database, availability_overrides, team_members_list)
+                            current_task_date_p = st.session_state.get(f"pdate_proj_{proj_key}_{task_name}", task_date)
+                            day_avail_map_p = get_availability_for_date(current_task_date_p, availability_database, availability_overrides, team_members_list)
                             
                             temp_assigned_p = {}
+                            
                             for uk, tlist in st.session_state.get("tasks_store", {}).items():
-                                for tt in tlist:
-                                    if tt.get("task") and tt["task"] != "- Επιλογή Εργασίας -" and tt.get("date") == task_date:
-                                        tut = tt.get("users", [])
+                                for ti, tt in enumerate(tlist):
+                                    if tt.get("task") and tt["task"] != "- Επιλογή Εργασίας -" and tt.get("date") == current_task_date_p:
+                                        tut = st.session_state.get(f"mat_users_{uk}_{tt.get('uid')}", tt.get("users", []))
                                         if not tut: tut = [tt.get("user", "- Χωρίς Ανάθεση -")]
                                         nu = max(len(tut), 1)
                                         q = 1
@@ -2469,7 +2470,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                             if uu and uu != "- Χωρίς Ανάθεση -":
                                                 temp_assigned_p[uu] = temp_assigned_p.get(uu, 0.0) + hpu
                             
-                            # Προσθήκη Project Tasks
                             for pk, pd in st.session_state.get("project_tasks_store", {}).items():
                                 if isinstance(pd, dict):
                                     pn = pk.replace("proj_", "")
@@ -2481,8 +2481,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                                 pq = max(pq, int(pr["Ποσότητα"]))
                                     
                                     for tn, pdata in pd.items():
-                                        if isinstance(pdata, dict) and pdata.get("active", False) and pdata.get("date") == task_date:
-                                            tut_p = pdata.get("users", [])
+                                        if isinstance(pdata, dict) and pdata.get("active", False) and pdata.get("date") == current_task_date_p:
+                                            tut_p = st.session_state.get(f"puser_proj_{pk}_{tn}", pdata.get("users", []))
                                             if not tut_p: tut_p = [pdata.get("user", "- Χωρίς Ανάθεση -")]
                                             nu_p = max(len(tut_p), 1)
                                             at_p = tasks_database.get(tn, 0.0)
