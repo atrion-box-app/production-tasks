@@ -677,6 +677,7 @@ def get_team_options_for_date(target_date, team_members_list, availability_datab
             hours_suffix = f" | ⚪ 0h / {hrs:.1f}h"
         # ==========================================
         
+        # Φτιάχνουμε το σταθερό label (χωρίς ώρες για να μην σβήνεται)
         if has_override and hrs == 0:
             reason_str = f" ⚠️ {override_reason}" if override_reason else " ⚠️ Άδεια"
             display = f"{name}{type_suffix}{location_suffix}{reason_str}{hours_suffix}"
@@ -2171,24 +2172,38 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 
                                 user_k = f"mat_users_{unique_key}_{task_uid}"
                                 
-                                # Παίρνουμε μόνο τα καθαρά ονόματα για τις επιλογές
-                                clean_user_names = list(disp_to_val.values())
-                                # Βρίσκουμε ποια από αυτά είναι τα ήδη επιλεγμένα
-                                selected_clean_names = [disp_to_val.get(d, d) for d in st.session_state.get(user_k, [])] if user_k in st.session_state else valid_users_clean
+                                # Χρησιμοποιούμε το display_opts που περιέχει το location
+                                current_display = [val_to_disp.get(u, u) for u in valid_users_clean if u in val_to_disp]
 
                                 c_user.multiselect(
                                     "Υπεύθυνοι",
-                                    options=clean_user_names,
-                                    default=selected_clean_names,
+                                    options=display_opts,
+                                    default=current_display,
                                     key=user_k,
                                     on_change=update_item_users_mapped,
-                                    args=(unique_key, t_idx, user_k, {}) # Περνάμε κενό {}
+                                    args=(unique_key, t_idx, user_k, disp_to_val)
                                 )
                                 
-                                # Δείχνουμε τις ώρες από κάτω για ενημέρωση
-                                for u_sel in st.session_state.get(user_k, []):
-                                    if u_sel in val_to_disp:
-                                        c_user.caption(f"└ {val_to_disp[u_sel]}")
+                                # === ΝΕΟ: Mini-Dashboard Διαθεσιμότητας ===
+                                with c_user.expander("📊 Δες Διαθεσιμότητα Ομάδας", expanded=False):
+                                    for d_opt in display_opts:
+                                        clean_n = disp_to_val.get(d_opt)
+                                        if not clean_n: continue
+                                        
+                                        # Παίρνουμε τις ώρες από το string
+                                        parts = d_opt.split("|")
+                                        if len(parts) > 1:
+                                            hours_str = parts[1].strip()
+                                            color = "#69f0ae" # Πράσινο
+                                            if "🔴" in hours_str: color = "#ff5252" # Κόκκινο
+                                            
+                                            st.markdown(
+                                                f'<div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">'
+                                                f'<span>{parts[0]}</span>'
+                                                f'<span style="color:{color}; font-weight:bold;">{hours_str}</span>'
+                                                f'</div>',
+                                                unsafe_allow_html=True
+                                            )
                                 
                                 date_k = f"mat_date_{unique_key}_{task_uid}"
                                 c_date.date_input("Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", key=date_k, on_change=update_item_field, args=(unique_key, t_idx, "date", date_k))
@@ -2355,22 +2370,36 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         puser_k = f"puser_proj_{proj_key}_{task_name}"
                         
-                        clean_user_names_p = list(disp_to_val.values())
-                        selected_clean_names_p = [disp_to_val.get(d, d) for d in st.session_state.get(puser_k, [])] if puser_k in st.session_state else valid_users_clean
+                        current_display_p = [val_to_disp.get(u, u) for u in valid_users_clean if u in val_to_disp]
 
                         c_user.multiselect(
                             "Υπεύθυνοι",
-                            options=clean_user_names_p,
-                            default=selected_clean_names_p,
+                            options=display_opts,
+                            default=current_display_p,
                             key=puser_k,
                             on_change=update_proj_users_mapped,
-                            args=(proj_key, task_name, puser_k, {}) # Περνάμε κενό {}
+                            args=(proj_key, task_name, puser_k, disp_to_val)
                         )
                         
-                        # Δείχνουμε τις ώρες από κάτω για ενημέρωση
-                        for u_sel_p in st.session_state.get(puser_k, []):
-                            if u_sel_p in val_to_disp:
-                                c_user.caption(f"└ {val_to_disp[u_sel_p]}")
+                        # === ΝΕΟ: Mini-Dashboard Διαθεσιμότητας ===
+                        with c_user.expander("📊 Δες Διαθεσιμότητα Ομάδας", expanded=False):
+                            for d_opt in display_opts:
+                                clean_n = disp_to_val.get(d_opt)
+                                if not clean_n: continue
+                                
+                                parts = d_opt.split("|")
+                                if len(parts) > 1:
+                                    hours_str = parts[1].strip()
+                                    color = "#69f0ae"
+                                    if "🔴" in hours_str: color = "#ff5252"
+                                    
+                                    st.markdown(
+                                        f'<div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">'
+                                        f'<span>{parts[0]}</span>'
+                                        f'<span style="color:{color}; font-weight:bold;">{hours_str}</span>'
+                                        f'</div>',
+                                        unsafe_allow_html=True
+                                    )
                         
                         pdate_k = f"pdate_proj_{proj_key}_{task_name}"
                         c_date.date_input("Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", key=pdate_k, on_change=update_proj_field, args=(proj_key, task_name, "date", pdate_k))
