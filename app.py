@@ -2173,19 +2173,23 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 user_k = f"mat_users_{unique_key}_{task_uid}"
                                 
                                 if user_k in st.session_state:
-                                    selected_display = st.session_state[user_k]
-                                    selected_display = [d for d in selected_display if d in display_opts]
+                                    # Το widget έχει ήδη state, το αφήνουμε να το διαχειριστεί
+                                    c_user.multiselect(
+                                        "Υπεύθυνοι",
+                                        options=display_opts,
+                                        key=user_k,
+                                        on_change=update_item_users_mapped,
+                                        args=(unique_key, t_idx, user_k, disp_to_val)
+                                    )
                                 else:
-                                    selected_display = current_display
-                                
-                                c_user.multiselect(
-                                    "Υπεύθυνοι",
-                                    options=display_opts,
-                                    default=selected_display,
-                                    key=user_k,
-                                    on_change=update_item_users_mapped,
-                                    args=(unique_key, t_idx, user_k, disp_to_val)
-                                )
+                                    c_user.multiselect(
+                                        "Υπεύθυνοι",
+                                        options=display_opts,
+                                        default=current_display,
+                                        key=user_k,
+                                        on_change=update_item_users_mapped,
+                                        args=(unique_key, t_idx, user_k, disp_to_val)
+                                    )
                                 
                                 date_k = f"mat_date_{unique_key}_{task_uid}"
                                 c_date.date_input("Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", key=date_k, on_change=update_item_field, args=(unique_key, t_idx, "date", date_k))
@@ -2353,19 +2357,22 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         puser_k = f"puser_proj_{proj_key}_{task_name}"
                         
                         if puser_k in st.session_state:
-                            selected_display_p = st.session_state[puser_k]
-                            selected_display_p = [d for d in selected_display_p if d in display_opts]
+                            c_user.multiselect(
+                                "Υπεύθυνοι",
+                                options=display_opts,
+                                key=puser_k,
+                                on_change=update_proj_users_mapped,
+                                args=(proj_key, task_name, puser_k, disp_to_val)
+                            )
                         else:
-                            selected_display_p = current_display
-                        
-                        c_user.multiselect(
-                            "Υπεύθυνοι",
-                            options=display_opts,
-                            default=selected_display_p,
-                            key=puser_k,
-                            on_change=update_proj_users_mapped,
-                            args=(proj_key, task_name, puser_k, disp_to_val)
-                        )
+                            c_user.multiselect(
+                                "Υπεύθυνοι",
+                                options=display_opts,
+                                default=current_display,
+                                key=puser_k,
+                                on_change=update_proj_users_mapped,
+                                args=(proj_key, task_name, puser_k, disp_to_val)
+                            )
                         
                         pdate_k = f"pdate_proj_{proj_key}_{task_name}"
                         c_date.date_input("Ημερομηνία", value=t_data["date"], format="DD/MM/YYYY", key=pdate_k, on_change=update_proj_field, args=(proj_key, task_name, "date", pdate_k))
