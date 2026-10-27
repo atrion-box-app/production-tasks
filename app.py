@@ -960,10 +960,15 @@ def load_assignments_from_sheet():
             task_name = strip_all_fields(str(r.get("Task_Name", "")))
             user_raw = strip_all_fields(str(r.get("Assigned_User", "- Χωρίς Ανάθεση -")))
             user = user_raw
-            users_list = [
-                strip_all_fields(u) for u in user_raw.split(",")
-                if strip_all_fields(u) and strip_all_fields(u) != "- Χωρίς Ανάθεση -"
-            ]
+            # Καθαρίζουμε τα ονόματα από τυχόν περιττά (location, ώρες) που μπορεί να έχουν μείνει
+            users_list = []
+            for u in user_raw.split(","):
+                u_clean = strip_all_fields(u)
+                if u_clean and u_clean != "- Χωρίς Ανάθεση -":
+                    # Κόβουμε ό,τι υπάρχει μετά το " — " (location) ή το " | " (ώρες)
+                    u_name = u_clean.split(" — ")[0].split(" | ")[0].strip()
+                    if u_name:
+                        users_list.append(u_name)
             
             assign_date_str = str(r.get("Assigned_Date", r.get("Assigned_Done", ""))).strip()
             
@@ -2177,8 +2182,13 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 user_k = f"mat_users_{unique_key}_{task_uid}"
                                 
                                 # Το dropdown έχει ΜΟΝΟ ονόματα και location (όχι ώρες)
-                                current_display = [val_to_disp.get(u, u) for u in valid_users_clean if u in val_to_disp]
-
+                                current_display = []
+                                for u in valid_users_clean:
+                                    # Ψάχνουμε να βρούμε το display string που ταιριάζει με το όνομα
+                                    for d_opt, clean_n in disp_to_val.items():
+                                        if clean_n == u:
+                                            current_display.append(d_opt)
+                                            break
                                 c_user.multiselect(
                                     "Υπεύθυνοι",
                                     options=display_opts,
@@ -2432,7 +2442,12 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         puser_k = f"puser_proj_{proj_key}_{task_name}"
                         
-                        current_display_p = [val_to_disp.get(u, u) for u in valid_users_clean if u in val_to_disp]
+                        current_display_p = []
+                        for u in valid_users_clean:
+                            for d_opt, clean_n in disp_to_val.items():
+                                if clean_n == u:
+                                    current_display_p.append(d_opt)
+                                    break
 
                         c_user.multiselect(
                             "Υπεύθυνοι",
