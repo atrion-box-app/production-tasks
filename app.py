@@ -2496,10 +2496,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         })
 
     # === ΟΡΙΣΤΙΚΗ ΔΙΟΡΘΩΣΗ ===
-    if 'dashboard_data' not in locals():
-        dashboard_data = []
-        
-    dash_df = pd.DataFrame(dashboard_data) if dashboard_data else pd.DataFrame()
+    dash_df = pd.DataFrame(dashboard_data if 'dashboard_data' in locals() else [])
     # ==========================
 
     st.markdown(f"### {section_title}")
