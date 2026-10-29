@@ -2181,14 +2181,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 
                                 user_k = f"mat_users_{unique_key}_{task_uid}"
                                 
-                                # Το dropdown έχει ΜΟΝΟ ονόματα και location (όχι ώρες)
-                                current_display = []
-                                for u in valid_users_clean:
-                                    # Ψάχνουμε να βρούμε το display string που ταιριάζει με το όνομα
-                                    for d_opt, clean_n in disp_to_val.items():
-                                        if clean_n == u:
-                                            current_display.append(d_opt)
-                                            break
+                                # Το dropdown έχει τα έτοιμα display_opts (Name — Location)
+                                current_display = [val_to_disp.get(u, u) for u in valid_users_clean if u in val_to_disp]
+                                
                                 c_user.multiselect(
                                     "Υπεύθυνοι",
                                     options=display_opts,
