@@ -2295,11 +2295,13 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 else:
                                     c_time.caption("—")
                                 
-                                if c_del.button("🗑️", key=f"mat_del_{unique_key}_{task_uid}"):
-                                    delete_item_task_by_uid(unique_key, task_uid)
-                                    if f"mat_del_{unique_key}_{task_uid}" in st.session_state:
-                                        del st.session_state[f"mat_del_{unique_key}_{task_uid}"]
-                                    st.rerun()
+                                if c_del.button("🗑️", key=f"mat_del_{unique_key}_{t_idx}"):
+                                    # Διαγραφή με βάση τη θέση (t_idx) για σιγουριά
+                                    if unique_key in st.session_state["tasks_store"]:
+                                        if t_idx < len(st.session_state["tasks_store"][unique_key]):
+                                            st.session_state["tasks_store"][unique_key].pop(t_idx)
+                                            mark_unsaved_changes()
+                                            st.rerun()
                         
                         col_add, col_rem, col_close = st.columns([1, 1, 1])
                         if col_add.button("Προσθήκη Εργασίας", key=f"mat_add_{unique_key}", use_container_width=True):
@@ -5183,11 +5185,12 @@ def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
                                             on_change=update_item_field, args=(unique_key, t_idx, "date", date_k),
                                             label_visibility="collapsed")
                                 
-                                if c5.button("🗑️", key=f"incoming_del_{unique_key}_{task_uid}"):
-                                    delete_item_task_by_uid(unique_key, task_uid)
-                                    if f"incoming_del_{unique_key}_{task_uid}" in st.session_state:
-                                        del st.session_state[f"incoming_del_{unique_key}_{task_uid}"]
-                                    st.rerun()
+                                if c5.button("🗑️", key=f"incoming_del_{unique_key}_{t_idx}"):
+                                    if unique_key in st.session_state["tasks_store"]:
+                                        if t_idx < len(st.session_state["tasks_store"][unique_key]):
+                                            st.session_state["tasks_store"][unique_key].pop(t_idx)
+                                            mark_unsaved_changes()
+                                            st.rerun()
                         else:
                             st.info("Δεν υπάρχουν tasks.")
                         
