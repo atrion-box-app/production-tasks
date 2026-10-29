@@ -2836,13 +2836,12 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         st.divider()
         col_exp1, col_exp2 = st.columns(2)
         
-        # Δημιουργούμε το dashboard_data αν δεν υπάρχει (για να μην σκάει το pd.DataFrame)
-        try:
-            dashboard_data
-        except NameError:
+        # Σιγουρευόμαστε ότι το dashboard_data είναι λίστα
+        if not isinstance(dashboard_data, list):
             dashboard_data = []
             
         dash_df = pd.DataFrame(dashboard_data)
+        
         with col_exp1:
             csv = dash_df.to_csv(index=False).encode('utf-8-sig')
             st.download_button(
