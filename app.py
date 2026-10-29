@@ -833,12 +833,13 @@ def load_assignments_from_sheet():
         for r in records:
             p_name = clean_project_name(strip_all_fields(r.get("Project", "")))
             
-            # === ΔΙΟΡΘΩΣΗ: Μετατροπή του Item_ID σε καθαρό ακέραιο ===
+            # --- ΔΙΟΡΘΩΣΗ ID ---
             raw_id = str(r.get("Item_ID", "")).strip()
             if raw_id.endswith(".0"):
-                raw_id = raw_id[:-2] # Αφαιρεί το .0
-            item_id = str(raw_id)
-            # =======================================================
+                raw_id = raw_id[:-2]  # Αφαιρεί το .0 αν υπάρχει
+            item_id = raw_id
+            # -------------------
+            
             task_name = strip_all_fields(str(r.get("Task_Name", "")))
             user_raw = strip_all_fields(str(r.get("Assigned_User", "- Χωρίς Ανάθεση -")))
             
@@ -1706,12 +1707,13 @@ def get_project_details(project_name, procurement_df, tasks_database, incoming_d
 def render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df):
     st.header("Projects")
 
-    # Πλήρης αρχικοποίηση μεταβλητών στην κορυφή της συνάρτησης
+    # === ΑΡΧΙΚΟΠΟΙΗΣΗ ΜΕΤΑΒΛΗΤΩΝ (Απαραίτητο για να μην σκάει) ===
     dashboard_data = []
     projects_details_cache = {}
     tot_all_hours = 0.0
     tot_tasks_count = 0
     tot_done_tasks = 0
+    # ===============================================================
 
     team_members_list = st.session_state.get("team_members_list", [])
     availability_overrides = st.session_state.get("availability_overrides", [])
@@ -2278,66 +2280,71 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         section_title = "Ενεργά Projects"
 
     try:
-        for p_name in projects_to_show:
-            filtered_p = procurement_df[procurement_df["Project"] == p_name]
-            p_main_qty = 1
-            for _, r in filtered_p.iterrows():
-                if str(r["Ποσότητα"]).isdigit():
-                    p_main_qty = max(p_main_qty, int(r["Ποσότητα"]))
+    # --- Υπολογισμός δεδομένων για το dashboard ---
+    for p_name in projects_to_show:
+        filtered_p = procurement_df[procurement_df["Project"] == p_name]
+        p_main_qty = 1
+        for _, r in filtered_p.iterrows():
+            if str(r["Ποσότητα"]).isdigit():
+                p_main_qty = max(p_main_qty, int(r["Ποσότητα"]))
 
-            p_total_hrs = 0.0
-            p_done_hrs = 0.0
-            p_tasks_cnt = 0
-            p_done_cnt = 0
-            
-            for idx, r in filtered_p.iterrows():
-                item_id = str(r["ID"])
-                u_key = f"{item_id}_{idx}"
-                qty = int(r["Ποσότητα"]) if str(r["Ποσότητα"]).isdigit() else 1
-                item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
-                for t in item_tasks:
-                    if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
-                        auto_t = tasks_database.get(t["task"], 0.0)
-                        hrs = (auto_t * qty) / 60
-                        p_total_hrs += hrs
-                        p_tasks_cnt += 1
-                        if t.get("done", False):
-                            p_done_hrs += hrs
-                            p_done_cnt += 1
+        p_total_hrs = 0.0
+        p_done_hrs = 0.0
+        p_tasks_cnt = 0
+        p_done_cnt = 0
+        
+        for idx, r in filtered_p.iterrows():
+            item_id = str(r["ID"])
+            u_key = f"{item_id}_{idx}"
+            qty = int(r["Ποσότητα"]) if str(r["Ποσότητα"]).isdigit() else 1
+            item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
+            for t in item_tasks:
+                if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
+                    auto_t = tasks_database.get(t["task"], 0.0)
+                    hrs = (auto_t * qty) / 60
+                    p_total_hrs += hrs
+                    p_tasks_cnt += 1
+                    if t.get("done", False):
+                        p_done_hrs += hrs
+                        p_done_cnt += 1
 
-            p_key = f"proj_{p_name}"
-            p_tasks_dict = st.session_state.get("project_tasks_store", {}).get(p_key, {})
-            if isinstance(p_tasks_dict, dict):
-                for t_name, p_data in p_tasks_dict.items():
-                    if isinstance(p_data, dict) and p_data.get("active", False):
-                        auto_t = tasks_database.get(t_name, 0.0)
-                        hrs = (auto_t * p_main_qty) / 60
-                        p_total_hrs += hrs
-                        p_tasks_cnt += 1
-                        if p_data.get("done", False):
-                            p_done_hrs += hrs
-                            p_done_cnt += 1
+        p_key = f"proj_{p_name}"
+        p_tasks_dict = st.session_state.get("project_tasks_store", {}).get(p_key, {})
+        if isinstance(p_tasks_dict, dict):
+            for t_name, p_data in p_tasks_dict.items():
+                if isinstance(p_data, dict) and p_data.get("active", False):
+                    auto_t = tasks_database.get(t_name, 0.0)
+                    hrs = (auto_t * p_main_qty) / 60
+                    p_total_hrs += hrs
+                    p_tasks_cnt += 1
+                    if p_data.get("done", False):
+                        p_done_hrs += hrs
+                        p_done_cnt += 1
 
-            tot_all_hours += p_total_hrs
-            tot_tasks_count += p_tasks_cnt
-            tot_done_tasks += p_done_cnt
-            p_progress = int((p_done_cnt / p_tasks_cnt) * 100) if p_tasks_cnt > 0 else 0
-            
-            proj_details = get_project_details(p_name, procurement_df, tasks_database, incoming_df)
-            projects_details_cache[p_name] = proj_details
-            is_shipped = proj_details.get('is_shipped', False)
-            
-            dashboard_data.append({
-                "Project": p_name,
-                "Υλικά": len(filtered_p),
-                "Σύνολο Tasks": p_tasks_cnt,
-                "Ολοκληρωμένα": p_done_cnt,
-                "Συνολικές Ώρες": round(p_total_hrs, 1),
-                "Υπολειπόμενες": round(p_total_hrs - p_done_hrs, 1),
-                "Πρόοδος": f"{p_progress}%",
-                "Shipping Date": proj_details.get("shipping_date", ""),
-                "Κατάσταση": "OK Shipped" if is_shipped else "ΕΝΕΡΓΟ"
-            })
+        tot_all_hours += p_total_hrs
+        tot_tasks_count += p_tasks_cnt
+        tot_done_tasks += p_done_cnt
+        p_progress = int((p_done_cnt / p_tasks_cnt) * 100) if p_tasks_cnt > 0 else 0
+        
+        proj_details = get_project_details(p_name, procurement_df, tasks_database, incoming_df)
+        projects_details_cache[p_name] = proj_details
+        is_shipped = proj_details.get('is_shipped', False)
+        
+        dashboard_data.append({
+            "Project": p_name,
+            "Υλικά": len(filtered_p),
+            "Σύνολο Tasks": p_tasks_cnt,
+            "Ολοκληρωμένα": p_done_cnt,
+            "Συνολικές Ώρες": round(p_total_hrs, 1),
+            "Υπολειπόμενες": round(p_total_hrs - p_done_hrs, 1),
+            "Πρόοδος": f"{p_progress}%",
+            "Shipping Date": proj_details.get("shipping_date", ""),
+            "Κατάσταση": "OK Shipped" if is_shipped else "ΕΝΕΡΓΟ"
+        })
+
+    # === ΔΗΜΙΟΥΡΓΙΑ DATAFRAME ΓΙΑ ΕΞΑΓΩΓΗ ===
+    # Εδώ βάζουμε την ασφάλεια για να μην ξανασκάσει ποτέ
+    dash_df = pd.DataFrame(dashboard_data) if dashboard_data else pd.DataFrame()
     except Exception as e:
         st.error(f"DEBUG ERROR: {e}")
 
