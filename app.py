@@ -2836,11 +2836,11 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         st.divider()
         col_exp1, col_exp2 = st.columns(2)
         
-        # Αν για οποιονδήποτε λόγο το dashboard_data δεν έχει οριστεί, δημιουργούμε κενή λίστα
-        if 'dashboard_data' not in locals():
+        # Δημιουργούμε το dashboard_data αν δεν υπάρχει (για να μην σκάει το pd.DataFrame)
+        try:
+            dashboard_data
+        except NameError:
             dashboard_data = []
-            
-        dash_df = pd.DataFrame(dashboard_data)
             
         dash_df = pd.DataFrame(dashboard_data)
         with col_exp1:
@@ -2858,7 +2858,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
                 use_container_width=True
             )
-
+            
 # --- RENDER MASTER VIEW ---
 def render_master_view(procurement_df, tasks_database, team_database, availability_database, incoming_df):
     st.header("Master View")
