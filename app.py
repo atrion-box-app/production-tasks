@@ -2646,6 +2646,11 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         import traceback
         st.error(traceback.format_exc())
 
+    # === ΔΙΟΡΘΩΣΗ: Αφαιρέσαμε τον έλεγχο και βεβαιωνόμαστε ότι το dashboard_data είναι έγκυρο ===
+    if not isinstance(dashboard_data, list):
+        dashboard_data = []
+    # =======================================================================================
+
     st.markdown(f"### {section_title}")
     st.caption(f"Εμφανίζονται **{len(projects_to_show)}** projects")
     
