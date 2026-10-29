@@ -2495,7 +2495,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
             "Κατάσταση": "OK Shipped" if is_shipped else "ΕΝΕΡΓΟ"
         })
 
-    # === ΔΗΜΙΟΥΡΓΙΑ DATAFRAME ΓΙΑ ΕΞΑΓΩΓΗ ===
+    # === ΑΠΟΛΥΤΗ ΑΣΦΑΛΕΙΑ ===
+    if 'dashboard_data' not in locals():
+        dashboard_data = []
     dash_df = pd.DataFrame(dashboard_data) if dashboard_data else pd.DataFrame()
 
     st.markdown(f"### {section_title}")
