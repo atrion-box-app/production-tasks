@@ -2167,82 +2167,82 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         c_user.multiselect("Υπεύθυνοι", options=display_opts, default=current_display_p, key=puser_k, on_change=update_proj_users_mapped, args=(proj_key, task_name, puser_k, disp_to_val))
 
-                                # Mini-Dashboard με τις ώρες (on-the-fly)
-                                with c_user.expander("📊 Δες Διαθεσιμότητα Ομάδας", expanded=False):
-                                    current_task_date = st.session_state.get(f"mat_date_{unique_key}_{task_uid}", task_date)
-                                    
-                                    day_avail_map = get_availability_for_date(current_task_date, availability_database, availability_overrides, team_members_list)
-                                    
-                                    temp_assigned = {}
-                                    
-                                    for uk, tlist in st.session_state.get("tasks_store", {}).items():
-                                        for ti, tt in enumerate(tlist):
-                                            if tt.get("task") and tt["task"] != "- Επιλογή Εργασίας -" and tt.get("date") == current_task_date:
-                                                tut = st.session_state.get(f"mat_users_{uk}_{tt.get('uid')}", tt.get("users", []))
-                                                if not tut: tut = [tt.get("user", "- Χωρίς Ανάθεση -")]
-                                                nu = max(len(tut), 1)
-                                                
-                                                q = 1
-                                                try:
-                                                    iid = uk.split("_")[0]
-                                                    if not procurement_df.empty:
-                                                        match = procurement_df[procurement_df["ID"].astype(str) == str(iid)]
-                                                        if not match.empty:
-                                                            q_str = str(match.iloc[0]["Ποσότητα"])
-                                                            if q_str.isdigit(): q = int(q_str)
-                                                except: pass
-                                                
-                                                at = tasks_database.get(tt["task"], 0.0)
-                                                hpu = (at * q / 60) / nu if at else 0
-                                                for uu in tut:
-                                                    if uu and uu != "- Χωρίς Ανάθεση -":
-                                                        temp_assigned[uu] = temp_assigned.get(uu, 0.0) + hpu
-                                    
-                                    for pk, pd in st.session_state.get("project_tasks_store", {}).items():
-                                        if isinstance(pd, dict):
-                                            pn = pk.replace("proj_", "")
-                                            pq = 1
+                        # Mini-Dashboard με τις ώρες (on-the-fly)
+                        with c_user.expander("📊 Δες Διαθεσιμότητα Ομάδας", expanded=False):
+                            current_task_date = st.session_state.get(f"mat_date_{unique_key}_{task_uid}", task_date)
+                            
+                            day_avail_map = get_availability_for_date(current_task_date, availability_database, availability_overrides, team_members_list)
+                            
+                            temp_assigned = {}
+                            
+                            for uk, tlist in st.session_state.get("tasks_store", {}).items():
+                                for ti, tt in enumerate(tlist):
+                                    if tt.get("task") and tt["task"] != "- Επιλογή Εργασίας -" and tt.get("date") == current_task_date:
+                                        tut = st.session_state.get(f"mat_users_{uk}_{tt.get('uid')}", tt.get("users", []))
+                                        if not tut: tut = [tt.get("user", "- Χωρίς Ανάθεση -")]
+                                        nu = max(len(tut), 1)
+                                        
+                                        q = 1
+                                        try:
+                                            iid = uk.split("_")[0]
                                             if not procurement_df.empty:
-                                                pi = procurement_df[procurement_df["Project"] == pn]
-                                                for _, pr in pi.iterrows():
-                                                    if str(pr["Ποσότητα"]).isdigit():
-                                                        pq = max(pq, int(pr["Ποσότητα"]))
-                                            
-                                            for tn, pdata in pd.items():
-                                                if isinstance(pdata, dict) and pdata.get("active", False) and pdata.get("date") == current_task_date:
-                                                    tut_p = st.session_state.get(f"puser_proj_{pk}_{tn}", pdata.get("users", []))
-                                                    if not tut_p: tut_p = [pdata.get("user", "- Χωρίς Ανάθεση -")]
-                                                    nu_p = max(len(tut_p), 1)
-                                                    at_p = tasks_database.get(tn, 0.0)
-                                                    hpu_p = (at_p * pq / 60) / nu_p if at_p else 0
-                                                    for uu in tut_p:
-                                                        if uu and uu != "- Χωρίς Ανάθεση -":
-                                                            temp_assigned[uu] = temp_assigned.get(uu, 0.0) + hpu_p
+                                                match = procurement_df[procurement_df["ID"].astype(str) == str(iid)]
+                                                if not match.empty:
+                                                    q_str = str(match.iloc[0]["Ποσότητα"])
+                                                    if q_str.isdigit(): q = int(q_str)
+                                        except: pass
+                                        
+                                        at = tasks_database.get(tt["task"], 0.0)
+                                        hpu = (at * q / 60) / nu if at else 0
+                                        for uu in tut:
+                                            if uu and uu != "- Χωρίς Ανάθεση -":
+                                                temp_assigned[uu] = temp_assigned.get(uu, 0.0) + hpu
+                            
+                            for pk, pd in st.session_state.get("project_tasks_store", {}).items():
+                                if isinstance(pd, dict):
+                                    pn = pk.replace("proj_", "")
+                                    pq = 1
+                                    if not procurement_df.empty:
+                                        pi = procurement_df[procurement_df["Project"] == pn]
+                                        for _, pr in pi.iterrows():
+                                            if str(pr["Ποσότητα"]).isdigit():
+                                                pq = max(pq, int(pr["Ποσότητα"]))
+                                    
+                                    for tn, pdata in pd.items():
+                                        if isinstance(pdata, dict) and pdata.get("active", False) and pdata.get("date") == current_task_date:
+                                            tut_p = st.session_state.get(f"puser_proj_{pk}_{tn}", pdata.get("users", []))
+                                            if not tut_p: tut_p = [pdata.get("user", "- Χωρίς Ανάθεση -")]
+                                            nu_p = max(len(tut_p), 1)
+                                            at_p = tasks_database.get(tn, 0.0)
+                                            hpu_p = (at_p * pq / 60) / nu_p if at_p else 0
+                                            for uu in tut_p:
+                                                if uu and uu != "- Χωρίς Ανάθεση -":
+                                                    temp_assigned[uu] = temp_assigned.get(uu, 0.0) + hpu_p
 
-                                    for d_opt in display_opts:
-                                        clean_n = disp_to_val.get(d_opt)
-                                        if not clean_n: continue
-                                        
-                                        assigned_h = temp_assigned.get(clean_n, 0.0)
-                                        avail_h = day_avail_map.get(clean_n, 0.0)
-                                        
-                                        if assigned_h > avail_h:
-                                            h_color = "#ff5252"
-                                            h_icon = "🔴"
-                                        elif assigned_h > 0:
-                                            h_color = "#69f0ae"
-                                            h_icon = "🟢"
-                                        else:
-                                            h_color = "#b0bec5"
-                                            h_icon = "⚪"
-                                            
-                                        st.markdown(
-                                            f'<div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">'
-                                            f'<span>{d_opt}</span>'
-                                            f'<span style="color:{h_color}; font-weight:bold;">{h_icon} {assigned_h:.1f}h / {avail_h:.1f}h</span>'
-                                            f'</div>',
-                                            unsafe_allow_html=True
-                                        )                      
+                            for d_opt in display_opts:
+                                clean_n = disp_to_val.get(d_opt)
+                                if not clean_n: continue
+                                
+                                assigned_h = temp_assigned.get(clean_n, 0.0)
+                                avail_h = day_avail_map.get(clean_n, 0.0)
+                                
+                                if assigned_h > avail_h:
+                                    h_color = "#ff5252"
+                                    h_icon = "🔴"
+                                elif assigned_h > 0:
+                                    h_color = "#69f0ae"
+                                    h_icon = "🟢"
+                                else:
+                                    h_color = "#b0bec5"
+                                    h_icon = "⚪"
+                                    
+                                st.markdown(
+                                    f'<div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">'
+                                    f'<span>{d_opt}</span>'
+                                    f'<span style="color:{h_color}; font-weight:bold;">{h_icon} {assigned_h:.1f}h / {avail_h:.1f}h</span>'
+                                    f'</div>',
+                                    unsafe_allow_html=True
+                                )                      
                         
                         with c_user.expander("📊 Δες Διαθεσιμότητα Ομάδας", expanded=False):
                             current_task_date_p = st.session_state.get(f"pdate_proj_{proj_key}_{task_name}", task_date)
