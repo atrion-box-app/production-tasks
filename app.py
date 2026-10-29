@@ -4089,19 +4089,151 @@ def main():
 
     ensure_task_uids()
    
+    # === ΕΠΑΝΑΦΟΡΑ SIDEBAR ===
     with st.sidebar:
-        st.markdown("<div style='font-size:18px;font-weight:600;'>Production Tasks</div>", unsafe_allow_html=True)
+        st.markdown("""
+        <div style="text-align:left;padding:5px 0 10px 0;">
+            <div style="font-size:18px;font-weight:600;color:#fafafa;">Production Tasks</div>
+        </div>
+        """, unsafe_allow_html=True)
         st.markdown(f"👋 Welcome, **{st.session_state.username}**!")
+        
         st.divider()
+        
+        # === Location Filter + Progress bars ===
+        st.markdown("### 📍 Location")
         
         if "_location_filter" not in st.session_state:
             st.session_state["_location_filter"] = LOCATION_ALL
         
         location_options = [LOCATION_ALL, LOCATION_MAIN, LOCATION_WAREHOUSE]
-        location_labels = {LOCATION_ALL: "Όλα", LOCATION_MAIN: "Κεντρικό", LOCATION_WAREHOUSE: "Παράρτημα"}
-        st.session_state["_location_filter"] = st.radio("Location:", location_options, format_func=lambda x: location_labels[x])
+        location_labels = {
+            LOCATION_ALL: "Όλα",
+            LOCATION_MAIN: "Κεντρικό",
+            LOCATION_WAREHOUSE: "Παράρτημα",
+        }
+        
+        team_members_list_for_count = st.session_state.get("team_members_list", [])
+        cnt_all = len([m for m in team_members_list_for_count if m.get("active", True)])
+        cnt_main = len([m for m in team_members_list_for_count if m.get("active", True) and m.get("location", LOCATION_MAIN) == LOCATION_MAIN])
+        cnt_wh = len([m for m in team_members_list_for_count if m.get("active", True) and m.get("location", LOCATION_MAIN) == LOCATION_WAREHOUSE])
+        
+        done_main, total_main, prog_main = compute_location_progress(procurement_df, tasks_database, LOCATION_MAIN)
+        done_wh, total_wh, prog_wh = compute_location_progress(procurement_df, tasks_database, LOCATION_WAREHOUSE)
+        
+        done_all = done_main + done_wh
+        total_all = total_main + total_wh
+        prog_all = int((done_all / total_all) * 100) if total_all > 0 else 0
+        
+        selected_location = st.radio(
+            "Location:",
+            location_options,
+            index=location_options.index(st.session_state["_location_filter"]),
+            format_func=lambda x: f"{location_labels[x]}",
+            key="sidebar_location_filter",
+            label_visibility="collapsed"
+        )
+        st.session_state["_location_filter"] = selected_location
+        
+        def render_sidebar_progress(emoji, label, count, done_t, total_t, progress_pct):
+            if progress_pct == 100:
+                bar_color = "#2e7d32"
+            elif progress_pct > 50:
+                bar_color = "#1e88e5"
+            elif progress_pct > 0:
+                bar_color = "#ff9800"
+            else:
+                bar_color = "#9e9e9e"
+            
+            st.markdown(
+                f'<div style="margin-bottom:8px;">'
+                f'<div style="display:flex;justify-content:space-between;font-size:11px;'
+                f'color:#b0bec5;margin-bottom:3px;">'
+                f'<span>{emoji} {label} ({count})</span>'
+                f'<span style="font-weight:600;color:#ffffff;">{progress_pct}%</span>'
+                f'</div>'
+                f'<div style="background:#37474f;border-radius:4px;height:6px;overflow:hidden;">'
+                f'<div style="width:{progress_pct}%;height:100%;background:{bar_color};"></div>'
+                f'</div>'
+                f'<div style="font-size:10px;color:#90a4ae;margin-top:2px;">'
+                f'{done_t}/{total_t} tasks'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        
+        st.markdown("**📊 Πρόοδος:**")
+        render_sidebar_progress("🏠", "Κεντρικό", cnt_main, done_main, total_main, prog_main)
+        render_sidebar_progress("🏭", "Παράρτημα", cnt_wh, done_wh, total_wh, prog_wh)
+        
+        if selected_location == LOCATION_ALL:
+            st.caption(f"👥 {cnt_all} άτομα · 📊 {prog_all}% σύνολο")
+        elif selected_location == LOCATION_MAIN:
+            st.caption(f"👥 {cnt_main} άτομα · 📊 {prog_main}%")
+        else:
+            st.caption(f"👥 {cnt_wh} άτομα · 📊 {prog_wh}%")
+        
         st.divider()
         
+        if st.session_state.get("_has_unsaved_changes", False):
+            st.warning("⚠️ **Μη αποθηκευμένες αλλαγές!**")
+            if st.button("💾 Αποθήκευση τώρα", key="sidebar_save", type="primary", use_container_width=True):
+                if save_all_assignments_to_sheet():
+                    st.success("✅ Αποθηκεύτηκε!")
+                    st.rerun()
+            st.divider()
+        
+        notifications = check_notifications()
+        if notifications:
+            st.markdown(f"### 🔔 Ειδοποιήσεις ({len(notifications)})")
+            for notif in notifications:
+                st.warning(notif)
+            st.divider()
+
+        # === Partial Tasks Widget ===
+        partial_tasks_sidebar = get_all_partial_tasks()
+        if partial_tasks_sidebar:
+            st.markdown(f"### 🚨 Εκκρεμότητες ({len(partial_tasks_sidebar)})")
+            
+            for pt in partial_tasks_sidebar:
+                done = pt["done_qty"]
+                total = pt["total_qty"]
+                
+                try:
+                    done = int(float(str(done).replace(',', '.'))) if done != "" else 0
+                except:
+                    done = 0
+                try:
+                    total = int(float(str(total).replace(',', '.'))) if total != "" else 0
+                except:
+                    total = 0
+                
+                pct = int((done / total) * 100) if total > 0 else 0
+                
+                st.markdown(
+                    f'<div style="background:#37474f;border-left:3px solid #ff9800;'
+                    f'padding:6px 10px;border-radius:5px;margin-bottom:5px;font-size:11px;">'
+                    f'<div style="font-weight:700;color:#ffffff !important;font-size:11px;">'
+                    f'⏳ {pt["task_name"][:25]}{"..." if len(pt["task_name"]) > 25 else ""}'
+                    f'</div>'
+                    f'<div style="color:#b0bec5 !important;font-size:10px;margin-top:2px;">'
+                    f'📁 {pt["project"][:20]}{"..." if len(pt["project"]) > 20 else ""}'
+                    f'</div>'
+                    f'<div style="color:#ffffff !important;font-size:10px;margin-top:2px;font-weight:600;">'
+                    f'{done}/{total} ({pct}%)'
+                    f'</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+            
+            if st.button("Δες όλα", key="see_all_partial", use_container_width=True):
+                st.session_state.page = "🚨 Εκκρεμότητες"
+                st.session_state["sidebar_page_radio"] = "🚨 Εκκρεμότητες"
+                st.rerun()
+            
+            st.divider()
+        
+        st.markdown("### 📋 Navigation")
         pages_list = [
             "📦 Projects", "📦 Παραλαβές", "📋 Master View", "🗓️ Daily Plan",
             "👤 Technician", "📆 Projection", "📝 Daily Report", "📆 Team Calendar",
@@ -4109,17 +4241,74 @@ def main():
         ]
         
         current_page = st.session_state.get("page", "📦 Projects")
-        page_index = pages_list.index(current_page) if current_page in pages_list else 0
-        page = st.radio("Navigation", pages_list, index=page_index, label_visibility="collapsed")
+        if current_page not in pages_list:
+            current_page = "📦 Projects"
+        page_index = pages_list.index(current_page)
+
+        page = st.radio(
+            "Select Page", 
+            pages_list, 
+            index=page_index,
+            label_visibility="collapsed", 
+            key="sidebar_page_radio"
+        )
         
         if page != st.session_state.page:
             st.session_state.page = page
             st.rerun()
 
         st.divider()
+        
+        total_tasks = 0
+        if not procurement_df.empty:
+            valid_u_keys = set()
+            for idx, row in procurement_df.iterrows():
+                item_id = str(row["ID"])
+                valid_u_keys.add(f"{item_id}_{idx}")
+            
+            for u_key, task_list in st.session_state.get("tasks_store", {}).items():
+                if u_key not in valid_u_keys:
+                    continue
+                for t in task_list:
+                    if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
+                        total_tasks += 1
+        
+        if not procurement_df.empty:
+            valid_projects = set(str(p) for p in procurement_df["Project"].unique() if p != "-")
+            for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
+                if isinstance(p_dict, dict):
+                    proj_name = p_key.replace("proj_", "")
+                    if proj_name not in valid_projects:
+                        continue
+                    for t_name, p_data in p_dict.items():
+                        if isinstance(p_data, dict) and p_data.get("active", False):
+                            total_tasks += 1
+        
+        st.metric("Total Tasks", total_tasks)
+        
+        active_count = 0
+        if not procurement_df.empty:
+            for p_name in procurement_df["Project"].unique():
+                if p_name != "-":
+                    proj_data = get_project_details(p_name, procurement_df, tasks_database, incoming_df)
+                    if proj_data['is_active']:
+                        active_count += 1
+        st.metric("Active Projects", active_count)
+        
+        st.divider()
+        
+        if "last_save" in st.session_state:
+            seconds_ago = int((datetime.now() - st.session_state.last_save).seconds)
+            if seconds_ago < 60:
+                st.caption(f"Αποθηκεύτηκε πριν {seconds_ago}δ")
+            else:
+                minutes_ago = seconds_ago // 60
+                st.caption(f"Αποθηκεύτηκε πριν {minutes_ago}λ")
+        
         if st.button("Logout", use_container_width=True):
             logout()
 
+    # === Page Routing ===
     page = st.session_state.page
     if page == "📦 Projects":
         render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df)
@@ -4147,6 +4336,7 @@ def main():
         render_database(tasks_database, team_database, availability_database)
     elif page == "⚙️ Settings":
         render_settings()
+
 
 if __name__ == "__main__":
     main()
