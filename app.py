@@ -2584,6 +2584,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
     tot_tasks_count = 0
     tot_done_tasks = 0
     projects_details_cache = {}
+
+    try:    
     
     for p_name in projects_to_show:
         filtered_p = procurement_df[procurement_df["Project"] == p_name]
@@ -2645,6 +2647,11 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
             "Shipping Date": proj_details.get("shipping_date", ""),
             "Κατάσταση": "OK Shipped" if is_shipped else "ΕΝΕΡΓΟ"
         })
+
+    except Exception as e:
+        st.error(f"DEBUG ERROR: {e}")
+        import traceback
+        st.error(traceback.format_exc())
 
     st.markdown(f"### {section_title}")
     st.caption(f"Εμφανίζονται **{len(projects_to_show)}** projects")
