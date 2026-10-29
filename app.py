@@ -2496,7 +2496,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         })
 
     # === ΟΡΙΣΤΙΚΗ ΔΙΟΡΘΩΣΗ ===
-    dash_df = pd.DataFrame(locals().get('dashboard_data', []))
+    import pandas as pandas_lib
+    dash_df = pandas_lib.DataFrame(locals().get('dashboard_data', []))
     # ==========================
 
     st.markdown(f"### {section_title}")
