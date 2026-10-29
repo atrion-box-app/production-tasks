@@ -832,7 +832,13 @@ def load_assignments_from_sheet():
         
         for r in records:
             p_name = clean_project_name(strip_all_fields(r.get("Project", "")))
-            item_id = strip_all_fields(str(r.get("Item_ID", "")))
+            
+            # === ΔΙΟΡΘΩΣΗ: Μετατροπή του Item_ID σε καθαρό ακέραιο ===
+            raw_id = str(r.get("Item_ID", "")).strip()
+            if raw_id.endswith(".0"):
+                raw_id = raw_id[:-2] # Αφαιρεί το .0
+            item_id = str(raw_id)
+            # =======================================================
             task_name = strip_all_fields(str(r.get("Task_Name", "")))
             user_raw = strip_all_fields(str(r.get("Assigned_User", "- Χωρίς Ανάθεση -")))
             
