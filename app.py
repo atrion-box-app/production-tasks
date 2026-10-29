@@ -1906,6 +1906,13 @@ def get_project_details(project_name, procurement_df, tasks_database, incoming_d
 def render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df):
     st.header("Projects")
 
+    # Αρχικοποίηση για να αποφύγουμε το UnboundLocalError
+    dashboard_data = []
+    projects_details_cache = {}
+    tot_all_hours = 0.0
+    tot_tasks_count = 0
+    tot_done_tasks = 0
+
     team_members_list = st.session_state.get("team_members_list", [])
     availability_overrides = st.session_state.get("availability_overrides", [])
     current_location = st.session_state.get("_location_filter", LOCATION_ALL)
@@ -2571,12 +2578,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
             if proj_data['is_active']:
                 projects_to_show.append(p_name)
         section_title = "Ενεργά Projects"
-    
-    dashboard_data = []
-    tot_all_hours = 0.0
-    tot_tasks_count = 0
-    tot_done_tasks = 0
-    projects_details_cache = {}
 
     try:
         for p_name in projects_to_show:
@@ -2835,14 +2836,11 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         st.divider()
         col_exp1, col_exp2 = st.columns(2)
         
-        # Διόρθωση: Αν το dashboard_data είναι κενό, το γεμίζουμε για να μην σκάσει το πρόγραμμα
-        if 'dashboard_data' not in locals() or not dashboard_data:
-            dashboard_data = []
-            
-        # ΠΡΟΣΤΑΣΙΑ: Αν για οποιονδήποτε λόγο το dashboard_data δεν έχει οριστεί,
-        # το δημιουργούμε τώρα για να μην σκάσει το πρόγραμμα.
+        # Αν για οποιονδήποτε λόγο το dashboard_data δεν έχει οριστεί, δημιουργούμε κενή λίστα
         if 'dashboard_data' not in locals():
             dashboard_data = []
+            
+        dash_df = pd.DataFrame(dashboard_data)
             
         dash_df = pd.DataFrame(dashboard_data)
         with col_exp1:
