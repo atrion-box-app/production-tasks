@@ -2834,6 +2834,11 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         
         st.divider()
         col_exp1, col_exp2 = st.columns(2)
+        
+        # Διόρθωση: Αν το dashboard_data είναι κενό, το γεμίζουμε για να μην σκάσει το πρόγραμμα
+        if 'dashboard_data' not in locals() or not dashboard_data:
+            dashboard_data = []
+            
         dash_df = pd.DataFrame(dashboard_data)
         with col_exp1:
             csv = dash_df.to_csv(index=False).encode('utf-8-sig')
