@@ -1906,6 +1906,13 @@ def get_project_details(project_name, procurement_df, tasks_database, incoming_d
 def render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df):
     st.header("Projects")
 
+    # Αρχικοποίηση για να αποφύγουμε το UnboundLocalError
+    dashboard_data = []
+    projects_details_cache = {}
+    tot_all_hours = 0.0
+    tot_tasks_count = 0
+    tot_done_tasks = 0
+
     team_members_list = st.session_state.get("team_members_list", [])
     availability_overrides = st.session_state.get("availability_overrides", [])
     current_location = st.session_state.get("_location_filter", LOCATION_ALL)
