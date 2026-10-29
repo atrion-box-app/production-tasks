@@ -1906,7 +1906,7 @@ def get_project_details(project_name, procurement_df, tasks_database, incoming_d
 def render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df):
     st.header("Projects")
 
-    # Αρχικοποίηση για να αποφύγουμε το UnboundLocalError
+    # === ΔΙΟΡΘΩΣΗ: Αρχικοποίηση μεταβλητών πριν από οποιαδήποτε λογική ===
     dashboard_data = []
     projects_details_cache = {}
     tot_all_hours = 0.0
@@ -1935,7 +1935,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
     if "selected_material_expand" not in st.session_state:
         st.session_state.selected_material_expand = None
 
-    
+    # === Εδώ ξεκινάει το drill-down ===
     if st.session_state.selected_project_drill is not None:
         selected_project = st.session_state.selected_project_drill
         
