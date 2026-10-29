@@ -2839,6 +2839,11 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         if 'dashboard_data' not in locals() or not dashboard_data:
             dashboard_data = []
             
+        # ΠΡΟΣΤΑΣΙΑ: Αν για οποιονδήποτε λόγο το dashboard_data δεν έχει οριστεί,
+        # το δημιουργούμε τώρα για να μην σκάσει το πρόγραμμα.
+        if 'dashboard_data' not in locals():
+            dashboard_data = []
+            
         dash_df = pd.DataFrame(dashboard_data)
         with col_exp1:
             csv = dash_df.to_csv(index=False).encode('utf-8-sig')
