@@ -2352,164 +2352,71 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                 projects_to_show.append(p_name)
         section_title = "Ενεργά Projects"
 
-    try:
-        for p_name in projects_to_show:
-            filtered_p = procurement_df[procurement_df["Project"] == p_name]
-            p_main_qty = 1
-            for _, r in filtered_p.iterrows():
-                if str(r["Ποσότητα"]).isdigit():
-                    p_main_qty = max(p_main_qty, int(r["Ποσότητα"]))
+    # === ΥΠΟΛΟΓΙΣΜΟΣ ΔΕΔΟΜΕΝΩΝ ΓΙΑ DASHBOARD ===
+    dashboard_data = []
+    for p_name in projects_to_show:
+        filtered_p = procurement_df[procurement_df["Project"] == p_name]
+        p_main_qty = 1
+        for _, r in filtered_p.iterrows():
+            if str(r["Ποσότητα"]).isdigit():
+                p_main_qty = max(p_main_qty, int(r["Ποσότητα"]))
 
-            p_total_hrs = 0.0
-            p_done_hrs = 0.0
-            p_tasks_cnt = 0
-            p_done_cnt = 0
-            
-            for idx, r in filtered_p.iterrows():
-                item_id = str(r["ID"])
-                u_key = f"{item_id}_{idx}"
-                qty = int(r["Ποσότητα"]) if str(r["Ποσότητα"]).isdigit() else 1
-                item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
-                for t in item_tasks:
-                    if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
-                        auto_t = tasks_database.get(t["task"], 0.0)
-                        hrs = (auto_t * qty) / 60
-                        p_total_hrs += hrs
-                        p_tasks_cnt += 1
-                        if t.get("done", False):
-                            p_done_hrs += hrs
-                            p_done_cnt += 1
-
-            p_key = f"proj_{p_name}"
-            p_tasks_dict = st.session_state.get("project_tasks_store", {}).get(p_key, {})
-            if isinstance(p_tasks_dict, dict):
-                for t_name, p_data in p_tasks_dict.items():
-                    if isinstance(p_data, dict) and p_data.get("active", False):
-                        auto_t = tasks_database.get(t_name, 0.0)
-                        hrs = (auto_t * p_main_qty) / 60
-                        p_total_hrs += hrs
-                        p_tasks_cnt += 1
-                        if p_data.get("done", False):
-                            p_done_hrs += hrs
-                            p_done_cnt += 1
-
-            tot_all_hours += p_total_hrs
-            tot_tasks_count += p_tasks_cnt
-            tot_done_tasks += p_done_cnt
-            p_progress = int((p_done_cnt / p_tasks_cnt) * 100) if p_tasks_cnt > 0 else 0
-            
-            proj_details = get_project_details(p_name, procurement_df, tasks_database, incoming_df)
-            projects_details_cache[p_name] = proj_details
-            is_shipped = proj_details.get('is_shipped', False)
-            
-            dashboard_data.append({
-                "Project": p_name,
-                "Υλικά": len(filtered_p),
-                "Σύνολο Tasks": p_tasks_cnt,
-                "Ολοκληρωμένα": p_done_cnt,
-                "Συνολικές Ώρες": round(p_total_hrs, 1),
-                "Υπολειπόμενες": round(p_total_hrs - p_done_hrs, 1),
-                "Πρόοδος": f"{p_progress}%",
-                "Shipping Date": proj_details.get("shipping_date", ""),
-                "Κατάσταση": "OK Shipped" if is_shipped else "ΕΝΕΡΓΟ"
-            })
-    except Exception as e:
-        st.error(f"DEBUG ERROR: {e}")
-
-    st.markdown(f"### {section_title}")
-    st.caption(f"Εμφανίζονται **{len(projects_to_show)}** projects")
-    
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Projects" if show_all else "Ενεργά", len(projects_to_show))
-    c2.metric("Συνολικές Ώρες", f"{round(tot_all_hours, 1)}h")
-    overall_pct = int((tot_done_tasks / tot_tasks_count) * 100) if tot_tasks_count > 0 else 0
-    c3.metric("Συνολική Πρόοδος", f"{overall_pct}%")
-    c4.metric("Εκκρεμή Tasks", tot_tasks_count - tot_done_tasks)
-
-    st.divider()
-    all_dates_dashboard = set()
-    for p_name_chk in projects_to_show:
-        filtered_p_chk = procurement_df[procurement_df["Project"] == p_name_chk]
-        for idx_chk, r_chk in filtered_p_chk.iterrows():
-            u_key_chk = f"{str(r_chk['ID'])}_{idx_chk}"
-            for t_chk in st.session_state.get("tasks_store", {}).get(u_key_chk, []):
-                if t_chk.get("task") and t_chk["task"] != "- Επιλογή Εργασίας -" and t_chk.get("date"):
-                    all_dates_dashboard.add(t_chk["date"])
-        proj_key_chk = f"proj_{p_name_chk}"
-        for t_name_chk, p_data_chk in st.session_state.get("project_tasks_store", {}).get(proj_key_chk, {}).items():
-            if isinstance(p_data_chk, dict) and p_data_chk.get("active", False) and p_data_chk.get("date"):
-                all_dates_dashboard.add(p_data_chk["date"])
-    render_overload_warnings(all_dates_dashboard, availability_database)
-    
-    st.subheader(section_title)
-    st.caption("Πάτησε σε μια κάρτα για να δεις τις λεπτομέρειες")
-    
-    if not projects_to_show:
-        st.info("Δεν βρέθηκαν projects.")
-    else:
-        st.markdown("""
-        <style>
-            .compact-card { background: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
-            .compact-card.active { border-left: 3px solid #2e7d32; }
-            .compact-card.shipped { border-left: 3px solid #c62828; opacity: 0.7; }
-            .compact-title { font-size: 12px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; min-height: 30px; }
-            .compact-status { font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 8px; display: inline-block; margin-bottom: 6px; }
-            .compact-progress-bg { background: #e0e0e0; border-radius: 4px; height: 5px; overflow: hidden; margin: 6px 0; }
-            .compact-progress-fill { height: 100%; border-radius: 4px; }
-            .compact-meta { font-size: 10px; color: #666; margin-top: 4px; display: flex; justify-content: space-between; }
-        </style>
-        """, unsafe_allow_html=True)
+        p_total_hrs = 0.0
+        p_done_hrs = 0.0
+        p_tasks_cnt = 0
+        p_done_cnt = 0
         
-        num_cols = 5
-        for i in range(0, len(projects_to_show), num_cols):
-            cols = st.columns(num_cols)
-            batch = projects_to_show[i:i+num_cols]
-            for j, p_name in enumerate(batch):
-                proj_data = projects_details_cache[p_name]
-                with cols[j]:
-                    is_shipped = proj_data.get('is_shipped', False)
-                    card_class = "compact-card shipped" if is_shipped else "compact-card active"
-                    status_html = '<span class="compact-status" style="background:#ffebee;color:#c62828;">SHIPPED</span>' if is_shipped else '<span class="compact-status" style="background:#e8f5e9;color:#2e7d32;">ΕΝΕΡΓΟ</span>'
-                    
-                    progress = proj_data['progress']
-                    bar_color = "#2e7d32" if progress == 100 else ("#1e88e5" if progress > 50 else ("#ff9800" if progress > 0 else "#9e9e9e"))
-                    
-                    total_h = proj_data['total_hours']
-                    materials = proj_data['materials_count']
-                    done_tasks = proj_data['completed_tasks']
-                    total_tasks = proj_data['total_tasks']
-                    display_name = p_name[:22] + "..." if len(p_name) > 22 else p_name
-                    
-                    shipping_date_html = f'<div style="font-size:9px;color:#c62828;margin-top:3px;">📦 {proj_data["shipping_date"]}</div>' if proj_data.get("shipping_date") else ""
-                    
-                    card_html = (
-                        f'<div class="{card_class}">'
-                        f'<div class="compact-title">{display_name}</div>'
-                        f'{status_html}'
-                        f'{shipping_date_html}'
-                        f'<div class="compact-progress-bg">'
-                        f'<div class="compact-progress-fill" style="width:{progress}%;background:{bar_color};"></div>'
-                        f'</div>'
-                        f'<div style="text-align:center;font-size:11px;font-weight:600;color:#333;">{progress}%</div>'
-                        f'<div class="compact-meta">'
-                        f'<span>{total_h}h</span>'
-                        f'<span>{materials} υλικά</span>'
-                        f'<span>{done_tasks}/{total_tasks}</span>'
-                        f'</div>'
-                        f'</div>'
-                    )
-                    st.markdown(card_html, unsafe_allow_html=True)
-                    
-                    if st.button("Άνοιγμα", key=f"drill_{p_name}", use_container_width=True):
-                        st.session_state.selected_project_drill = p_name
-                        st.session_state.selected_material_expand = None
-                        st.rerun()
+        for idx, r in filtered_p.iterrows():
+            item_id = str(r["ID"])
+            u_key = f"{item_id}_{idx}"
+            qty = int(r["Ποσότητα"]) if str(r["Ποσότητα"]).isdigit() else 1
+            item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
+            for t in item_tasks:
+                if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
+                    auto_t = tasks_database.get(t["task"], 0.0)
+                    hrs = (auto_t * qty) / 60
+                    p_total_hrs += hrs
+                    p_tasks_cnt += 1
+                    if t.get("done", False):
+                        p_done_hrs += hrs
+                        p_done_cnt += 1
+
+        p_key = f"proj_{p_name}"
+        p_tasks_dict = st.session_state.get("project_tasks_store", {}).get(p_key, {})
+        if isinstance(p_tasks_dict, dict):
+            for t_name, p_data in p_tasks_dict.items():
+                if isinstance(p_data, dict) and p_data.get("active", False):
+                    auto_t = tasks_database.get(t_name, 0.0)
+                    hrs = (auto_t * p_main_qty) / 60
+                    p_total_hrs += hrs
+                    p_tasks_cnt += 1
+                    if p_data.get("done", False):
+                        p_done_hrs += hrs
+                        p_done_cnt += 1
+
+        tot_all_hours += p_total_hrs
+        tot_tasks_count += p_tasks_cnt
+        tot_done_tasks += p_done_cnt
+        p_progress = int((p_done_cnt / p_tasks_cnt) * 100) if p_tasks_cnt > 0 else 0
         
-        st.divider()
-        col_exp1, col_exp2 = st.columns(2)
+        proj_details = get_project_details(p_name, procurement_df, tasks_database, incoming_df)
+        projects_details_cache[p_name] = proj_details
+        is_shipped = proj_details.get('is_shipped', False)
         
-        # ΑΣΦΑΛΗΣ ΜΕΤΑΤΡΟΠΗ ΣΕ DATAFRAME ΓΙΑ ΕΞΑΓΩΓΗ
-        dash_df = pd.DataFrame(dashboard_data if dashboard_data else [])
+        dashboard_data.append({
+            "Project": p_name,
+            "Υλικά": len(filtered_p),
+            "Σύνολο Tasks": p_tasks_cnt,
+            "Ολοκληρωμένα": p_done_cnt,
+            "Συνολικές Ώρες": round(p_total_hrs, 1),
+            "Υπολειπόμενες": round(p_total_hrs - p_done_hrs, 1),
+            "Πρόοδος": f"{p_progress}%",
+            "Shipping Date": proj_details.get("shipping_date", ""),
+            "Κατάσταση": "OK Shipped" if is_shipped else "ΕΝΕΡΓΟ"
+        })
+    # === ΤΕΛΟΣ ΥΠΟΛΟΓΙΣΜΟΥ ===
+
+    dash_df = pd.DataFrame(dashboard_data) if dashboard_data else pd.DataFrame()
         
         with col_exp1:
             csv = dash_df.to_csv(index=False).encode('utf-8-sig')
