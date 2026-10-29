@@ -2279,7 +2279,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                 projects_to_show.append(p_name)
         section_title = "Ενεργά Projects"
 
-    try:
     # --- Υπολογισμός δεδομένων για το dashboard ---
     for p_name in projects_to_show:
         filtered_p = procurement_df[procurement_df["Project"] == p_name]
@@ -2343,10 +2342,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         })
 
     # === ΔΗΜΙΟΥΡΓΙΑ DATAFRAME ΓΙΑ ΕΞΑΓΩΓΗ ===
-    # Εδώ βάζουμε την ασφάλεια για να μην ξανασκάσει ποτέ
     dash_df = pd.DataFrame(dashboard_data) if dashboard_data else pd.DataFrame()
-    except Exception as e:
-        st.error(f"DEBUG ERROR: {e}")
+
 
     st.markdown(f"### {section_title}")
     st.caption(f"Εμφανίζονται **{len(projects_to_show)}** projects")
