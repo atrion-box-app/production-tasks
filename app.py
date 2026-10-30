@@ -5807,22 +5807,35 @@ def main():
         
         new_store = {}
         for idx, row in procurement_df.iterrows():
-            item_id = str(row["ID"])
+            item_id = str(row["ID"]).strip()
             u_key = f"{item_id}_{idx}"
             if u_key in new_store:
                 continue
             
-            # === ΔΙΟΡΘΩΣΗ: Ψάχνουμε το item_id σε ΟΛΟ το sheet_item_assignments ===
-            # Το sheet_item_assignments έχει κλειδιά όπως "103074", όχι "103074_5"
-            if item_id in sheet_item_assignments and len(sheet_item_assignments[item_id]) > 0:
-                new_store[u_key] = sheet_item_assignments[item_id]
-            elif item_id in item_to_tasks and len(item_to_tasks[item_id]) > 0:
-                new_store[u_key] = item_to_tasks[item_id]
-            else:
-                new_store[u_key] = []
-            # =====================================================================
-        
-        st.session_state["tasks_store"] = new_store
+            # === ΔΙΟΡΘΩΣΗ: Καθαρίζουμε τα κλειδιά από τυχόν .0 και κενά ===
+            found_tasks = []
+            
+            # Ψάχνουμε στο sheet_item_assignments
+            for assign_key, assign_tasks in sheet_item_assignments.items():
+                clean_assign_key = str(assign_key).strip()
+                if clean_assign_key.endswith(".0"):
+                    clean_assign_key = clean_assign_key[:-2]
+                if clean_assign_key == item_id:
+                    found_tasks = assign_tasks
+                    break
+            
+            # Αν δεν βρέθηκε, ψάχνουμε στο item_to_tasks
+            if not found_tasks:
+                for task_key, task_list in item_to_tasks.items():
+                    clean_task_key = str(task_key).strip()
+                    if clean_task_key.endswith(".0"):
+                        clean_task_key = clean_task_key[:-2]
+                    if clean_task_key == item_id:
+                        found_tasks = task_list
+                        break
+            
+            new_store[u_key] = found_tasks
+            # ============================================================
         
         st.session_state["tasks_store"] = new_store
     
