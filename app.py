@@ -4705,6 +4705,8 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
 # --- RENDER SETTINGS ---
 def render_settings():
     st.header("Ρυθμίσεις")
+    render_orphan_relink()
+    st.divider()
     st.subheader("Ασφάλεια")
     st.info("Οι ρυθμίσεις ασφαλείας διαχειρίζονται μέσω των Streamlit Secrets")
     st.markdown("**Users:** admin/admin123, manager/manager123, operator/operator123, maria@atrionartgifts.com/atrionmaria")
@@ -5906,6 +5908,82 @@ def sync_session_stores(procurement_df, sheet_item_assignments, sheet_proj_assig
         st.session_state["tasks_store"] = new_store
         if "project_tasks_store" not in st.session_state:
             st.session_state["project_tasks_store"] = sheet_proj_assignments
+
+def render_orphan_relink():
+    st.subheader("🔗 Σύνδεση orphan tasks με υλικά")
+    st.caption("Tasks που ανατέθηκαν σε υλικό με παλιό ID. Διάλεξε το σωστό υλικό και πάτα Σύνδεση. Μετά πάτα Αποθήκευση.")
+
+    proc = st.session_state.get("procurement_df", pd.DataFrame())
+    src = st.session_state.get("_sheet_item_assignments", {})
+    if proc is None or proc.empty:
+        return
+
+    valid_ids = {normalize_item_id(x) for x in proc["ID"]}
+    relinked = st.session_state.setdefault("_relinked_rows", set())
+    member_names = [m.get("name", "") for m in st.session_state.get("team_members_list", [])]
+
+    pending = []
+    for old_id, tasks in src.items():
+        if normalize_item_id(old_id) in valid_ids:
+            continue
+        for t in tasks:
+            if t.get("material"):
+                continue
+            sig = (_norm_txt(t.get("project", "")), normalize_item_id(old_id),
+                   _norm_txt(t.get("task", "")), str(t.get("date")))
+            if sig in relinked:
+                continue
+            pending.append((old_id, t, sig))
+
+    if not pending:
+        st.success("Δεν υπάρχουν orphan tasks προς σύνδεση.")
+        return
+
+    st.info(f"{len(pending)} tasks περιμένουν σύνδεση.")
+
+    for i, (old_id, t, sig) in enumerate(pending):
+        proj = t.get("project", "")
+        sub = proc[proc["Project"].apply(lambda p: _norm_txt(p) == _norm_txt(proj))]
+        with st.container(border=True):
+            st.markdown(
+                f"**{proj}** · {t.get('task')} · 👤 {', '.join(t.get('users', [])) or '-'} · "
+                f"📅 {t.get('date')} · Total_Qty: **{t.get('total_qty', '')}** · παλιό ID: `{old_id}`"
+            )
+            if sub.empty:
+                st.warning("Δεν βρέθηκαν υλικά για αυτό το project στο procurement.")
+                continue
+            options = {}
+            for idx, r in sub.iterrows():
+                label = f"{r['ID']} | {str(r['Υλικό / Προϊόν'])[:60]} | {r['Ποσότητα']} τμχ"
+                options[label] = f"{r['ID']}_{idx}"
+            c1, c2 = st.columns([4, 1])
+            choice = c1.selectbox("Υλικό:", ["- Επιλογή -"] + list(options.keys()),
+                                  key=f"orph_sel_{i}_{old_id}_{t.get('task')}", label_visibility="collapsed")
+            if c2.button("Σύνδεση", key=f"orph_btn_{i}_{old_id}_{t.get('task')}", use_container_width=True):
+                if choice == "- Επιλογή -":
+                    st.warning("Διάλεξε υλικό.")
+                else:
+                    key = options[choice]
+                    new_t = dict(t)
+                    users = []
+                    for u in t.get("users", []):
+                        cu = clean_assigned_user(u, member_names)
+                        if cu and cu not in users:
+                            users.append(cu)
+                    new_t["users"] = users
+                    new_t["user"] = users[0] if users else "- Χωρίς Ανάθεση -"
+                    done_q = _to_int(t.get("done_qty"), 0)
+                    total_q = _to_int(t.get("total_qty"), 0)
+                    new_t["done_qty"] = done_q
+                    new_t["total_qty"] = total_q
+                    new_t["is_partial"] = 0 < done_q < total_q
+                    new_t["partial_reason"] = str(t.get("partial_reason", "") or "")
+                    new_t["progress_logs"] = t.get("progress_logs") or []
+                    new_t["uid"] = f"task_{datetime.now().timestamp()}"
+                    st.session_state["tasks_store"].setdefault(key, []).append(new_t)
+                    relinked.add(sig)
+                    mark_unsaved_changes()
+                    st.rerun()
             
 # --- MAIN ---
 def main():
@@ -5927,6 +6005,7 @@ def main():
     st.session_state.availability_overrides = availability_overrides
     
     sheet_item_assignments, sheet_proj_assignments = load_assignments_from_sheet()
+    st.session_state["_sheet_item_assignments"] = sheet_item_assignments
     sync_session_stores(
         procurement_df, sheet_item_assignments, sheet_proj_assignments,
         team_database, version
