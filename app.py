@@ -5811,10 +5811,18 @@ def main():
             u_key = f"{item_id}_{idx}"
             if u_key in new_store:
                 continue
-            if item_id in item_to_tasks and len(item_to_tasks[item_id]) > 0:
+            
+            # === ΔΙΟΡΘΩΣΗ: Ψάχνουμε το item_id σε ΟΛΟ το sheet_item_assignments ===
+            # Το sheet_item_assignments έχει κλειδιά όπως "103074", όχι "103074_5"
+            if item_id in sheet_item_assignments and len(sheet_item_assignments[item_id]) > 0:
+                new_store[u_key] = sheet_item_assignments[item_id]
+            elif item_id in item_to_tasks and len(item_to_tasks[item_id]) > 0:
                 new_store[u_key] = item_to_tasks[item_id]
             else:
-                new_store[u_key] = sheet_item_assignments.get(item_id, [])
+                new_store[u_key] = []
+            # =====================================================================
+        
+        st.session_state["tasks_store"] = new_store
         
         st.session_state["tasks_store"] = new_store
     
