@@ -930,6 +930,8 @@ def load_assignments_from_sheet():
                 if not is_duplicate:
                     assignments_item[item_id].append({
                         "uid": f"task_{item_id}_{task_name}_{assign_date_str}_{int(time.time() * 1000) % 1000000}",
+                        "material": strip_all_fields(str(r.get("Material", ""))),
+                        "project": p_name,
                         "done": done,
                         "task": task_name,
                         "user": users_list[0] if users_list else "- Χωρίς Ανάθεση -",
@@ -1028,7 +1030,7 @@ def save_all_assignments_to_sheet():
 
         sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
         rows = [["Project", "Item_ID", "Task_Name", "Assigned_User", "Assigned_Date", "Status_Done", "Task_Type",
-                 "Done_Qty", "Total_Qty", "Partial_Reason"]]
+                 "Done_Qty", "Total_Qty", "Partial_Reason", "Material"]]
 
         item_to_project = {}
         if 'procurement_df' in st.session_state and st.session_state.procurement_df is not None:
@@ -1038,6 +1040,14 @@ def save_all_assignments_to_sheet():
         for u_key, t_list in st.session_state.get("tasks_store", {}).items():
             item_id = strip_all_fields(u_key.split("_")[0])
             proj_name = strip_all_fields(item_to_project.get(item_id, "-"))
+            mat_name = ""
+            try:
+                _ix = int(u_key.rsplit("_", 1)[1])
+                _r = st.session_state.procurement_df.loc[_ix]
+                mat_name = strip_all_fields(str(_r["Υλικό / Προϊόν"]))
+                proj_name = strip_all_fields(str(_r["Project"]))
+            except Exception:
+                pass            
             for t in t_list:
                 if t.get("task") and t.get("task") != "- Επιλογή Εργασίας -":
                     task_users = t.get("users", [])
@@ -1058,7 +1068,7 @@ def save_all_assignments_to_sheet():
                     rows.append([
                         proj_name, item_id, strip_all_fields(t.get("task")), 
                         users_str, str(t.get("date")), str(t.get("done")), "ITEM",
-                        partial_done, partial_total, partial_reason
+                        partial_done, partial_total, partial_reason, mat_name
                     ])
                     
         for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
@@ -1085,9 +1095,33 @@ def save_all_assignments_to_sheet():
                         rows.append([
                             proj_name, "-", strip_all_fields(t_name), 
                             users_str, str(p_data.get("date")), str(p_data.get("done")), "PROJECT",
-                            done_q, total_q, p_reason
+                            done_q, total_q, p_reason, ""
                         ])
 
+        # --- ΔΙΑΤΗΡΗΣΗ ORPHAN ITEM ROWS ---
+        try:
+            existing_vals = sheet.get_all_values()
+            valid_ids_now = {
+                normalize_item_id(r["ID"])
+                for _, r in st.session_state.procurement_df.iterrows()
+            }
+            relinked = st.session_state.get("_relinked_rows", set())
+            for er in existing_vals[1:]:
+                if len(er) < 7 or not any(str(c).strip() for c in er):
+                    continue
+                if strip_all_fields(str(er[6])).upper() == "PROJECT":
+                    continue
+                if normalize_item_id(strip_all_fields(str(er[1]))) in valid_ids_now:
+                    continue
+                sig = (_norm_txt(er[0]), normalize_item_id(er[1]), _norm_txt(er[2]), str(er[4]))
+                if sig in relinked:
+                    continue
+                rows.append(list(er) + [""] * (11 - len(er)))
+        except Exception as e:
+            st.error(f"Η αποθήκευση ακυρώθηκε, δεν διαβάστηκε το sheet για έλεγχο orphans: {e}")
+            return False
+        # ----------------------------------        
+        
         seen = set()
         deduped_rows = [rows[0]]
         for r in rows[1:]:
@@ -5773,17 +5807,25 @@ def clean_assigned_user(raw_name, known_names):
     base = re.sub(r"\s*\([^)]*\)\s*$", "", name).strip()
     return base if base else name
 
+def _norm_txt(x):
+    return strip_all_fields(str(x)).upper()
+
 def sync_session_stores(procurement_df, sheet_item_assignments, sheet_proj_assignments, team_names, version):
     keys_all = []
     latest_key = {}
     qty_by_key = {}
+    mat_index = {}   # (PROJECT, MATERIAL) -> [keys]
+    id_by_key = {}
     if procurement_df is not None and not procurement_df.empty:
         for idx, row in procurement_df.iterrows():
             raw_id = str(row["ID"])
             key = f"{raw_id}_{idx}"
             keys_all.append(key)
-            latest_key[normalize_item_id(raw_id)] = key  # το τελευταίο idx, όπως κάνει και το save
+            id_by_key[key] = normalize_item_id(raw_id)
+            latest_key[normalize_item_id(raw_id)] = key
             qty_by_key[key] = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+            mk = (_norm_txt(row["Project"]), _norm_txt(row["Υλικό / Προϊόν"]))
+            mat_index.setdefault(mk, []).append(key)
 
     needs_rebuild = (
         "tasks_store" not in st.session_state
@@ -5792,12 +5834,27 @@ def sync_session_stores(procurement_df, sheet_item_assignments, sheet_proj_assig
 
     if needs_rebuild:
         new_store = {k: [] for k in keys_all}
+        relinked = set()
+        n = 0
         for item_id, tasks in sheet_item_assignments.items():
-            key = latest_key.get(normalize_item_id(item_id))
-            if key is None:
-                continue
-            for n, t in enumerate(tasks):
+            old_id = normalize_item_id(item_id)
+            for t in tasks:
                 t = dict(t)
+                key = None
+                mat = t.get("material", "")
+                proj = t.get("project", "")
+                if mat and proj:
+                    cands = mat_index.get((_norm_txt(proj), _norm_txt(mat)), [])
+                    if cands:
+                        same_id = [c for c in cands if id_by_key.get(c) == old_id]
+                        key = same_id[0] if same_id else cands[0]
+                        if id_by_key.get(key) != old_id:
+                            relinked.add((_norm_txt(proj), old_id, _norm_txt(t.get("task", "")), str(t.get("date"))))
+                else:
+                    key = latest_key.get(old_id)
+                if key is None:
+                    continue
+
                 users = []
                 for u in t.get("users", []):
                     cu = clean_assigned_user(u, team_names)
@@ -5813,7 +5870,8 @@ def sync_session_stores(procurement_df, sheet_item_assignments, sheet_proj_assig
                 t["is_partial"] = 0 < done_q < total_q
                 t["partial_reason"] = str(t.get("partial_reason", "") or "")
                 t["progress_logs"] = t.get("progress_logs") or []
-                t["uid"] = f"task_{normalize_item_id(item_id)}_{n}_{int(time.time() * 1000) % 1000000}"
+                n += 1
+                t["uid"] = f"task_{old_id}_{n}_{int(time.time() * 1000) % 1000000}"
                 new_store[key].append(t)
 
         proj_store = {}
@@ -5832,11 +5890,10 @@ def sync_session_stores(procurement_df, sheet_item_assignments, sheet_proj_assig
 
         st.session_state["tasks_store"] = new_store
         st.session_state["project_tasks_store"] = proj_store
+        st.session_state["_relinked_rows"] = relinked
         st.session_state["_store_version"] = version
-        st.session_state["_has_unsaved_changes"] = False
+        st.session_state["_has_unsaved_changes"] = bool(relinked)
     else:
-        # Κρατάμε ό,τι υπάρχει στη μνήμη. Αν μετατοπίστηκαν τα idx (αλλαγή στο procurement),
-        # μεταφέρουμε τα tasks στο σωστό νέο κλειδί.
         old = st.session_state["tasks_store"]
         new_store = {k: old.get(k, []) for k in keys_all}
         for k, tl in old.items():
@@ -5849,7 +5906,7 @@ def sync_session_stores(procurement_df, sheet_item_assignments, sheet_proj_assig
         st.session_state["tasks_store"] = new_store
         if "project_tasks_store" not in st.session_state:
             st.session_state["project_tasks_store"] = sheet_proj_assignments
-
+            
 # --- MAIN ---
 def main():
     init_auth()
