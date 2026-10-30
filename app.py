@@ -3871,6 +3871,7 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     pct_display = int((done_q / total_q) * 100) if total_q > 0 else 0
                     
                     item_info = {
+                        "type": "project", "p_key": p_key, "task_name": task_name,
                         "Project": proj_name, "Εργασία": task_name,
                         "Υλικό / Είδος": "Γενική Σύνθεση / Box",
                         "Υπεύθυνος": ", ".join(t_users), "Ώρες": hrs_total,
@@ -3892,7 +3893,7 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
             material = row["Υλικό / Προϊόν"]
             qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
             item_tasks = st.session_state["tasks_store"].get(unique_item_key, [])
-            for t_data in item_tasks:
+            for t_idx, t_data in enumerate(item_tasks):
                 if t_data.get("task") != "- Επιλογή Εργασίας -" and t_data.get("date") == rep_date:
                     auto_time = tasks_database.get(t_data["task"], 0.0)
                     t_users = t_data.get("users", [])
@@ -3918,6 +3919,7 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     pct_display = int((done_q / total_q) * 100) if total_q > 0 else 0
                     
                     item_info = {
+                        "type": "item", "u_key": unique_item_key, "t_idx": t_idx,
                         "Project": project_name, "Εργασία": t_data["task"],
                         "Υλικό / Είδος": f"[{item_id}] {material}",
                         "Υπεύθυνος": ", ".join(t_users), "Ώρες": hrs_total,
