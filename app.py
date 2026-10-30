@@ -764,14 +764,21 @@ def load_all_data(version=0):
         team_member_names = ["Βαγγέλης Μ.", "Βαγγέλης JR.", "Μαρία"]
         team_members_list = [{"name": n, "type": "Μόνιμος", "active": True, "location": LOCATION_MAIN} for n in team_member_names]
 
+    # 5. Availability Weekly
     availability_dict = {}
-    
     try:
         df_week = pd.read_csv(AVAILABILITY_WEEKLY_CSV_URL)
         df_week.columns = [str(c).strip() for c in df_week.columns]
         
         ignore_cols = ["Ημέρα", "Σύνολο", "ΣΥΝΟΛΟ", "Σύνολο διαθέσιμων ωρών", "Unnamed: 0"]
         member_cols = [c for c in df_week.columns if c and c not in ignore_cols and "Unnamed" not in c]
+        
+        # === ΔΙΟΡΘΩΣΗ: Καθαρίζουμε τα ονόματα στηλών από παρενθέσεις ===
+        col_to_clean = {}
+        for col in member_cols:
+            clean_name = col.split("(")[0].strip()
+            col_to_clean[col] = clean_name
+        # ==============================================================
         
         for _, row in df_week.iterrows():
             day_name = str(row.iloc[0]).strip()
@@ -784,7 +791,13 @@ def load_all_data(version=0):
                             val = 0.0
                     except:
                         val = 0.0
-                    availability_dict[day_name][member_col] = val
+                    # Χρησιμοποιούμε το καθαρό όνομα
+                    clean_name = col_to_clean.get(member_col, member_col)
+                    availability_dict[day_name][clean_name] = val
+    except Exception as e:
+        st.warning(f"Could not load Availability_Weekly: {e}")
+        for day in WEEKDAYS_GREEK.values():
+            availability_dict[day] = {m: 6.0 for m in team_member_names}
     except Exception as e:
         st.warning(f"Could not load Availability_Weekly: {e}")
         for day in WEEKDAYS_GREEK.values():
