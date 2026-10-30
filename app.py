@@ -2451,13 +2451,14 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
             u_key = f"{item_id}_{idx}"
             qty = int(r["Ποσότητα"]) if str(r["Ποσότητα"]).isdigit() else 1
             
-            # === ΔΙΟΡΘΩΣΗ: Ψάχνουμε το u_key με βάση το item_id ===
+            # === ΔΙΟΡΘΩΣΗ: Ψάχνουμε ΟΛΑ τα tasks_store για το item_id ===
             item_tasks = []
             for store_key, store_tasks in st.session_state.get("tasks_store", {}).items():
-                if store_key.split("_")[0] == item_id:
+                store_item_id = store_key.split("_")[0]
+                if store_item_id == item_id:
                     item_tasks = store_tasks
                     break
-            # ========================================================
+            # ============================================================
             for t in item_tasks:
                 if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
                     auto_t = tasks_database.get(t["task"], 0.0)
