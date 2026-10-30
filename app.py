@@ -2451,14 +2451,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
             u_key = f"{item_id}_{idx}"
             qty = int(r["Ποσότητα"]) if str(r["Ποσότητα"]).isdigit() else 1
             
-            # === ΔΙΟΡΘΩΣΗ: Ψάχνουμε ΟΛΑ τα tasks_store για το item_id ===
-            item_tasks = []
-            for store_key, store_tasks in st.session_state.get("tasks_store", {}).items():
-                store_item_id = store_key.split("_")[0]
-                if store_item_id == item_id:
-                    item_tasks = store_tasks
-                    break
-            # ============================================================
+            item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
             for t in item_tasks:
                 if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
                     auto_t = tasks_database.get(t["task"], 0.0)
@@ -5757,6 +5750,106 @@ def generate_calendar_print_html(month, year, weeks, team_database, availability
     </html>"""
     return html
 
+# --- SYNC SESSION STORES ---
+def normalize_item_id(v):
+    s = str(v).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    return s
+
+def _to_int(v, default=0):
+    try:
+        if v is None or v == "":
+            return default
+        return int(float(str(v).replace(",", ".")))
+    except Exception:
+        return default
+
+def clean_assigned_user(raw_name, known_names):
+    """Καθαρίζει 'Λίζα (Εποχικός)' -> 'Λίζα' αν το καθαρό όνομα υπάρχει στην ομάδα."""
+    name = strip_all_fields(raw_name)
+    if name in known_names:
+        return name
+    base = re.sub(r"\s*\([^)]*\)\s*$", "", name).strip()
+    return base if base else name
+
+def sync_session_stores(procurement_df, sheet_item_assignments, sheet_proj_assignments, team_names, version):
+    keys_all = []
+    latest_key = {}
+    qty_by_key = {}
+    if procurement_df is not None and not procurement_df.empty:
+        for idx, row in procurement_df.iterrows():
+            raw_id = str(row["ID"])
+            key = f"{raw_id}_{idx}"
+            keys_all.append(key)
+            latest_key[normalize_item_id(raw_id)] = key  # το τελευταίο idx, όπως κάνει και το save
+            qty_by_key[key] = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+
+    needs_rebuild = (
+        "tasks_store" not in st.session_state
+        or st.session_state.get("_store_version") != version
+    )
+
+    if needs_rebuild:
+        new_store = {k: [] for k in keys_all}
+        for item_id, tasks in sheet_item_assignments.items():
+            key = latest_key.get(normalize_item_id(item_id))
+            if key is None:
+                continue
+            for n, t in enumerate(tasks):
+                t = dict(t)
+                users = []
+                for u in t.get("users", []):
+                    cu = clean_assigned_user(u, team_names)
+                    if cu and cu not in users:
+                        users.append(cu)
+                t["users"] = users
+                t["user"] = users[0] if users else "- Χωρίς Ανάθεση -"
+
+                done_q = _to_int(t.get("done_qty"), 0)
+                total_q = _to_int(t.get("total_qty"), 0) or qty_by_key.get(key, 1)
+                t["done_qty"] = done_q
+                t["total_qty"] = total_q
+                t["is_partial"] = 0 < done_q < total_q
+                t["partial_reason"] = str(t.get("partial_reason", "") or "")
+                t["progress_logs"] = t.get("progress_logs") or []
+                t["uid"] = f"task_{normalize_item_id(item_id)}_{n}_{int(time.time() * 1000) % 1000000}"
+                new_store[key].append(t)
+
+        proj_store = {}
+        for p_key, p_dict in sheet_proj_assignments.items():
+            proj_store[p_key] = {}
+            for t_name, p in p_dict.items():
+                p = dict(p)
+                users = []
+                for u in p.get("users", []):
+                    cu = clean_assigned_user(u, team_names)
+                    if cu and cu not in users:
+                        users.append(cu)
+                p["users"] = users
+                p["user"] = users[0] if users else "- Χωρίς Ανάθεση -"
+                proj_store[p_key][t_name] = p
+
+        st.session_state["tasks_store"] = new_store
+        st.session_state["project_tasks_store"] = proj_store
+        st.session_state["_store_version"] = version
+        st.session_state["_has_unsaved_changes"] = False
+    else:
+        # Κρατάμε ό,τι υπάρχει στη μνήμη. Αν μετατοπίστηκαν τα idx (αλλαγή στο procurement),
+        # μεταφέρουμε τα tasks στο σωστό νέο κλειδί.
+        old = st.session_state["tasks_store"]
+        new_store = {k: old.get(k, []) for k in keys_all}
+        for k, tl in old.items():
+            if k in new_store or not tl:
+                continue
+            iid = normalize_item_id(k.rsplit("_", 1)[0])
+            target = latest_key.get(iid)
+            if target:
+                new_store[target] = new_store[target] + tl
+        st.session_state["tasks_store"] = new_store
+        if "project_tasks_store" not in st.session_state:
+            st.session_state["project_tasks_store"] = sheet_proj_assignments
+
 # --- MAIN ---
 def main():
     init_auth()
@@ -5777,33 +5870,16 @@ def main():
     st.session_state.availability_overrides = availability_overrides
     
     sheet_item_assignments, sheet_proj_assignments = load_assignments_from_sheet()
-    
-    if "tasks_store" not in st.session_state:
-        st.session_state["tasks_store"] = {}
-    else:
-        for u_key, task_list in st.session_state["tasks_store"].items():
-            unique_tasks = []
-            seen = set()
-            for t in task_list:
-                signature = (t.get("task", ""), t.get("user", ""), str(t.get("date", "")))
-                if signature not in seen:
-                    seen.add(signature)
-                    unique_tasks.append(t)
-            st.session_state["tasks_store"][u_key] = unique_tasks
-    
-    if procurement_df is not None and not procurement_df.empty:
-        new_store = {}
-        for idx, row in procurement_df.iterrows():
-            item_id = str(row["ID"])
-            u_key = f"{item_id}_{idx}"
-            if u_key in new_store:
-                continue
-            new_store[u_key] = []
-        
-        st.session_state["tasks_store"] = new_store
-    
-    if "project_tasks_store" not in st.session_state:
-        st.session_state["project_tasks_store"] = sheet_proj_assignments
+    sync_session_stores(
+        procurement_df, sheet_item_assignments, sheet_proj_assignments,
+        team_database, version
+    )
+    _valid_ids = {normalize_item_id(x) for x in procurement_df["ID"]} if not procurement_df.empty else set()
+    _orph = [i for i in sheet_item_assignments if normalize_item_id(i) not in _valid_ids]
+    st.sidebar.caption(
+        f"DEBUG sheet={sum(len(v) for v in sheet_item_assignments.values())} | "
+        f"μνήμη={sum(len(v) for v in st.session_state['tasks_store'].values())} | orphans={len(_orph)}"
+    )
     if "audit_log" not in st.session_state:
         st.session_state.audit_log = []
     if "last_save" not in st.session_state:
