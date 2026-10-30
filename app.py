@@ -6010,17 +6010,7 @@ def main():
         procurement_df, sheet_item_assignments, sheet_proj_assignments,
         team_database, version
     )
-    _valid_ids = {normalize_item_id(x) for x in procurement_df["ID"]} if not procurement_df.empty else set()
-    _orph = [i for i in sheet_item_assignments if normalize_item_id(i) not in _valid_ids]
-    st.sidebar.caption(
-        f"DEBUG sheet={sum(len(v) for v in sheet_item_assignments.values())} | "
-        f"μνήμη={sum(len(v) for v in st.session_state['tasks_store'].values())} | orphans={len(_orph)}"
-    )
-    with st.sidebar.expander("DEBUG orphans"):
-        st.write("Orphan IDs:", [repr(x) for x in _orph])
-        for _nm in ["SKLERO", "ELVIAL", "CHUBB"]:
-            _sub = procurement_df[procurement_df["Project"].str.contains(_nm, case=False, na=False)]
-            st.write(f"{_nm} – IDs στο procurement:", [repr(x) for x in _sub["ID"]])
+
     if "audit_log" not in st.session_state:
         st.session_state.audit_log = []
     if "last_save" not in st.session_state:
