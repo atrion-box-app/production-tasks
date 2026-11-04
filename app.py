@@ -4588,19 +4588,7 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
                 current_task["progress_logs"] = logs
                 total_done_from_logs = current_done
 
-            # === ΟΡΙΣΤΙΚΗ ΔΙΟΡΘΩΣΗ: Μαύρο κείμενο με !important ===
-            st.markdown(
-                f'<div style="background:#fff3e0;padding:10px;border-radius:6px;'
-                f'border-left:4px solid #ff9800;margin-bottom:10px;">'
-                f'<div style="font-weight:700;color:#000000 !important;">📋 {project_name}</div>'
-                f'<div style="font-size:12px;margin-top:3px;color:#000000 !important;">'
-                f'<span style="color:#000000 !important;">Εργασία: <b>{task_name}</b></span></div>'
-                f'<div style="font-size:12px;color:#000000 !important;">'
-                f'<span style="color:#000000 !important;">Συνολική ποσότητα: <b>{total_qty_default}</b> | Έχουν γίνει: <b>{total_done_from_logs}</b></span></div>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-            # =====================================================================
+            st.info(f"📋 **{project_name}** — {task_name} | Συνολική ποσότητα: **{total_qty_default}** | Έχουν γίνει: **{total_done_from_logs}**")
             
             if logs:
                 st.markdown("##### 📜 Ιστορικό Προόδου")
