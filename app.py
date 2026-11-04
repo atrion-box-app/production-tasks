@@ -2107,7 +2107,11 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 
                                 # Mini-Dashboard με τις ώρες (on-the-fly)
                                 with c_user.expander("📊 Δες Διαθεσιμότητα Ομάδας", expanded=False):
+                                    # === ΔΙΟΡΘΩΣΗ: Διαβάζουμε την ημερομηνία απευθείας από το widget ===
                                     current_task_date = st.session_state.get(f"mat_date_{unique_key}_{task_uid}", task_date)
+                                    if current_task_date is None:
+                                        current_task_date = task_date
+                                    # ====================================================================
                                     
                                     day_avail_map = get_availability_for_date(current_task_date, availability_database, availability_overrides, team_members_list)
                                     
