@@ -4588,7 +4588,7 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
                 current_task["progress_logs"] = logs
                 total_done_from_logs = current_done
 
-            st.info(f"📋 **{project_name}** — {task_name} | Συνολική ποσότητα: **{total_qty_default}** | Έχουν γίνει: **{total_done_from_logs}**")
+                st.info(f"📋 **{project_name}** — {task_name} | Συνολική ποσότητα: **{total_qty_default}** | Έχουν γίνει: **{total_done_from_logs}**")
             
             if logs:
                 st.markdown("##### 📜 Ιστορικό Προόδου")
