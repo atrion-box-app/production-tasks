@@ -1720,12 +1720,30 @@ def render_overload_warnings(target_dates, availability_database):
                 all_warnings[check_date] = []
             all_warnings[check_date].append((user, info))
     
-    for check_date in sorted(all_warnings.keys()):
-        for user, info in all_warnings[check_date]:
-            st.warning(
-                f"⚠️ **Υπέρβαση ωρών** — **{user}** στις **{check_date.strftime('%d/%m/%Y')}**: "
-                f"**{info['assigned']}h** (όριο: {info['max']}h) — **+{info['over']}h**"
-            )
+    # === ΝΕΟ: Κουμπί απόκρυψης ειδοποιήσεων ===
+    warn_key = "_overload_warnings_visible"
+    if warn_key not in st.session_state:
+        st.session_state[warn_key] = True
+    
+    if st.session_state[warn_key]:
+        col_warn_head, col_hide_btn = st.columns([5, 1])
+        with col_hide_btn:
+            if st.button("✕ Απόκρυψη", key="_hide_overload_btn", use_container_width=True):
+                st.session_state[warn_key] = False
+                st.rerun()
+        
+        for check_date in sorted(all_warnings.keys()):
+            for user, info in all_warnings[check_date]:
+                st.warning(
+                    f"⚠️ **Υπέρβαση ωρών** — **{user}** στις **{check_date.strftime('%d/%m/%Y')}**: "
+                    f"**{info['assigned']}h** (όριο: {info['max']}h) — **+{info['over']}h**"
+                )
+    else:
+        # Μικρό κουμπί για εμφάνιση ξανά
+        if st.button("👁️ Εμφάνιση ειδοποιήσεων υπέρβασης", key="_show_overload_btn", use_container_width=True):
+            st.session_state[warn_key] = True
+            st.rerun()
+    # ==========================================
 
 # --- PROJECT DETAILS FUNCTION ---
 def get_project_details(project_name, procurement_df, tasks_database, incoming_df):
