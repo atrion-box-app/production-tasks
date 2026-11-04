@@ -2285,7 +2285,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                 
                 with st.container(border=True):
                     c_active, c_name, c_done, c_partial = st.columns([0.08, 0.55, 0.25, 0.12])
-                    pact_k = f"pact_proj_{proj_key}_{task_name}"
+                    # === ΔΙΟΡΘΩΣΗ: Μοναδικό κλειδί για το tab των Γενικών Εργασιών ===
+                    pact_k = f"general_pact_{proj_key}_{task_name}"
+                    # =====================================================================
                     is_active = c_active.checkbox("", value=t_data["active"], key=pact_k, on_change=update_proj_field, args=(proj_key, task_name, "active", pact_k))
                     c_name.markdown(f"**{task_name}**" if is_active else f"<span style='color:gray;'>{task_name}</span>", unsafe_allow_html=True)
                     
