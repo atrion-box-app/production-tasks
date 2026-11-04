@@ -2076,9 +2076,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                         pct = int((done_q / total_q) * 100)
                                         reason_text = f' · 📝 {t_data.get("partial_reason", "")[:40]}' if t_data.get("partial_reason") else ''
                                         st.markdown(
-                                            f'<div style="background:#37474f;padding:6px 10px;'
+                                            f'<div style="background:#263238;padding:6px 10px;'
                                             f'border-radius:5px;margin:5px 0;font-size:11px;border-left:3px solid #ff9800;">'
-                                            f'<span style="color:#ffffff !important;font-weight:600;">'
+                                            f'<span style="color:#ffb74d !important;font-weight:600;">'
                                             f'⏳ {done_q}/{total_q} ({pct}%){reason_text}'
                                             f'</span>'
                                             f'</div>',
@@ -2332,9 +2332,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             pct = int((done_q / total_q) * 100)
                             reason_text = f' · 📝 {t_data.get("partial_reason", "")[:40]}' if t_data.get("partial_reason") else ''
                             st.markdown(
-                                f'<div style="background:#ffe0b2;padding:6px 10px;'
-                                f'border-radius:5px;margin:5px 0;font-size:11px;">'
-                                f'<span style="color:#bf360c !important;font-weight:600;">'
+                                f'<div style="background:#263238;padding:6px 10px;'
+                                f'border-radius:5px;margin:5px 0;font-size:11px;border-left:3px solid #ff9800;">'
+                                f'<span style="color:#ffb74d !important;font-weight:600;">'
                                 f'⏳ {done_q}/{total_q} ({pct}%){reason_text}'
                                 f'</span>'
                                 f'</div>',
@@ -4591,7 +4591,7 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
             st.markdown(
                 f'<div style="background:#263238;padding:12px 15px;border-radius:8px;'
                 f'border-left:4px solid #ff9800;margin-bottom:10px;">'
-                f'<div style="font-weight:700;color:#ff9800;font-size:14px;">📋 {project_name}</div>'
+                f'<div style="font-weight:700;color:#ffb74d;font-size:14px;">📋 {project_name}</div>'
                 f'<div style="font-size:12px;color:#b0bec5;margin-top:5px;">'
                 f'Εργασία: <b style="color:#ffffff;">{task_name}</b></div>'
                 f'<div style="font-size:12px;color:#b0bec5;">'
@@ -4599,7 +4599,7 @@ def render_partial_dialog(u_key_or_p_key, t_idx_or_task_name, task_type,
                 f'Έχουν γίνει: <b style="color:#ffffff;">{total_done_from_logs}</b></div>'
                 f'</div>',
                 unsafe_allow_html=True
-            )            
+            )
             if logs:
                 st.markdown("##### 📜 Ιστορικό Προόδου")
                 for i, log in enumerate(logs):
