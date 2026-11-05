@@ -1598,6 +1598,12 @@ def ensure_task_uids():
         for i, t in enumerate(task_list):
             if not t.get("uid"):
                 t["uid"] = f"task_{u_key}_{i}_{int(time.time() * 1000) % 1000000}"
+            # Αυτό το κομμάτι φτιάχνει τα παλιά tasks:
+            if "task_qty" not in t:
+                try:
+                    t["task_qty"] = int(t.get("total_qty", 1))
+                except:
+                    t["task_qty"] = 1
 
 def delete_item_task_by_uid(u_key, task_uid):
     if u_key not in st.session_state.get("tasks_store", {}):
@@ -2210,7 +2216,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 auto_time = tasks_database.get(t_data["task"], 0.0)
                                 if t_data["task"] != "- Επιλογή Εργασίας -":
                                     num_users = max(len(t_data.get("users", [])), 1)
-                                    task_hours_total = (auto_time * qty) / 60
+                                    effective_qty = t_data.get("task_qty", qty)  # <-- ΝΕΟ
+                                    task_hours_total = (auto_time * effective_qty) / 60
                                     task_hours_per_user = task_hours_total / num_users
                                     if num_users > 1:
                                         c_time.metric("Ώρες/άτομο", f"{round(task_hours_per_user, 2)}h")
@@ -2265,6 +2272,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                                 "done": False, "task": new_task_name, 
                                                 "user": "- Χωρίς Ανάθεση -", "users": [], "date": auto_date,
                                                 "is_partial": False, "done_qty": 0, "total_qty": new_task_qty, 
+                                                "task_qty": new_task_qty,
                                                 "partial_reason": "", "progress_logs": []
                                             })
                                             st.session_state[f"_add_task_form_{unique_key}"] = False
@@ -2410,7 +2418,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                                     if q_str.isdigit(): q = int(q_str)
                                         except: pass
                                         at = tasks_database.get(tt["task"], 0.0)
-                                        hpu = (at * q / 60) / nu if at else 0
+                                        eff_q = tt.get("task_qty", q)  # <-- ΝΕΟ
+                                        hpu = (at * eff_q) / 60 / nu if at else 0
                                         for uu in tut:
                                             if uu and uu != "- Χωρίς Ανάθεση -":
                                                 temp_assigned_p[uu] = temp_assigned_p.get(uu, 0.0) + hpu
@@ -5071,8 +5080,9 @@ def render_incoming(procurement_df, tasks_database, team_database, incoming_df):
                                 "uid": f"task_{datetime.now().timestamp()}",
                                 "done": False, "task": "- Επιλογή Εργασίας -",
                                 "user": "- Χωρίς Ανάθεση -", "users": [], "date": auto_date,
-                                "is_partial": False, "done_qty": 0, "total_qty": m["qty"], "partial_reason": "",
-                                "progress_logs": []
+                                "is_partial": False, "done_qty": 0, "total_qty": m["qty"], 
+                                "task_qty": m["qty"],
+                                "partial_reason": "", "progress_logs": []
                             })
                             mark_unsaved_changes()
                             st.rerun()
