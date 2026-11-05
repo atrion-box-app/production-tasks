@@ -2500,7 +2500,19 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
             help="Αν τσεκαριστεί, εμφανίζονται ΟΛΑ τα projects."
         )
     
-    all_projects = sorted([p for p in procurement_df["Project"].unique().tolist() if p != "-"])
+    # --- ΝΕΟΣ ΚΩΔΙΚΑΣ ΤΑΞΙΝΟΜΗΣΗΣ ΜΕ ΒΑΣΗ ΤΗΝ ΗΜΕΡΟΜΗΝΙΑ ΑΠΟΣΤΟΛΗΣ ---
+    all_projects_raw = [p for p in procurement_df["Project"].unique().tolist() if p != "-"]
+    
+    def get_sort_date(p_name):
+        is_shipped, ship_date_str = get_shipping_info(p_name, incoming_df)
+        if ship_date_str:
+            parsed = parse_date_safe(ship_date_str)
+            if parsed:
+                return parsed
+        return date(9999, 12, 31) # Αν δεν υπάρχει ημερομηνία, πάει στο τέλος
+
+    all_projects = sorted(all_projects_raw, key=get_sort_date)
+    # -------------------------------------------------------------------
     
     if show_all:
         projects_to_show = all_projects
