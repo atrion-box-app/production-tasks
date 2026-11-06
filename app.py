@@ -611,7 +611,15 @@ def clean_users_to_display(clean_list, value_to_display):
     return result
 
 def update_item_users_mapped(u_key, t_idx, widget_key, display_to_value):
-    selected_clean = st.session_state[widget_key] 
+    selected_display = st.session_state[widget_key] 
+    
+    # Μετατροπή από το κείμενο εμφάνισης στο καθαρό όνομα
+    selected_clean = []
+    for d in selected_display:
+        clean_name = display_to_value.get(d, d)
+        if clean_name not in selected_clean:
+            selected_clean.append(clean_name)
+            
     st.session_state["tasks_store"][u_key][t_idx]["users"] = selected_clean
     if selected_clean:
         st.session_state["tasks_store"][u_key][t_idx]["user"] = selected_clean[0]
@@ -620,7 +628,15 @@ def update_item_users_mapped(u_key, t_idx, widget_key, display_to_value):
     mark_unsaved_changes()
 
 def update_proj_users_mapped(p_key, task_name, widget_key, display_to_value):
-    selected_clean = st.session_state[widget_key]
+    selected_display = st.session_state[widget_key]
+    
+    # Μετατροπή από το κείμενο εμφάνισης στο καθαρό όνομα
+    selected_clean = []
+    for d in selected_display:
+        clean_name = display_to_value.get(d, d)
+        if clean_name not in selected_clean:
+            selected_clean.append(clean_name)
+
     st.session_state["project_tasks_store"][p_key][task_name]["users"] = selected_clean
     if selected_clean:
         st.session_state["project_tasks_store"][p_key][task_name]["user"] = selected_clean[0]
