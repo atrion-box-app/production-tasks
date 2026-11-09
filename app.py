@@ -2111,7 +2111,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 if t_data.get("task") and t_data["task"] != "- Επιλογή Εργασίας -":
                                     render_partial_dialog(
                                         unique_key, t_idx, "item",
-                                        qty, t_data.get("done_qty", 0),
+                                        get_expected_qty(row, qty), t_data.get("done_qty", 0),
                                         t_data.get("partial_reason", ""),
                                         selected_project, t_data["task"]
                                     )
@@ -6061,6 +6061,19 @@ def render_orphan_relink():
                     relinked.add(sig)
                     mark_unsaved_changes()
                     st.rerun()
+
+def get_expected_qty(row, fallback):
+    """Αναμενόμενη ποσότητα παραλαβής του υλικού. Αν λείπει ή δεν είναι αριθμός, επιστρέφει το fallback."""
+    raw = str(row.get("Αναμενόμενη Ποσότητα Παραλαβής", "")).strip()
+    if raw in ["", "-", "nan", "None"]:
+        return fallback
+    try:
+        if re.match(r"^\d{1,3}(\.\d{3})+$", raw):   # π.χ. 1.131 -> 1131
+            raw = raw.replace(".", "")
+        val = int(float(raw.replace(",", ".")))
+        return val if val > 0 else fallback
+    except Exception:
+        return fallback
             
 # --- MAIN ---
 def main():
