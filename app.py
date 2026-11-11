@@ -2196,7 +2196,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                                     if not tut_p: tut_p = [pdata.get("user", "- Χωρίς Ανάθεση -")]
                                                     nu_p = max(len(tut_p), 1)
                                                     at_p = tasks_database.get(tn, 0.0)
-                                                    hpu_p = (at_p * pq / 60) / nu_p if at_p else 0
+                                                    # Χρήση task_qty αν υπάρχει
+                                                    eff_q_p = pdata.get("task_qty", pq)
+                                                    hpu_p = (at_p * eff_q_p / 60) / nu_p if at_p else 0
                                                     for uu in tut_p:
                                                         if uu and uu != "- Χωρίς Ανάθεση -":
                                                             temp_assigned[uu] = temp_assigned.get(uu, 0.0) + hpu_p
@@ -2375,7 +2377,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         )
                     
                     if is_active:
-                        c_user, c_date, c_time = st.columns([0.4, 0.4, 0.2])
+                        # ΝΕΟ: Προσθήκη στήλης για την ημερήσια ποσότητα
+                        c_user, c_qty, c_date, c_time = st.columns([0.35, 0.15, 0.35, 0.15])
                         current_users = t_data.get("users", [])
                         if not isinstance(current_users, list):
                             current_users = [current_users] if current_users else []
@@ -2410,6 +2413,17 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             key=puser_k,
                             on_change=update_proj_users_mapped,
                             args=(proj_key, task_name, puser_k, disp_to_val)
+                        )
+
+                        # ΝΕΟ: Input για την ημερήσια ποσότητα
+                        ptask_qty = c_qty.number_input(
+                            "Ποσότητα (για αυτή τη μέρα):", 
+                            min_value=1, 
+                            value=int(t_data.get("task_qty", project_main_qty)), 
+                            step=1, 
+                            key=f"pqty_proj_{proj_key}_{task_name}",
+                            on_change=update_proj_field, 
+                            args=(proj_key, task_name, "task_qty", f"pqty_proj_{proj_key}_{task_name}")
                         )
                         
                         with c_user.expander("📊 Δες Διαθεσιμότητα Ομάδας", expanded=False):
@@ -2491,7 +2505,9 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         auto_time = tasks_database.get(task_name, 0.0)
                         num_users = max(len(t_data.get("users", [])), 1)
-                        task_hours_total = (auto_time * project_main_qty) / 60
+                        # Χρήση της ημερήσιας ποσότητας αν υπάρχει, αλλιώς της συνολικής του project
+                        effective_qty = t_data.get("task_qty", project_main_qty)
+                        task_hours_total = (auto_time * effective_qty) / 60
                         task_hours_per_user = task_hours_total / num_users
                         if num_users > 1:
                             c_time.metric("Ώρες/άτομο", f"{round(task_hours_per_user, 2)}h")
