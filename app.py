@@ -1723,6 +1723,7 @@ def check_user_overload(target_date, availability_database, availability_overrid
     
     user_hours = {}
     
+    # 1. Υπολογισμός για τα Υλικά (Item Tasks)
     for u_key, task_list in st.session_state.get("tasks_store", {}).items():
         for t in task_list:
             if t.get("task") and t["task"] != "- Επιλογή Εργασίας -" and t.get("date") == target_date:
@@ -1744,13 +1745,14 @@ def check_user_overload(target_date, availability_database, availability_overrid
                     pass
                 
                 auto_time = tasks_db.get(t["task"], 0.0)
-                eff_qty = t.get("task_qty", qty)  # <-- Χρήση του task_qty
+                eff_qty = t.get("task_qty", qty)
                 hrs_per_user = (auto_time * eff_qty / 60) / num_users if auto_time else 0
                 
                 for user in t_users:
                     if user and user != "- Χωρίς Ανάθεση -":
                         user_hours[user] = user_hours.get(user, 0.0) + hrs_per_user
     
+    # 2. Υπολογισμός για τις Γενικές Εργασίες (Project Tasks)
     for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
         if isinstance(p_dict, dict):
             proj_name = p_key.replace("proj_", "")
@@ -1767,8 +1769,8 @@ def check_user_overload(target_date, availability_database, availability_overrid
                     if not t_users:
                         t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
                     num_users = max(len(t_users), 1)
-                    auto_time = tasks_db.get(t["task"], 0.0)
-                    eff_qty = t.get("task_qty", qty)  # <-- Χρήση του task_qty
+                    auto_time = tasks_db.get(t_name, 0.0)
+                    eff_qty = p_data.get("task_qty", proj_qty)
                     hrs_per_user = (auto_time * eff_qty / 60) / num_users if auto_time else 0
                     for user in t_users:
                         if user and user != "- Χωρίς Ανάθεση -":
