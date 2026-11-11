@@ -342,12 +342,12 @@ def dismiss_warning(date_str, user):
     try:
         sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Dismissed_Warnings")
         sheet.append_row([date_str, user, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
-        load_dismissed_warnings.clear() # Καθαρίζουμε το cache
+        # ΕΔΩ ΔΕΝ ΒΑΖΟΥΜΕ ΤΟ load_dismissed_warnings.clear()
         return True
     except Exception as e:
         st.error(f"Σφάλμα: {e}")
         return False
-
+        
 def update_partial_status_item(u_key, t_idx, done_qty, total_qty, reason):
     if u_key not in st.session_state.get("tasks_store", {}):
         return False
@@ -1812,7 +1812,7 @@ def render_overload_warnings(target_dates, availability_database):
                 if st.button("✕", key=f"dismiss_{warn_key}", help="Διαγραφή ειδοποίησης"):
                     date_str = check_date.strftime("%d/%m/%Y")
                     if dismiss_warning(date_str, user):
-                        st.rerun()
+                        st.rerun()  # <-- ΜΟΝΟ ΑΥΤΟ, ΤΙΠΟΤΑ ΑΛΛΟ
 
 # --- PROJECT DETAILS FUNCTION ---
 def get_project_details(project_name, procurement_df, tasks_database, incoming_df):
