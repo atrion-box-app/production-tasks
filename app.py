@@ -1792,9 +1792,6 @@ def render_overload_warnings(target_dates, availability_database):
     
     # Διαβάζουμε ποιες έχουν σβηστεί από το Sheet
     dismissed_warnings = load_dismissed_warnings()
-
-    # ΔΙΑΓΝΩΣΤΙΚΟ: Δες τι διαβάζει το πρόγραμμα
-    st.write("🔍 Διαβασμένα warnings από Excel:", dismissed_warnings)
     
     all_warnings = {}
     for check_date in sorted(target_dates):
