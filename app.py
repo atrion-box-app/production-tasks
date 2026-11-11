@@ -332,15 +332,16 @@ def load_dismissed_warnings():
             if not date_raw or not user:
                 continue
             
-            # Καθαρισμός ημερομηνίας: αφαιρούμε κενά και αλλάζουμε παύλες με κάθετες
-            date_clean = date_raw.replace(" ", "").replace("-", "/")
+            # Καθαρισμός ημερομηνίας: κόβουμε την ώρα αν υπάρχει
+            date_clean = date_raw.split(" ")[0]
+            # Αντικαθιστούμε παύλες με κάθετες
+            date_clean = date_clean.replace("-", "/")
             
             # Αν είναι σε μορφή YYYY/MM/DD, το κάνουμε DD/MM/YYYY
             parts = date_clean.split("/")
             if len(parts) == 3:
                 if len(parts[0]) == 4:  # π.χ. 2026/11/04
                     date_clean = f"{parts[2]}/{parts[1]}/{parts[0]}"
-                # Αν είναι ήδη DD/MM/YYYY, το αφήνουμε ως έχει
             
             dismissed.add(f"{date_clean}_{user}")
         return dismissed
