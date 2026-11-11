@@ -3549,7 +3549,7 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
                         "Project": project_name,
                         "Υλικό": material,
                         "Ποσότητα": qty,
-                        "Ποσότητα Task": t_data.get("task_qty", qty)
+                        "Ποσότητα Task": t_data.get("task_qty", qty),
                         "Εργασία": t_task,
                         "Υπεύθυνος": ", ".join(t_users),
                         "Υπεύθυνος_list": t_users,
