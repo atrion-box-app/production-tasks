@@ -2490,10 +2490,12 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             min_value=1, 
                             value=int(_curr_qty), 
                             step=1, 
-                            key=f"pqty_proj_{proj_key}_{task_name}",
-                            on_change=update_proj_field, 
-                            args=(proj_key, task_name, "task_qty", f"pqty_proj_{proj_key}_{task_name}")
+                            key=f"pqty_proj_{proj_key}_{task_name}"
                         )
+                        
+                        # Αποθήκευση αμέσως αν αλλάξει η τιμή
+                        if ptask_qty != _curr_qty:
+                            update_proj_field(proj_key, task_name, "task_qty", f"pqty_proj_{proj_key}_{task_name}")
                         
                         with c_user.expander("📊 Δες Διαθεσιμότητα Ομάδας", expanded=False):
                             current_task_date_p = st.session_state.get(f"pdate_proj_{proj_key}_{task_name}", task_date)
