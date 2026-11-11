@@ -2593,6 +2593,55 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             c_time.metric("Ώρες/άτομο", f"{round(task_hours_per_user, 2)}h")
                         else:
                             c_time.metric("Ώρες", f"{round(task_hours_per_user, 2)}h")
+        # --- ΝΕΟ: Προσθήκη επιπλέον ημέρας για Γενικές Εργασίες ---
+        col_add_day, _ = st.columns([1, 3])
+        if col_add_day.button("➕ Προσθήκη άλλης ημέρας για αυτή την εργασία", key=f"add_day_{proj_key}", use_container_width=True):
+            st.session_state[f"_add_proj_day_form_{proj_key}"] = True
+
+        if st.session_state.get(f"_add_proj_day_form_{proj_key}", False):
+            with st.container(border=True):
+                st.markdown("**➕ Νέα Ημέρα για Γενική Εργασία**")
+                col_sel_task, col_sel_date, col_sel_qty = st.columns([2, 1, 1])
+                
+                # Επιλογή εργασίας
+                sel_task = col_sel_task.selectbox("Εργασία:", FIXED_PROJECT_TASKS, key=f"new_proj_task_sel_{proj_key}")
+                
+                # Επιλογή ημερομηνίας
+                sel_date = col_sel_date.date_input("Ημερομηνία:", value=date.today(), format="DD/MM/YYYY", key=f"new_proj_date_sel_{proj_key}")
+                
+                # Επιλογή ποσότητας
+                sel_qty = col_sel_qty.number_input("Ποσότητα:", min_value=1, value=int(project_main_qty), step=1, key=f"new_proj_qty_sel_{proj_key}")
+                
+                col_save_day, col_cancel_day = st.columns([1, 1])
+                with col_save_day:
+                    if st.button("💾 Δημιουργία", key=f"save_new_proj_day_{proj_key}", type="primary", use_container_width=True):
+                        # Δημιουργία νέου task στο project_tasks_store με μοναδικό όνομα
+                        unique_task_name = f"{sel_task} - {sel_date.strftime('%d/%m')}"
+                        
+                        if proj_key not in st.session_state["project_tasks_store"]:
+                            st.session_state["project_tasks_store"][proj_key] = {}
+                        
+                        st.session_state["project_tasks_store"][proj_key][unique_task_name] = {
+                            "active": True,
+                            "done": False,
+                            "user": "- Χωρίς Ανάθεση -",
+                            "users": [],
+                            "date": sel_date,
+                            "is_partial": False,
+                            "done_qty": 0,
+                            "total_qty": sel_qty,
+                            "task_qty": sel_qty,  # <-- Αποθηκεύουμε την ποσότητα της ημέρας
+                            "partial_reason": "",
+                            "progress_logs": []
+                        }
+                        st.session_state[f"_add_proj_day_form_{proj_key}"] = False
+                        mark_unsaved_changes()
+                        st.rerun()
+                with col_cancel_day:
+                    if st.button("✕ Ακύρωση", key=f"cancel_new_proj_day_{proj_key}", use_container_width=True):
+                        st.session_state[f"_add_proj_day_form_{proj_key}"] = False
+                        st.rerun()
+        # -----------------------------------------------------------
         
         st.divider()
         col_save, _ = st.columns([1, 3])
