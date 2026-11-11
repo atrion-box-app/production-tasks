@@ -332,27 +332,25 @@ def load_dismissed_warnings():
             if not date_raw or not user:
                 continue
             
-            # Μετατροπή της ημερομηνίας σε μορφή DD/MM/YYYY
-            # Αφαιρούμε την ώρα αν υπάρχει
+            # 1. Κόβουμε την ώρα αν υπάρχει (π.χ. "2026-11-04 00:00:00" -> "2026-11-04")
             date_part = date_raw.split(" ")[0]
             
-            # Ελέγχουμε αν είναι σε μορφή YYYY-MM-DD ή YYYY/MM/DD
-            if "-" in date_part:
-                parts = date_part.split("-")
-            else:
-                parts = date_part.split("/")
-                
+            # 2. Αντικαθιστούμε παύλες με κάθετες
+            date_part = date_part.replace("-", "/")
+            
+            # 3. Αν είναι σε μορφή YYYY/MM/DD, το κάνουμε DD/MM/YYYY
+            parts = date_part.split("/")
             if len(parts) == 3:
-                if len(parts[0]) == 4: # Είναι YYYY-MM-DD
+                if len(parts[0]) == 4:  # π.χ. 2026/11/04
                     final_date = f"{parts[2]}/{parts[1]}/{parts[0]}"
-                else: # Είναι DD/MM/YYYY
+                else:
                     final_date = f"{parts[0]}/{parts[1]}/{parts[2]}"
             else:
                 final_date = date_part
                 
             dismissed.add(f"{final_date}_{user}")
         return dismissed
-    except Exception:
+    except Exception as e:
         return set()
         
 def dismiss_warning(date_str, user):
@@ -1796,6 +1794,9 @@ def render_overload_warnings(target_dates, availability_database):
     
     # Διαβάζουμε ποιες έχουν σβηστεί από το Sheet
     dismissed_warnings = load_dismissed_warnings()
+
+    # ΔΙΑΓΝΩΣΤΙΚΟ: Δες τι διαβάζει το πρόγραμμα
+    st.write("🔍 Διαβασμένα warnings από Excel:", dismissed_warnings)
     
     all_warnings = {}
     for check_date in sorted(target_dates):
