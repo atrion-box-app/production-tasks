@@ -1657,7 +1657,7 @@ def update_proj_field(p_key, task_name, field, widget_key):
                 task[field] = st.session_state[widget_key]
                 
             mark_unsaved_changes()
-
+            
 # --- CHECK USER OVERLOAD ---
 def check_user_overload(target_date, availability_database, availability_overrides=None, team_members_list=None):
     if not target_date:
@@ -2425,11 +2425,15 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             args=(proj_key, task_name, puser_k, disp_to_val)
                         )
 
-                        # ΝΕΟ: Input για την ημερήσια ποσότητα
+                        # ΝΕΟ: Input για την ημερήσια ποσότητα (με ασφαλή έλεγχο)
+                        _curr_qty = t_data.get("task_qty")
+                        if _curr_qty is None or _curr_qty == 0:
+                            _curr_qty = project_main_qty
+                            
                         ptask_qty = c_qty.number_input(
                             "Ποσότητα (για αυτή τη μέρα):", 
                             min_value=1, 
-                            value=int(t_data.get("task_qty", project_main_qty)), 
+                            value=int(_curr_qty), 
                             step=1, 
                             key=f"pqty_proj_{proj_key}_{task_name}",
                             on_change=update_proj_field, 
@@ -2515,8 +2519,14 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         auto_time = tasks_database.get(task_name, 0.0)
                         num_users = max(len(t_data.get("users", [])), 1)
-                        # Χρήση της ημερήσιας ποσότητας (αν έχει οριστεί), αλλιώς της συνολικής
-                        effective_qty = t_data.get("task_qty", project_main_qty)
+                        
+                        # Χρήση της ημερήσιας ποσότητας με ασφάλεια
+                        effective_qty = t_data.get("task_qty")
+                        try:
+                            effective_qty = int(effective_qty)
+                        except:
+                            effective_qty = project_main_qty
+                            
                         task_hours_total = (auto_time * effective_qty) / 60
                         task_hours_per_user = task_hours_total / num_users
                         if num_users > 1:
