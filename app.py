@@ -2483,7 +2483,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             args=(proj_key, task_name, puser_k, disp_to_val)
                         )
 
-                        # ΝΕΟ: Input για την ημερήσια ποσότητα (με ασφαλή έλεγχο)
+                        # ΝΕΟ: Input για την ημερήσια ποσότητα
                         _curr_qty = t_data.get("task_qty")
                         if _curr_qty is None or _curr_qty == 0:
                             _curr_qty = project_main_qty
@@ -2495,6 +2495,12 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             step=1, 
                             key=f"pqty_proj_{proj_key}_{task_name}"
                         )
+                        
+                        # Αν άλλαξε η τιμή, την αποθηκεύουμε αμέσως
+                        if ptask_qty != _curr_qty:
+                            st.session_state["project_tasks_store"][proj_key][task_name]["task_qty"] = ptask_qty
+                            st.session_state["project_tasks_store"][proj_key][task_name]["total_qty"] = ptask_qty
+                            mark_unsaved_changes()
                         
                         # Αποθήκευση αμέσως αν αλλάξει η τιμή
                         if ptask_qty != _curr_qty:
