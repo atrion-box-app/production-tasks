@@ -1743,9 +1743,10 @@ def check_user_overload(target_date, availability_database, availability_overrid
                 except:
                     pass
                 
-                    auto_time = tasks_db.get(t_name, 0.0)
-                    eff_qty = p_data.get("task_qty", proj_qty)  # <-- Χρήση του task_qty
-                    hrs_per_user = (auto_time * eff_qty / 60) / num_users if auto_time else 0
+                auto_time = tasks_db.get(t["task"], 0.0)
+                eff_qty = t.get("task_qty", qty)  # <-- Χρήση του task_qty
+                hrs_per_user = (auto_time * eff_qty / 60) / num_users if auto_time else 0
+                
                 for user in t_users:
                     if user and user != "- Χωρίς Ανάθεση -":
                         user_hours[user] = user_hours.get(user, 0.0) + hrs_per_user
