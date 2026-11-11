@@ -1812,7 +1812,6 @@ def render_overload_warnings(target_dates, availability_database):
                 if st.button("✕", key=f"dismiss_{warn_key}", help="Διαγραφή ειδοποίησης"):
                     date_str = check_date.strftime("%d/%m/%Y")
                     if dismiss_warning(date_str, user):
-                        load_dismissed_warnings.clear() # <-- Καθαρισμός cache
                         st.rerun()
 
 # --- PROJECT DETAILS FUNCTION ---
