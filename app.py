@@ -3492,16 +3492,31 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
                     t_done = p_data.get("done", False)
                     auto_time = tasks_database.get(task_name, 0.0)
                     num_users = max(len(t_users), 1)
-                    hours_total = (auto_time * proj_qty) / 60
+                    
+                    # ΔΙΟΡΘΩΣΗ: Χρήση του task_qty αν υπάρχει
+                    effective_qty = p_data.get("task_qty", proj_qty)
+                    hours_total = (auto_time * effective_qty) / 60 
                     hours_per_user = hours_total / num_users
                     
                     daily_tasks_raw.append({
-                        "type": "project", "p_key": p_key, "task_name": task_name,
-                        "Project": proj_name, "Υλικό": "Γενική Σύνθεση / Box",
-                        "Ποσότητα": proj_qty, "Εργασία": task_name,
-                        "Υπεύθυνος": ", ".join(t_users), "Υπεύθυνος_list": t_users,
-                        "Ώρες": round(hours_total, 2), "Ώρες/άτομο": round(hours_per_user, 2),
-                        "num_users": num_users, "done": t_done, "status_proc": "READY"
+                        "type": "item",
+                        "u_key": unique_item_key,
+                        "t_idx": t_idx,
+                        "Project": project_name,
+                        "Υλικό": material,
+                        "Ποσότητα": qty,
+                        "Ποσότητα Task": t_data.get("task_qty", qty),  # <-- ΝΕΟ
+                        "Εργασία": t_task,
+                        "Υπεύθυνος": ", ".join(t_users),
+                        "Υπεύθυνος_list": t_users,
+                        "Ώρες": round(hours_total, 2),
+                        "Ώρες/άτομο": round(hours_per_user, 2),
+                        "num_users": num_users,
+                        "done": t_done,
+                        "is_partial": is_partial,
+                        "done_qty": t_data.get("done_qty", 0),
+                        "total_qty": t_data.get("total_qty", 0),
+                        "status_proc": proc_status
                     })
 
     if not procurement_df.empty:
@@ -3535,6 +3550,7 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
                         "Project": project_name,
                         "Υλικό": material,
                         "Ποσότητα": qty,
+                        "Ποσότητα Task": p_data.get("task_qty", proj_qty),  # <-- ΝΕΟ
                         "Εργασία": t_task,
                         "Υπεύθυνος": ", ".join(t_users),
                         "Υπεύθυνος_list": t_users,
@@ -3628,7 +3644,9 @@ def render_daily_plan(procurement_df, tasks_database, team_database, availabilit
                 is_done = col_chk.checkbox("Done", value=dt["done"], key=chk_k, on_change=toggle_item_task, args=(dt['u_key'], dt['t_idx'], chk_k))
             
             col_p.markdown(f"**{dt['Project']}**")
-            col_mat.caption(f"{dt['Υλικό']} ({dt['Ποσότητα']} τμχ)")
+            # Εμφάνιση της ποσότητας του task (αν υπάρχει), αλλιώς της κανονικής
+            show_qty = dt.get("Ποσότητα Task", dt['Ποσότητα'])
+            col_mat.caption(f"{dt['Υλικό']} ({show_qty} τμχ)")
             if dt.get("is_partial", False):
                 done_q = dt.get("done_qty", 0)
                 total_q = dt.get("total_qty", 0)
