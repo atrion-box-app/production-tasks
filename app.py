@@ -332,16 +332,12 @@ def load_dismissed_warnings():
             if not date_raw or not user:
                 continue
             
-            # 1. Κόβουμε την ώρα αν υπάρχει (π.χ. "2026-11-04 00:00:00" -> "2026-11-04")
             date_part = date_raw.split(" ")[0]
-            
-            # 2. Αντικαθιστούμε παύλες με κάθετες
             date_part = date_part.replace("-", "/")
             
-            # 3. Αν είναι σε μορφή YYYY/MM/DD, το κάνουμε DD/MM/YYYY
             parts = date_part.split("/")
             if len(parts) == 3:
-                if len(parts[0]) == 4:  # π.χ. 2026/11/04
+                if len(parts[0]) == 4: 
                     final_date = f"{parts[2]}/{parts[1]}/{parts[0]}"
                 else:
                     final_date = f"{parts[0]}/{parts[1]}/{parts[2]}"
@@ -351,6 +347,8 @@ def load_dismissed_warnings():
             dismissed.add(f"{final_date}_{user}")
         return dismissed
     except Exception as e:
+        # ΕΔΩ: Αντί να επιστρέφουμε απλά set(), θα τυπώνουμε το σφάλμα για να το δούμε!
+        st.error(f"⚠️ ΣΦΑΛΜΑ κατά την ανάγνωση του Dismissed_Warnings: {e}")
         return set()
         
 def dismiss_warning(date_str, user):
