@@ -327,10 +327,19 @@ def load_dismissed_warnings():
         records = sheet.get_all_records()
         dismissed = set()
         for r in records:
-            date_str = str(r.get("Date", "")).strip()
+            date_raw = str(r.get("Date", "")).strip()
             user = str(r.get("User", "")).strip()
-            if date_str and user:
-                dismissed.add(f"{date_str}_{user}")
+            if not date_raw or not user:
+                continue
+            
+            # Καθαρίζουμε την ημερομηνία για να είναι πάντα σε μορφή DD/MM/YYYY
+            date_clean = date_raw.split(" ")[0].replace("-", "/")
+            if len(date_clean.split("/")) == 3:
+                p1, p2, p3 = date_clean.split("/")
+                if len(p1) == 4:  # Αν είναι σε μορφή YYYY/MM/DD, το γυρνάμε σε DD/MM/YYYY
+                    date_clean = f"{p3}/{p2}/{p1}"
+            
+            dismissed.add(f"{date_clean}_{user}")
         return dismissed
     except Exception:
         return set()
