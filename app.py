@@ -1645,8 +1645,18 @@ def update_item_field(u_key, t_idx, field, widget_key):
     mark_unsaved_changes()
 
 def update_proj_field(p_key, task_name, field, widget_key):
-    st.session_state["project_tasks_store"][p_key][task_name][field] = st.session_state[widget_key]
-    mark_unsaved_changes()
+    if p_key in st.session_state.get("project_tasks_store", {}):
+        if task_name in st.session_state["project_tasks_store"][p_key]:
+            task = st.session_state["project_tasks_store"][p_key][task_name]
+            
+            # Αν αλλάζουμε την ποσότητα, ενημερώνουμε και το total_qty για να υπολογιστούν οι ώρες
+            if field == "task_qty":
+                task["task_qty"] = st.session_state[widget_key]
+                task["total_qty"] = st.session_state[widget_key]
+            else:
+                task[field] = st.session_state[widget_key]
+                
+            mark_unsaved_changes()
 
 # --- CHECK USER OVERLOAD ---
 def check_user_overload(target_date, availability_database, availability_overrides=None, team_members_list=None):
@@ -2505,7 +2515,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                         
                         auto_time = tasks_database.get(task_name, 0.0)
                         num_users = max(len(t_data.get("users", [])), 1)
-                        # Χρήση της ημερήσιας ποσότητας αν υπάρχει, αλλιώς της συνολικής του project
+                        # Χρήση της ημερήσιας ποσότητας (αν έχει οριστεί), αλλιώς της συνολικής
                         effective_qty = t_data.get("task_qty", project_main_qty)
                         task_hours_total = (auto_time * effective_qty) / 60
                         task_hours_per_user = task_hours_total / num_users
@@ -2516,9 +2526,11 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         
         st.divider()
         col_save, _ = st.columns([1, 3])
-        if col_save.button("💾 Αποθήκευση Αλλαγών", use_container_width=True, type="primary", key="save_project"):
+        if col_save.button("💾 Αποθήκευση Αλλαγών", use_container_width=True, type="primary", key=f"save_project_{selected_project}"):
             if save_all_assignments_to_sheet():
                 st.success("✅ Όλες οι αναθέσεις αποθηκεύτηκαν.")
+                st.session_state["_has_unsaved_changes"] = False
+                st.rerun() # <-- Αυτό κάνει refresh για να καθαρίσει το warning
             else:
                 st.error("❌ Σφάλμα κατά την αποθήκευση")
         
