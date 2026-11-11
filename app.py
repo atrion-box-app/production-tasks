@@ -2907,7 +2907,8 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
         for t_idx, t in enumerate(item_tasks):
             if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
                 auto_time = tasks_database.get(t["task"], 0.0)
-                hrs = (auto_time * qty) / 60
+                eff_qty = t.get("task_qty", qty)  # <-- ΝΕΟ
+                hrs = (auto_time * eff_qty) / 60
                 t_users = t.get("users", [])
                 if not t_users:
                     t_users = [t.get("user", "- Χωρίς Ανάθεση -")]
@@ -2958,7 +2959,8 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
             for task_name, p_data in p_tasks_dict.items():
                 if isinstance(p_data, dict) and p_data.get("active", False):
                     auto_time = tasks_database.get(task_name, 0.0)
-                    hrs = (auto_time * proj_qty) / 60
+                    eff_qty = p_data.get("task_qty", proj_qty)  # <-- ΝΕΟ
+                    hrs = (auto_time * eff_qty) / 60
                     t_users = p_data.get("users", [])
                     if not t_users:
                         t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
@@ -3724,7 +3726,8 @@ def render_technician(procurement_df, tasks_database, team_database, availabilit
                     if selected_member in t_users:
                         auto_time = tasks_database.get(task_name, 0.0)
                         num_users = max(len(t_users), 1)
-                        hours = (auto_time * proj_qty) / 60 / num_users
+                        eff_qty = p_data.get("task_qty", proj_qty)  # <-- ΝΕΟ
+                        hours = (auto_time * eff_qty) / 60 / num_users
                         worker_tasks.append({"type": "project", "p_key": p_key, "task_name": task_name, "project": proj_name, "item": "Γενική Σύνθεση / Box", "qty": proj_qty, "task": task_name, "hours": round(hours, 2), "done": p_data.get("done", False), "status_proc": "READY"})
 
     if not procurement_df.empty:
@@ -3745,7 +3748,8 @@ def render_technician(procurement_df, tasks_database, team_database, availabilit
                     if t_task != "- Επιλογή Εργασίας -":
                         auto_time = tasks_database.get(t_task, 0.0)
                         num_users = max(len(t_users), 1)
-                        hours = (auto_time * qty) / 60 / num_users
+                        eff_qty = t_data.get("task_qty", qty)  # <-- ΝΕΟ
+                        hours = (auto_time * eff_qty) / 60 / num_users
                         worker_tasks.append({"type": "item", "u_key": unique_item_key, "t_idx": t_idx, "project": project_name, "item": f"[{item_id}] {material}", "qty": qty, "task": t_task, "hours": round(hours, 2), "done": t_data.get("done", False), "status_proc": proc_status})
 
     if worker_tasks:
@@ -3877,7 +3881,8 @@ def render_projection(procurement_df, tasks_database, team_database, availabilit
                         if t_date in w_days:
                             auto_time = tasks_database.get(task_name, 0.0)
                             num_users = max(len(t_users), 1)
-                            hrs_per_user = (auto_time * proj_qty) / 60 / num_users
+                            eff_qty = p_data.get("task_qty", proj_qty)  # <-- ΝΕΟ
+                            hrs_per_user = (auto_time * eff_qty) / 60 / num_users
                             col_str = f"{WEEKDAYS_SHORT_GREEK[t_date.weekday()]} {t_date.strftime('%d/%m')}"
                             for user in t_users:
                                 if user in w_matrix:
@@ -3899,7 +3904,8 @@ def render_projection(procurement_df, tasks_database, team_database, availabilit
                     if t_task != "- Επιλογή Εργασίας -" and t_date in w_days:
                         auto_time = tasks_database.get(t_task, 0.0)
                         num_users = max(len(t_users), 1)
-                        hrs_per_user = (auto_time * qty) / 60 / num_users
+                        eff_qty = t_data.get("task_qty", qty)  # <-- ΝΕΟ
+                        hrs_per_user = (auto_time * eff_qty) / 60 / num_users
                         col_str = f"{WEEKDAYS_SHORT_GREEK[t_date.weekday()]} {t_date.strftime('%d/%m')}"
                         for user in t_users:
                             if user in w_matrix:
@@ -3981,7 +3987,8 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     if not t_users:
                         t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
                     num_users = max(len(t_users), 1)
-                    hrs_total = round((auto_time * proj_qty) / 60, 2)
+                    eff_qty = p_data.get("task_qty", proj_qty)
+                    hrs_total = round((auto_time * eff_qty) / 60, 2)
                     hrs_per_user = round(hrs_total / num_users, 2)
                     
                     is_partial = p_data.get("is_partial", False)
@@ -4029,7 +4036,8 @@ def render_daily_report(procurement_df, tasks_database, team_database, availabil
                     if not t_users:
                         t_users = [t_data.get("user", "- Χωρίς Ανάθεση -")]
                     num_users = max(len(t_users), 1)
-                    hrs_total = round((auto_time * qty) / 60, 2)
+                    eff_qty = t_data.get("task_qty", qty)
+                    hrs_total = round((auto_time * eff_qty) / 60, 2)
                     hrs_per_user = round(hrs_total / num_users, 2)
                     
                     is_partial = t_data.get("is_partial", False)
@@ -4350,7 +4358,8 @@ def render_location_dashboard(procurement_df, tasks_database, team_members_list,
             for t in item_tasks:
                 if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
                     auto_t = tasks_database.get(t["task"], 0.0)
-                    hrs = (auto_t * qty) / 60
+                    eff_qty = t.get("task_qty", qty)
+                    hrs = (auto_t * eff_qty) / 60
                     total_tasks += 1
                     total_hours += hrs
                     
@@ -4375,7 +4384,8 @@ def render_location_dashboard(procurement_df, tasks_database, team_members_list,
                 for task_name, p_data in p_tasks_dict.items():
                     if isinstance(p_data, dict) and p_data.get("active", False):
                         auto_t = tasks_database.get(task_name, 0.0)
-                        hrs = (auto_t * proj_qty) / 60
+                        eff_qty = p_data.get("task_qty", proj_qty)
+                        hrs = (auto_t * eff_qty) / 60
                         total_tasks += 1
                         total_hours += hrs
                         
@@ -5540,7 +5550,8 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
                     if not t_users:
                         t_users = [t.get("user", "- Χωρίς Ανάθεση -")]
                     num_users = max(len(t_users), 1)
-                    hrs_total = (auto_time * qty) / 60
+                    eff_qty = t.get("task_qty", qty)
+                    hrs_total = (auto_time * eff_qty) / 60
                     hrs_per_user = hrs_total / num_users
                     
                     if project_name not in day_data["projects"]:
@@ -5573,7 +5584,8 @@ def render_team_calendar(procurement_df, tasks_database, team_database, availabi
                         if not t_users:
                             t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
                         num_users = max(len(t_users), 1)
-                        hrs_total = (auto_time * proj_qty) / 60
+                        eff_qty = p_data.get("task_qty", proj_qty)
+                        hrs_total = (auto_time * eff_qty) / 60
                         hrs_per_user = hrs_total / num_users
                         
                         if proj_name not in day_data["projects"]:
