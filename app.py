@@ -318,7 +318,6 @@ def save_partial_to_history(project, task_name, item_id, done_qty, total_qty, re
         st.warning(f"Could not save partial to history: {e}")
         return False
 
-@st.cache_data(ttl=30)
 def load_dismissed_warnings():
     gc, _ = get_gspread_client()
     if not gc:
@@ -1813,6 +1812,7 @@ def render_overload_warnings(target_dates, availability_database):
                 if st.button("✕", key=f"dismiss_{warn_key}", help="Διαγραφή ειδοποίησης"):
                     date_str = check_date.strftime("%d/%m/%Y")
                     if dismiss_warning(date_str, user):
+                        load_dismissed_warnings.clear() # <-- Καθαρισμός cache
                         st.rerun()
 
 # --- PROJECT DETAILS FUNCTION ---
