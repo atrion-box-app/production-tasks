@@ -3726,9 +3726,9 @@ def render_technician(procurement_df, tasks_database, team_database, availabilit
                     if selected_member in t_users:
                         auto_time = tasks_database.get(task_name, 0.0)
                         num_users = max(len(t_users), 1)
-                        eff_qty = p_data.get("task_qty", proj_qty)  # <-- ΝΕΟ
+                        eff_qty = p_data.get("task_qty", proj_qty)
                         hours = (auto_time * eff_qty) / 60 / num_users
-                        worker_tasks.append({"type": "project", "p_key": p_key, "task_name": task_name, "project": proj_name, "item": "Γενική Σύνθεση / Box", "qty": proj_qty, "task": task_name, "hours": round(hours, 2), "done": p_data.get("done", False), "status_proc": "READY"})
+                        worker_tasks.append({"type": "project", "p_key": p_key, "task_name": task_name, "project": proj_name, "item": "Γενική Σύνθεση / Box", "qty": eff_qty, "task": task_name, "hours": round(hours, 2), "done": p_data.get("done", False), "status_proc": "READY"})
 
     if not procurement_df.empty:
         for idx, row in procurement_df.iterrows():
@@ -3748,9 +3748,9 @@ def render_technician(procurement_df, tasks_database, team_database, availabilit
                     if t_task != "- Επιλογή Εργασίας -":
                         auto_time = tasks_database.get(t_task, 0.0)
                         num_users = max(len(t_users), 1)
-                        eff_qty = t_data.get("task_qty", qty)  # <-- ΝΕΟ
+                        eff_qty = t_data.get("task_qty", qty)
                         hours = (auto_time * eff_qty) / 60 / num_users
-                        worker_tasks.append({"type": "item", "u_key": unique_item_key, "t_idx": t_idx, "project": project_name, "item": f"[{item_id}] {material}", "qty": qty, "task": t_task, "hours": round(hours, 2), "done": t_data.get("done", False), "status_proc": proc_status})
+                        worker_tasks.append({"type": "item", "u_key": unique_item_key, "t_idx": t_idx, "project": project_name, "item": f"[{item_id}] {material}", "qty": eff_qty, "task": t_task, "hours": round(hours, 2), "done": t_data.get("done", False), "status_proc": proc_status})
 
     if worker_tasks:
         w_export_list = [{"Project": wt["project"], "Υλικό / Είδος": wt["item"], "Ποσότητα": wt["qty"], "Εργασία": wt["task"], "Ώρες": wt["hours"], "Status Procurement": wt["status_proc"], "Ολοκληρώθηκε": "ΝΑΙ" if wt["done"] else "ΟΧΙ"} for wt in worker_tasks]
