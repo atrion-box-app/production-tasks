@@ -332,18 +332,25 @@ def load_dismissed_warnings():
             if not date_raw or not user:
                 continue
             
-            # Καθαρισμός ημερομηνίας: κόβουμε την ώρα αν υπάρχει
-            date_clean = date_raw.split(" ")[0]
-            # Αντικαθιστούμε παύλες με κάθετες
-            date_clean = date_clean.replace("-", "/")
+            # Μετατροπή της ημερομηνίας σε μορφή DD/MM/YYYY
+            # Αφαιρούμε την ώρα αν υπάρχει
+            date_part = date_raw.split(" ")[0]
             
-            # Αν είναι σε μορφή YYYY/MM/DD, το κάνουμε DD/MM/YYYY
-            parts = date_clean.split("/")
+            # Ελέγχουμε αν είναι σε μορφή YYYY-MM-DD ή YYYY/MM/DD
+            if "-" in date_part:
+                parts = date_part.split("-")
+            else:
+                parts = date_part.split("/")
+                
             if len(parts) == 3:
-                if len(parts[0]) == 4:  # π.χ. 2026/11/04
-                    date_clean = f"{parts[2]}/{parts[1]}/{parts[0]}"
-            
-            dismissed.add(f"{date_clean}_{user}")
+                if len(parts[0]) == 4: # Είναι YYYY-MM-DD
+                    final_date = f"{parts[2]}/{parts[1]}/{parts[0]}"
+                else: # Είναι DD/MM/YYYY
+                    final_date = f"{parts[0]}/{parts[1]}/{parts[2]}"
+            else:
+                final_date = date_part
+                
+            dismissed.add(f"{final_date}_{user}")
         return dismissed
     except Exception:
         return set()
@@ -1794,9 +1801,11 @@ def render_overload_warnings(target_dates, availability_database):
     for check_date in sorted(target_dates):
         overloads = check_user_overload(check_date, availability_database, availability_overrides, team_members_list)
         for user, info in overloads.items():
+            # Φτιάχνουμε το κλειδί με βάση την ημερομηνία όπως τη βλέπουμε
             date_str = check_date.strftime("%d/%m/%Y")
             warn_key = f"{date_str}_{user}"
             
+            # Έλεγχος αν υπάρχει το κλειδί στη λίστα
             if warn_key in dismissed_warnings:
                 continue
                 
@@ -1825,7 +1834,7 @@ def render_overload_warnings(target_dates, availability_database):
                 if st.button("✕", key=f"dismiss_{warn_key}", help="Διαγραφή ειδοποίησης"):
                     date_str = check_date.strftime("%d/%m/%Y")
                     if dismiss_warning(date_str, user):
-                        st.rerun()  # <-- ΜΟΝΟ ΑΥΤΟ, ΤΙΠΟΤΑ ΑΛΛΟ
+                        st.rerun()
 
 # --- PROJECT DETAILS FUNCTION ---
 def get_project_details(project_name, procurement_df, tasks_database, incoming_df):
