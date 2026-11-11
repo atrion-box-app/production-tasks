@@ -332,18 +332,21 @@ def load_dismissed_warnings():
             if not date_raw or not user:
                 continue
             
-            # Καθαρίζουμε την ημερομηνία για να είναι πάντα σε μορφή DD/MM/YYYY
-            date_clean = date_raw.split(" ")[0].replace("-", "/")
-            if len(date_clean.split("/")) == 3:
-                p1, p2, p3 = date_clean.split("/")
-                if len(p1) == 4:  # Αν είναι σε μορφή YYYY/MM/DD, το γυρνάμε σε DD/MM/YYYY
-                    date_clean = f"{p3}/{p2}/{p1}"
+            # Καθαρισμός ημερομηνίας: αφαιρούμε κενά και αλλάζουμε παύλες με κάθετες
+            date_clean = date_raw.replace(" ", "").replace("-", "/")
+            
+            # Αν είναι σε μορφή YYYY/MM/DD, το κάνουμε DD/MM/YYYY
+            parts = date_clean.split("/")
+            if len(parts) == 3:
+                if len(parts[0]) == 4:  # π.χ. 2026/11/04
+                    date_clean = f"{parts[2]}/{parts[1]}/{parts[0]}"
+                # Αν είναι ήδη DD/MM/YYYY, το αφήνουμε ως έχει
             
             dismissed.add(f"{date_clean}_{user}")
         return dismissed
     except Exception:
         return set()
-
+        
 def dismiss_warning(date_str, user):
     gc, _ = get_gspread_client()
     if not gc:
