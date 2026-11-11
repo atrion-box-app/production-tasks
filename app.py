@@ -318,6 +318,37 @@ def save_partial_to_history(project, task_name, item_id, done_qty, total_qty, re
         st.warning(f"Could not save partial to history: {e}")
         return False
 
+@st.cache_data(ttl=30)
+def load_dismissed_warnings():
+    gc, _ = get_gspread_client()
+    if not gc:
+        return set()
+    try:
+        sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Dismissed_Warnings")
+        records = sheet.get_all_records()
+        dismissed = set()
+        for r in records:
+            date_str = str(r.get("Date", "")).strip()
+            user = str(r.get("User", "")).strip()
+            if date_str and user:
+                dismissed.add(f"{date_str}_{user}")
+        return dismissed
+    except Exception:
+        return set()
+
+def dismiss_warning(date_str, user):
+    gc, _ = get_gspread_client()
+    if not gc:
+        return False
+    try:
+        sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Dismissed_Warnings")
+        sheet.append_row([date_str, user, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+        load_dismissed_warnings.clear() # Καθαρίζουμε το cache
+        return True
+    except Exception as e:
+        st.error(f"Σφάλμα: {e}")
+        return False
+
 def update_partial_status_item(u_key, t_idx, done_qty, total_qty, reason):
     if u_key not in st.session_state.get("tasks_store", {}):
         return False
@@ -1744,38 +1775,45 @@ def render_overload_warnings(target_dates, availability_database):
     availability_overrides = st.session_state.get("availability_overrides", [])
     team_members_list = st.session_state.get("team_members_list", [])
     
+    # Διαβάζουμε ποιες έχουν σβηστεί από το Sheet
+    dismissed_warnings = load_dismissed_warnings()
+    
     all_warnings = {}
     for check_date in sorted(target_dates):
         overloads = check_user_overload(check_date, availability_database, availability_overrides, team_members_list)
         for user, info in overloads.items():
+            date_str = check_date.strftime("%d/%m/%Y")
+            warn_key = f"{date_str}_{user}"
+            
+            if warn_key in dismissed_warnings:
+                continue
+                
             if check_date not in all_warnings:
                 all_warnings[check_date] = []
-            all_warnings[check_date].append((user, info))
+            all_warnings[check_date].append((user, info, warn_key))
     
-    # === ΝΕΟ: Κουμπί απόκρυψης ειδοποιήσεων ===
-    warn_key = "_overload_warnings_visible"
-    if warn_key not in st.session_state:
-        st.session_state[warn_key] = True
-    
-    if st.session_state[warn_key]:
-        col_warn_head, col_hide_btn = st.columns([5, 1])
-        with col_hide_btn:
-            if st.button("✕ Απόκρυψη", key="_hide_overload_btn", use_container_width=True):
-                st.session_state[warn_key] = False
-                st.rerun()
-        
-        for check_date in sorted(all_warnings.keys()):
-            for user, info in all_warnings[check_date]:
-                st.warning(
-                    f"⚠️ **Υπέρβαση ωρών** — **{user}** στις **{check_date.strftime('%d/%m/%Y')}**: "
-                    f"**{info['assigned']}h** (όριο: {info['max']}h) — **+{info['over']}h**"
+    if not all_warnings:
+        return
+
+    for check_date in sorted(all_warnings.keys()):
+        for user, info, warn_key in all_warnings[check_date]:
+            col_msg, col_btn = st.columns([10, 1])
+            
+            with col_msg:
+                st.markdown(
+                    f'<div style="background: #b71c1c; color: white; padding: 12px 16px; '
+                    f'border-radius: 8px; margin-bottom: 8px; border-left: 5px solid #ff5252;">'
+                    f'<b>⚠️ Υπέρβαση ωρών — {user}</b> στις <b>{check_date.strftime("%d/%m/%Y")}</b>: '
+                    f'<b>{info["assigned"]}h</b> (όριο: {info["max"]}h) — <b>+{info["over"]}h</b>'
+                    f'</div>',
+                    unsafe_allow_html=True
                 )
-    else:
-        # Μικρό κουμπί για εμφάνιση ξανά
-        if st.button("👁️ Εμφάνιση ειδοποιήσεων υπέρβασης", key="_show_overload_btn", use_container_width=True):
-            st.session_state[warn_key] = True
-            st.rerun()
-    # ==========================================
+            
+            with col_btn:
+                if st.button("✕", key=f"dismiss_{warn_key}", help="Διαγραφή ειδοποίησης"):
+                    date_str = check_date.strftime("%d/%m/%Y")
+                    if dismiss_warning(date_str, user):
+                        st.rerun()
 
 # --- PROJECT DETAILS FUNCTION ---
 def get_project_details(project_name, procurement_df, tasks_database, incoming_df):
