@@ -907,8 +907,36 @@ def load_all_data(version=0):
             })
     except Exception as e:
         pass
+    # === ΝΕΟ: Εισαγωγή εικονικού υλικού για Γενικές Εργασίες ===
+    if not df_proc.empty:
+        projects_list = df_proc["Project"].unique()
+        for proj in projects_list:
+            if proj == "-":
+                continue
+            proj_items = df_proc[df_proc["Project"] == proj]
+            main_qty = 1
+            for _, r in proj_items.iterrows():
+                if str(r["Ποσότητα"]).isdigit():
+                    main_qty = max(main_qty, int(r["Ποσότητα"]))
+            
+            virtual_row = {
+                "ID": f"VIRTUAL_{proj}",
+                "Ημερομηνία Παράδοσης": "-",
+                "Είδος Δώρου": "Γενική Σύνθεση",
+                "Project": proj,
+                "Ποσότητα": main_qty,
+                "Προμηθευτής": "-",
+                "Υλικό / Προϊόν": "Γενική Σύνθεση / Box",
+                "Αναμενόμενη Ημ. Παραλαβής": "-",
+                "Αναμενόμενη Ποσότητα Παραλαβής": "-",
+                "Status Procurement": "READY",
+                "is_virtual": True
+            }
+            df_proc = pd.concat([df_proc, pd.DataFrame([virtual_row])], ignore_index=True)
+    # =============================================================
 
     return df_proc, tasks_dict, team_member_names, availability_dict, df_incoming, team_members_list, availability_overrides
+
 
 # --- ASSIGNMENTS MANAGEMENT ---
 @st.cache_data(ttl=30)
@@ -2015,8 +2043,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         render_overload_warnings(all_dates_check, availability_database)
         
         st.divider()
-        tab1, tab2 = st.tabs(["Υλικά", "Γενικές Εργασίες"])
-        
+        tab1 = st.tabs(["Υλικά"])[0]        
         with tab1:
             filtered_df = procurement_df[procurement_df["Project"] == selected_project].copy()
             col_search, col_status_filter, col_clear = st.columns([2, 1, 1])
@@ -2384,145 +2411,6 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                             st.rerun()
                         if col_close.button("Κλείσιμο", key=f"mat_close_{unique_key}", use_container_width=True):
                             st.session_state.selected_material_expand = None
-                            st.rerun()
-        
-        with tab2:
-            st.markdown(f"### Γενικές Εργασίες — {selected_project}")
-            st.caption("Εδώ μπορείς να προσθέτεις εργασίες ανά ημερομηνία (π.χ. 300 τμχ στις 12/11, 200 στις 13/11).")
-            
-            # Χρησιμοποιούμε ένα ειδικό κλειδί για τις Γενικές Εργασίες του Project
-            proj_key = f"PROJ_{selected_project}"
-            
-            # Ελέγχουμε αν υπάρχει το store, αλλιώς το δημιουργούμε
-            if proj_key not in st.session_state["tasks_store"]:
-                st.session_state["tasks_store"][proj_key] = []
-            
-            proj_tasks = st.session_state["tasks_store"][proj_key]
-            
-            # Βρίσκουμε την κύρια ποσότητα του project (για default τιμές)
-            project_main_qty = 1
-            filtered_df = procurement_df[procurement_df["Project"] == selected_project].copy()
-            for _, r in filtered_df.iterrows():
-                if str(r["Ποσότητα"]).isdigit():
-                    project_main_qty = max(project_main_qty, int(r["Ποσότητα"]))
-            
-            # Εμφάνιση των υπαρχόντων Γενικών Εργασιών
-            if not proj_tasks:
-                st.info("Δεν έχουν οριστεί Γενικές Εργασίες για αυτό το project. Πάτησε 'Προσθήκη Εργασίας' παρακάτω.")
-                
-            task_options = sorted(list(tasks_database.keys()))
-            
-            for t_idx, t_data in enumerate(list(proj_tasks)):
-                task_uid = t_data.get("uid", f"task_{t_idx}")
-                
-                with st.container(border=True):
-                    c_done, c_task, c_del = st.columns([0.1, 0.8, 0.1])
-                    
-                    chk_k = f"proj_task_chk_{proj_key}_{task_uid}"
-                    c_done.checkbox("Done", value=t_data.get("done", False), key=chk_k, on_change=toggle_item_task, args=(proj_key, t_idx, chk_k))
-                    
-                    # Επιλογή Εργασίας
-                    task_idx = task_options.index(t_data["task"]) if t_data["task"] in task_options else 0
-                    task_k = f"proj_task_sel_{proj_key}_{task_uid}"
-                    c_task.selectbox("Εργασία", task_options, index=task_idx, key=task_k, on_change=update_item_field, args=(proj_key, t_idx, "task", task_k))
-                    
-                    if c_del.button("🗑️", key=f"proj_task_del_{proj_key}_{t_idx}"):
-                        st.session_state["tasks_store"][proj_key].pop(t_idx)
-                        mark_unsaved_changes()
-                        st.rerun()
-
-                    # Υπεύθυνοι, Ποσότητα, Ημερομηνία
-                    c_user, c_qty, c_date, c_time = st.columns([0.35, 0.15, 0.35, 0.15])
-                    
-                    current_users = t_data.get("users", [])
-                    if not isinstance(current_users, list):
-                        current_users = [current_users] if current_users else []
-                    
-                    task_date = t_data.get("date", date.today())
-                    
-                    display_opts, disp_to_val, val_to_disp = get_team_options_for_date(
-                        task_date, team_members_list, availability_database, availability_overrides,
-                        current_location=current_location
-                    )
-                    
-                    valid_users_clean = [u for u in current_users if u in team_database]
-                    current_display = clean_users_to_display(valid_users_clean, val_to_disp)
-                    
-                    user_k = f"proj_task_users_{proj_key}_{task_uid}"
-                    c_user.multiselect("Υπεύθυνοι", options=display_opts, default=current_display, key=user_k, on_change=update_item_users_mapped, args=(proj_key, t_idx, user_k, disp_to_val))
-                    
-                    # Ποσότητα
-                    qty_val = t_data.get("task_qty", project_main_qty)
-                    qty_k = f"proj_task_qty_{proj_key}_{task_uid}"
-                    ptask_qty = c_qty.number_input("Ποσότητα (για αυτή τη μέρα):", min_value=1, value=int(qty_val), step=1, key=qty_k)
-                    if ptask_qty != qty_val:
-                        st.session_state["tasks_store"][proj_key][t_idx]["task_qty"] = ptask_qty
-                        st.session_state["tasks_store"][proj_key][t_idx]["total_qty"] = ptask_qty
-                        mark_unsaved_changes()
-                    
-                    # Ημερομηνία
-                    date_k = f"proj_task_date_{proj_key}_{task_uid}"
-                    c_date.date_input("Ημερομηνία", value=t_data.get("date", date.today()), format="DD/MM/YYYY", key=date_k, on_change=update_item_field, args=(proj_key, t_idx, "date", date_k))
-                    
-                    # Υπολογισμός Ωρών
-                    auto_time = tasks_database.get(t_data["task"], 0.0)
-                    num_users = max(len(t_data.get("users", [])), 1)
-                    eff_qty = ptask_qty
-                    task_hours_total = (auto_time * eff_qty) / 60
-                    task_hours_per_user = task_hours_total / num_users
-                    
-                    if num_users > 1:
-                        c_time.metric("Ώρες/άτομο", f"{round(task_hours_per_user, 2)}h")
-                    else:
-                        c_time.metric("Ώρες", f"{round(task_hours_per_user, 2)}h")
-
-            # Κουμπί Προσθήκης Νέας Εργασίας
-            col_add, _ = st.columns([1, 3])
-            if col_add.button("➕ Προσθήκη Εργασίας", key=f"add_proj_task_{proj_key}", use_container_width=True, type="primary"):
-                # Αλλάζουμε την κατάσταση της φόρμας (toggle)
-                st.session_state[f"_add_proj_task_form_{proj_key}"] = not st.session_state.get(f"_add_proj_task_form_{proj_key}", False)
-
-            if st.session_state.get(f"_add_proj_task_form_{proj_key}", False):
-                with st.container(border=True):
-                    st.markdown("**➕ Νέα Γενική Εργασία**")
-                    col_sel_task, col_sel_date, col_sel_qty = st.columns([2, 1, 1])
-                    
-                    sel_task = col_sel_task.selectbox("Εργασία:", task_options, key=f"new_proj_task_sel_{proj_key}")
-                    sel_date = col_sel_date.date_input("Ημερομηνία:", value=date.today(), format="DD/MM/YYYY", key=f"new_proj_date_sel_{proj_key}")
-                    sel_qty = col_sel_qty.number_input("Ποσότητα:", min_value=1, value=int(project_main_qty), step=1, key=f"new_proj_qty_sel_{proj_key}")
-                    
-                    col_save, col_cancel = st.columns([1, 1])
-                    with col_save:
-                        if st.button("💾 Δημιουργία", key=f"save_new_proj_task_{proj_key}", type="primary", use_container_width=True):
-                            new_uid = f"task_{datetime.now().timestamp()}"
-                            
-                            # Έλεγχος αν υπάρχει το κλειδί, αλλιώς το δημιουργούμε
-                            if proj_key not in st.session_state["tasks_store"]:
-                                st.session_state["tasks_store"][proj_key] = []
-                            
-                            # Προσθήκη του νέου task
-                            st.session_state["tasks_store"][proj_key].append({
-                                "uid": new_uid,
-                                "done": False,
-                                "task": sel_task,
-                                "user": "- Χωρίς Ανάθεση -",
-                                "users": [],
-                                "date": sel_date,
-                                "is_partial": False,
-                                "done_qty": 0,
-                                "total_qty": sel_qty,
-                                "task_qty": sel_qty,
-                                "partial_reason": "",
-                                "progress_logs": []
-                            })
-                            
-                            st.session_state[f"_add_proj_task_form_{proj_key}"] = False
-                            mark_unsaved_changes()
-                            time.sleep(0.5)  # Μικρή καθυστέρηση για να προλάβει να σώσει
-                            st.rerun()
-                    with col_cancel:
-                        if st.button("✕ Ακύρωση", key=f"cancel_new_proj_task_{proj_key}", use_container_width=True):
-                            st.session_state[f"_add_proj_task_form_{proj_key}"] = False
                             st.rerun()
         
         st.divider()
