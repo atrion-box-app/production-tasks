@@ -1743,32 +1743,39 @@ def check_user_overload(target_date, availability_database, availability_overrid
                 
                 auto_time = tasks_db.get(t["task"], 0.0)
                 eff_qty = t.get("task_qty", qty)
+                
+                # Ασφάλεια για να μην κρασάρει αν το eff_qty δεν είναι αριθμός
+                try:
+                    eff_qty = float(eff_qty) if eff_qty not in [None, ""] else float(qty)
+                except:
+                    eff_qty = float(qty)
+                    
                 hrs_per_user = (auto_time * eff_qty / 60) / num_users if auto_time else 0
                 
                 for user in t_users:
                     if user and user != "- Χωρίς Ανάθεση -":
                         user_hours[user] = user_hours.get(user, 0.0) + hrs_per_user
     
-    # 2. Υπολογισμός για τις Γενικές Εργασίες (Project Tasks)
-    for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
-        if isinstance(p_dict, dict):
-            proj_name = p_key.replace("proj_", "")
-            proj_qty = 1
-            if not procurement_df.empty:
-                p_items = procurement_df[procurement_df["Project"] == proj_name]
-                for _, r in p_items.iterrows():
-                    if str(r["Ποσότητα"]).isdigit():
-                        proj_qty = max(proj_qty, int(r["Ποσότητα"]))
-            
-            for t_name, p_data in p_dict.items():
-                if isinstance(p_data, dict) and p_data.get("active", False) and p_data.get("date") == target_date:
-                    t_users = p_data.get("users", [])
+    # 2. Υπολογισμός για τις Γενικές Εργασίες (Project Tasks) - ΝΕΑ ΛΟΓΙΚΗ
+    for p_key, p_tasks_list in st.session_state.get("tasks_store", {}).items():
+        if p_key.startswith("PROJ_"):
+            proj_name = p_key.replace("PROJ_", "")
+            for t_data in p_tasks_list:
+                if t_data.get("task") and t_data.get("date") == target_date:
+                    t_users = t_data.get("users", [])
                     if not t_users:
-                        t_users = [p_data.get("user", "- Χωρίς Ανάθεση -")]
+                        t_users = [t_data.get("user", "- Χωρίς Ανάθεση -")]
                     num_users = max(len(t_users), 1)
-                    auto_time = tasks_db.get(t_name, 0.0)
-                    eff_qty = p_data.get("task_qty", proj_qty)
+                    auto_time = tasks_db.get(t_data["task"], 0.0)
+                    eff_qty = t_data.get("task_qty", 1)
+                    
+                    try:
+                        eff_qty = float(eff_qty) if eff_qty not in [None, ""] else 1.0
+                    except:
+                        eff_qty = 1.0
+                        
                     hrs_per_user = (auto_time * eff_qty / 60) / num_users if auto_time else 0
+                    
                     for user in t_users:
                         if user and user != "- Χωρίς Ανάθεση -":
                             user_hours[user] = user_hours.get(user, 0.0) + hrs_per_user
