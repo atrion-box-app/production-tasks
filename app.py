@@ -1155,6 +1155,9 @@ def save_all_assignments_to_sheet():
         for p_key, p_tasks_list in st.session_state.get("tasks_store", {}).items():
             if p_key.startswith("PROJ_"):
                 proj_name = p_key.replace("PROJ_", "")
+                # Έλεγχος αν το proj_name είναι έγκυρο
+                if not proj_name:
+                    continue
                 for t in p_tasks_list:
                     if t.get("task"):
                         task_users = t.get("users", [])
@@ -2492,6 +2495,12 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     with col_save:
                         if st.button("💾 Δημιουργία", key=f"save_new_proj_task_{proj_key}", type="primary", use_container_width=True):
                             new_uid = f"task_{datetime.now().timestamp()}"
+                            
+                            # Έλεγχος αν υπάρχει το κλειδί, αλλιώς το δημιουργούμε
+                            if proj_key not in st.session_state["tasks_store"]:
+                                st.session_state["tasks_store"][proj_key] = []
+                            
+                            # Προσθήκη του νέου task
                             st.session_state["tasks_store"][proj_key].append({
                                 "uid": new_uid,
                                 "done": False,
@@ -2506,8 +2515,10 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                                 "partial_reason": "",
                                 "progress_logs": []
                             })
+                            
                             st.session_state[f"_add_proj_task_form_{proj_key}"] = False
                             mark_unsaved_changes()
+                            time.sleep(0.5)  # Μικρή καθυστέρηση για να προλάβει να σώσει
                             st.rerun()
                     with col_cancel:
                         if st.button("✕ Ακύρωση", key=f"cancel_new_proj_task_{proj_key}", use_container_width=True):
@@ -5996,10 +6007,22 @@ def sync_session_stores(procurement_df, sheet_item_assignments, sheet_proj_assig
 
     if needs_rebuild:
         new_store = {k: [] for k in keys_all}
-        # Προσθήκη των Γενικών Εργασιών στο νέο store
+        
+        # Προσθήκη των Γενικών Εργασιών από το Sheet
         for p_key, p_tasks_list in sheet_item_assignments.items():
             if p_key.startswith("PROJ_"):
                 new_store[p_key] = p_tasks_list
+                
+        # ΔΙΑΤΗΡΗΣΗ των Γενικών Εργασιών που έχουν προστεθεί αλλά δεν έχουν αποθηκευτεί
+        if "tasks_store" in st.session_state:
+            for p_key, p_tasks_list in st.session_state["tasks_store"].items():
+                if p_key.startswith("PROJ_"):
+                    if p_key not in new_store:
+                        new_store[p_key] = []
+                    for t in p_tasks_list:
+                        if t not in new_store[p_key]:
+                            new_store[p_key].append(t)
+        
         relinked = set()
         n = 0
         for item_id, tasks in sheet_item_assignments.items():
