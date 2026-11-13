@@ -2476,7 +2476,8 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
             # Κουμπί Προσθήκης Νέας Εργασίας
             col_add, _ = st.columns([1, 3])
             if col_add.button("➕ Προσθήκη Εργασίας", key=f"add_proj_task_{proj_key}", use_container_width=True, type="primary"):
-                st.session_state[f"_add_proj_task_form_{proj_key}"] = True
+                # Αλλάζουμε την κατάσταση της φόρμας (toggle)
+                st.session_state[f"_add_proj_task_form_{proj_key}"] = not st.session_state.get(f"_add_proj_task_form_{proj_key}", False)
 
             if st.session_state.get(f"_add_proj_task_form_{proj_key}", False):
                 with st.container(border=True):
