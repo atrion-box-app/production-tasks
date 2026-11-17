@@ -458,6 +458,40 @@ def parse_date_ambiguous(date_str, prefer_eu=True):
             continue
     return None
 
+def get_expected_arrival_date(row):
+    """
+    Επιστρέφει την αναμενόμενη ημερομηνία παραλαβής ενός υλικού (date) ή None.
+    Διαβάζει το πεδίο 'Αναμενόμενη Ημ. Παραλαβής' από τη γραμμή του procurement_df.
+    """
+    if row is None:
+        return None
+    raw = str(row.get("Αναμενόμενη Ημ. Παραλαβής", "")).strip()
+    if raw in ["-", "nan", "", "None", "NaT", "NAT"]:
+        return None
+    return parse_date_safe(raw)
+
+
+def is_material_ready(status):
+    """True αν το Status Procurement θεωρείται έτοιμο."""
+    return str(status).strip().upper() in ["OK STOCK", "RECEIVED", "READY"]
+
+
+def check_task_date_vs_arrival(task_date, expected_arrival_date):
+    """
+    Επιστρέφει (is_ok, message).
+    - is_ok=False → η ημερομηνία εργασίας είναι πριν την αναμενόμενη παραλαβή.
+    - is_ok=True  → OK ή δεν υπάρχει αναμενόμενη ημερομηνία.
+    """
+    if expected_arrival_date is None or task_date is None:
+        return True, ""
+    if task_date < expected_arrival_date:
+        return False, (
+            f"⚠️ Η εργασία ορίζεται για {task_date.strftime('%d/%m/%Y')}, "
+            f"αλλά το υλικό αναμένεται {expected_arrival_date.strftime('%d/%m/%Y')}. "
+            f"Σίγουρα θέλεις να το προγραμματίσεις νωρίτερα;"
+        )
+    return True, ""
+
 def get_shipping_info(project_name, incoming_df):
     if incoming_df is None or incoming_df.empty:
         return False, ""
