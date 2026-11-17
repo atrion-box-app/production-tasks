@@ -2857,7 +2857,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         })
 
     # === ΔΙΟΡΘΩΣΗ: Απλό DataFrame αντί locals() ===
-    dash_df = pd.DataFrame(locals().get('dashboard_data', [])) 
+    dash_df = pd.DataFrame(dashboard_data) 
     # ==================================================
 
     st.markdown(f"### {section_title}")
