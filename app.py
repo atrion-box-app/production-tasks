@@ -2857,7 +2857,10 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         })
 
     # === ΔΙΟΡΘΩΣΗ: Απλό DataFrame αντί locals() ===
-    dash_df = pd.DataFrame(dashboard_data) 
+    try:
+        dash_df = pd.DataFrame(dashboard_data)
+    except Exception:
+        dash_df = pd.DataFrame()
     # ==================================================
 
     st.markdown(f"### {section_title}")
