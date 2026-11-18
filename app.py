@@ -2087,7 +2087,10 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         all_dates_check = set()
         for idx_chk, row_chk in filtered_df_check.iterrows():
             item_id_chk = str(row_chk["ID"])
-            u_key_chk = f"{row_chk['u_key']}"  # <-- ΝΕΟ
+            if 'u_key' in row_chk:
+                u_key_chk = str(row_chk['u_key'])
+            else:
+                u_key_chk = f"{item_id_chk}_{idx_chk}"
             for t_chk in st.session_state.get("tasks_store", {}).get(u_key_chk, []):
                 if t_chk.get("task") and t_chk["task"] != "- Επιλογή Εργασίας -" and t_chk.get("date"):
                     all_dates_check.add(t_chk["date"])
@@ -2528,7 +2531,10 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         
         for idx, r in filtered_p.iterrows():
             item_id = str(r["ID"])
-            u_key = f"{r['u_key']}"  # <-- ΝΕΟ
+            if 'u_key' in r:
+                u_key = str(r['u_key'])
+            else:
+                u_key = f"{item_id}_{idx}"
             qty = int(r["Ποσότητα"]) if str(r["Ποσότητα"]).isdigit() else 1
             
             item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
@@ -2683,7 +2689,10 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     filtered_p_items = procurement_df[procurement_df["Project"] == p_name]
                     for idx_t, r_t in filtered_p_items.iterrows():
                         item_id_t = str(r_t["ID"])
-                        u_key_t = f"{r_t['u_key']}"  # <-- ΝΕΟ
+                        if 'u_key' in r_t:
+                            u_key_t = str(r_t['u_key'])
+                        else:
+                            u_key_t = f"{item_id_t}_{idx_t}"
                         qty_t = int(r_t["Ποσότητα"]) if str(r_t["Ποσότητα"]).isdigit() else 1
                         for tt in st.session_state["tasks_store"].get(u_key_t, []):
                             if tt.get("task") and tt["task"] != "- Επιλογή Εργασίας -" and not tt.get("done", False):
@@ -2723,7 +2732,10 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     all_users_in_proj = set()
                     for idx_u, r_u in filtered_p_items.iterrows():
                         item_id_u = str(r_u["ID"])
-                        u_key_u = f"{r_u['u_key']}"  # <-- ΝΕΟ
+                        if 'u_key' in r_u:
+                            u_key_u = str(r_u['u_key'])
+                        else:
+                            u_key_u = f"{item_id_u}_{idx_u}"
                         for tt in st.session_state["tasks_store"].get(u_key_u, []):
                             if tt.get("task") and tt["task"] != "- Επιλογή Εργασίας -":
                                 for uu in tt.get("users", []):
@@ -2827,7 +2839,10 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     
     for idx, row in procurement_df.iterrows():
         item_id = str(row["ID"])
-        unique_key = f"{row['u_key']}"  # <-- ΝΕΟ
+        if 'u_key' in row:
+            unique_key = str(row['u_key'])
+        else:
+            unique_key = f"{item_id}_{idx}"
         project_name = str(row["Project"])
 
         if project_name not in active_projects_set:
