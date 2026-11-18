@@ -498,17 +498,23 @@ def get_shipping_info(project_name, incoming_df):
     if "Project" not in incoming_df.columns:
         return False, ""
     
-    project_name_clean = str(project_name).strip().upper()
+    # Καθαρίζουμε το όνομα του project που ψάχνουμε
+    project_name_clean = re.sub(r'\s+', ' ', str(project_name).strip().upper())
     
     for _, inc_row in incoming_df.iterrows():
-        inc_project = str(inc_row["Project"]).strip().upper()
+        # Καθαρίζουμε και το όνομα από το Incoming Sheet
+        inc_project = re.sub(r'\s+', ' ', str(inc_row["Project"]).strip().upper())
         
-        # --- DEBUG ---
-        if "INTERSALONICA" in project_name_clean or "ISOMAT" in project_name_clean or "CPW" in project_name_clean:
-            st.warning(f"DEBUG: Ψάχνω για '{project_name_clean}' | Στο incoming βρήκα: '{inc_project}' | Match: {inc_project == project_name_clean}")
-        # -------------
-            
+        # Ελέγχουμε αν το ένα περιέχεται στο άλλο, αγνοώντας κενά
+        is_match = False
         if inc_project == project_name_clean:
+            is_match = True
+        elif inc_project and inc_project in project_name_clean:
+            is_match = True
+        elif project_name_clean and project_name_clean in inc_project:
+            is_match = True
+            
+        if is_match:
             shipping_status = str(inc_row.get("Shipping Status", "")).strip()
             shipping_date = str(inc_row.get("Shipping Date", "")).strip()
             
@@ -519,6 +525,7 @@ def get_shipping_info(project_name, incoming_df):
                 shipping_date = ""
             
             return is_shipped, shipping_date
+            
     return False, ""
 
 def get_availability_for_date(target_date, availability_weekly, availability_overrides, team_members_list):
