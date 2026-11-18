@@ -502,6 +502,12 @@ def get_shipping_info(project_name, incoming_df):
     
     for _, inc_row in incoming_df.iterrows():
         inc_project = str(inc_row["Project"]).strip().upper()
+        
+        # --- DEBUG ---
+        if "INTERSALONICA" in project_name_clean or "ISOMAT" in project_name_clean or "CPW" in project_name_clean:
+            st.warning(f"DEBUG: Ψάχνω για '{project_name_clean}' | Στο incoming βρήκα: '{inc_project}' | Match: {inc_project == project_name_clean}")
+        # -------------
+            
         if inc_project == project_name_clean:
             shipping_status = str(inc_row.get("Shipping Status", "")).strip()
             shipping_date = str(inc_row.get("Shipping Date", "")).strip()
