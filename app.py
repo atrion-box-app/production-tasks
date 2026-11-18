@@ -407,7 +407,7 @@ def load_partial_history(version=0):
 def clean_project_name(name):
     if name is None:
         return ""
-    s = str(name).strip()
+    s = strip_all_fields(str(name))
     s = re.sub(r'^\*+\s*', '', s)
     s = re.sub(r'\s*\*+$', '', s)
     s = s.replace('**', '')
