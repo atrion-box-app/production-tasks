@@ -209,7 +209,14 @@ def compute_location_progress(procurement_df, tasks_database, location):
     
     for idx, row in proj_df.iterrows():
         item_id = str(row["ID"])
-        u_key = f"{row['u_key']}"  # <-- ΝΕΟ
+        
+        # Δικλείδα ασφαλείας: Αν δεν υπάρχει το u_key (π.χ. δεν έχει φορτώσει ακόμα), το φτιάχνουμε επιτόπου
+        if 'u_key' in row:
+            u_key = str(row['u_key'])
+        else:
+            # Fallback στο παλιό σύστημα για να μην σκάσει το app
+            u_key = f"{item_id}_{idx}"
+            
         item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
         for t in item_tasks:
             if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
@@ -1931,7 +1938,11 @@ def get_project_details(project_name, procurement_df, tasks_database, incoming_d
     
     for idx, row in items.iterrows():
         item_id = str(row["ID"])
-        u_key = f"{row['u_key']}"  # <-- ΝΕΟ
+        # Δικλείδα ασφαλείας
+        if 'u_key' in row:
+            u_key = str(row['u_key'])
+        else:
+            u_key = f"{item_id}_{idx}"
         qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
         
         item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
