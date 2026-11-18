@@ -209,7 +209,7 @@ def compute_location_progress(procurement_df, tasks_database, location):
     
     for idx, row in proj_df.iterrows():
         item_id = str(row["ID"])
-        u_key = f"{item_id}_{idx}"
+        u_key = f"{row['u_key']}"  # <-- ΝΕΟ
         item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
         for t in item_tasks:
             if t.get("task") and t["task"] != "- Επιλογή Εργασίας -":
@@ -794,6 +794,26 @@ def load_all_data(version=0):
     except Exception:
         df_proc = pd.DataFrame()
 
+        # --- ΝΕΟ: Δημιουργία σταθερού u_key ---
+        def create_stable_u_key(row):
+            proj = str(row.get("Project", "")).strip()
+            desc = str(row.get("Υλικό / Προϊόν", "")).strip()
+            due = str(row.get("Ημερομηνία Παράδοσης", "")).strip()
+            sku = str(row.get("SKU", "")).strip() # Αν υπάρχει SKU στο df_proc
+            
+            # Καθαρίζουμε το due date
+            if due in ["-", "nan", ""]:
+                due = "NO_DATE"
+            
+            # Αν το due date είναι άκυρο, χρησιμοποιούμε το SKU (αν υπάρχει)
+            if due == "NO_DATE" and sku and sku not in ["-", "nan", ""]:
+                return f"{proj}_{desc}_{sku}"
+            
+            return f"{proj}_{desc}_{due}"
+
+        df_proc["u_key"] = df_proc.apply(create_stable_u_key, axis=1)
+        # -------------------------------------
+
     df_incoming = pd.DataFrame()
     try:
         df_incoming_raw = pd.read_csv(INCOMING_CSV_URL, header=None)
@@ -1071,11 +1091,24 @@ def load_assignments_from_sheet():
                     "progress_logs": [],
                 })
             else:
-                if item_id not in assignments_item:
-                    assignments_item[item_id] = []
+                # Βρίσκουμε το σωστό u_key από το procurement_df
+                # Χρειαζόμαστε το procurement_df εδώ. Ας το πάρουμε από το session_state
+                proc_df = st.session_state.get("procurement_df", pd.DataFrame())
+                if proc_df.empty:
+                    continue
+                
+                # Ψάχνουμε τη γραμμή με το ίδιο ID και Project
+                match = proc_df[(proc_df["ID"].astype(str) == str(item_id)) & (proc_df["Project"] == p_name)]
+                if match.empty:
+                    continue
+                
+                real_u_key = str(match.iloc[0]["u_key"])
+                
+                if real_u_key not in assignments_item:
+                    assignments_item[real_u_key] = []
                 
                 is_duplicate = False
-                for existing in assignments_item[item_id]:
+                for existing in assignments_item[real_u_key]:
                     if (existing["task"] == task_name and 
                         existing["user"] == user and 
                         str(existing["date"]) == str(assign_date)):
@@ -1083,8 +1116,8 @@ def load_assignments_from_sheet():
                         break
                 
                 if not is_duplicate:
-                    assignments_item[item_id].append({
-                        "uid": f"task_{item_id}_{task_name}_{assign_date_str}_{int(time.time() * 1000) % 1000000}",
+                    assignments_item[real_u_key].append({
+                        "uid": f"task_{real_u_key}_{task_name}_{assign_date_str}_{int(time.time() * 1000) % 1000000}",
                         "material": strip_all_fields(str(r.get("Material", ""))),
                         "project": p_name,
                         "done": done,
@@ -1105,29 +1138,8 @@ def load_assignments_from_sheet():
     return assignments_item, assignments_proj
 
 def auto_rollover_partial_tasks():
-    today = date.today()
-    rolled_over_count = 0
-    
-    for u_key, task_list in st.session_state.get("tasks_store", {}).items():
-        for t in task_list:
-            if t.get("is_partial", False) and not is_partial_complete(t):
-                task_date = t.get("date")
-                if task_date and isinstance(task_date, date) and task_date < today:
-                    t["date"] = today
-                    rolled_over_count += 1
-                    
-    for p_key, p_dict in st.session_state.get("project_tasks_store", {}).items():
-        if isinstance(p_dict, dict):
-            for task_name, p_data in p_dict.items():
-                if isinstance(p_data, dict) and p_data.get("is_partial", False) and not is_partial_complete(p_data):
-                    task_date = p_data.get("date")
-                    if task_date and isinstance(task_date, date) and task_date < today:
-                        p_data["date"] = today
-                        rolled_over_count += 1
-                        
-    if rolled_over_count > 0:
-        mark_unsaved_changes()
-    return rolled_over_count
+    # ΑΠΕΝΕΡΓΟΠΟΙΗΣΗ: Δεν θέλουμε να αλλάζουν οι ημερομηνίες μόνο τους.
+    return 0
 
 def save_all_assignments_to_sheet():
     gc, _ = get_gspread_client()
@@ -1143,8 +1155,7 @@ def save_all_assignments_to_sheet():
         if 'procurement_df' in st.session_state and not st.session_state.procurement_df.empty:
             valid_u_keys = set()
             for idx, row in st.session_state.procurement_df.iterrows():
-                item_id = str(row["ID"])
-                valid_u_keys.add(f"{item_id}_{idx}")
+                valid_u_keys.add(str(row['u_key']))  # <-- Χρήση του νέου u_key
             
             stale_keys = [k for k in list(st.session_state.get("tasks_store", {}).keys()) if k not in valid_u_keys]
             for k in stale_keys:
@@ -1167,21 +1178,8 @@ def save_all_assignments_to_sheet():
             except:
                 pass
 
-        if 'procurement_df' in st.session_state and not st.session_state.procurement_df.empty:
-            latest_u_key_per_item = {}
-            for idx, row in st.session_state.procurement_df.iterrows():
-                item_id = str(row["ID"])
-                u_key = f"{item_id}_{idx}"
-                latest_u_key_per_item[item_id] = u_key
-            
-            cleaned_store = {}
-            for u_key, tasks in st.session_state.get("tasks_store", {}).items():
-                parts = u_key.rsplit("_", 1)
-                item_id_key = parts[0] if len(parts) == 2 else u_key
-                if item_id_key in latest_u_key_per_item:
-                    if u_key == latest_u_key_per_item[item_id_key]:
-                        cleaned_store[u_key] = tasks
-            st.session_state["tasks_store"] = cleaned_store
+        # --- ΑΦΑΙΡΕΘΗΚΕ ΤΟ CLEANUP ΠΟΥ ΕΣΒΗΝΕ TASKS ---
+        pass
 
         sheet = gc.open_by_key(MY_SHEET_ID).worksheet("Assignments")
         rows = [["Project", "Item_ID", "Task_Name", "Assigned_User", "Assigned_Date", "Status_Done", "Task_Type",
@@ -1193,16 +1191,15 @@ def save_all_assignments_to_sheet():
                 item_to_project[str(r["ID"])] = str(r["Project"])
 
         for u_key, t_list in st.session_state.get("tasks_store", {}).items():
-            item_id = strip_all_fields(u_key.split("_")[0])
-            proj_name = strip_all_fields(item_to_project.get(item_id, "-"))
-            mat_name = ""
-            try:
-                _ix = int(u_key.rsplit("_", 1)[1])
-                _r = st.session_state.procurement_df.loc[_ix]
-                mat_name = strip_all_fields(str(_r["Υλικό / Προϊόν"]))
-                proj_name = strip_all_fields(str(_r["Project"]))
-            except Exception:
-                pass            
+            # Βρίσκουμε τη γραμμή του procurement_df με βάση το u_key
+            matched_row = st.session_state.procurement_df[st.session_state.procurement_df["u_key"] == u_key]
+            if matched_row.empty:
+                continue
+            
+            _r = matched_row.iloc[0]
+            item_id = strip_all_fields(str(_r["ID"]))
+            proj_name = strip_all_fields(str(_r["Project"]))
+            mat_name = strip_all_fields(str(_r["Υλικό / Προϊόν"]))
             for t in t_list:
                 if t.get("task") and t.get("task") != "- Επιλογή Εργασίας -":
                     task_users = t.get("users", [])
@@ -1934,7 +1931,7 @@ def get_project_details(project_name, procurement_df, tasks_database, incoming_d
     
     for idx, row in items.iterrows():
         item_id = str(row["ID"])
-        u_key = f"{item_id}_{idx}"
+        u_key = f"{row['u_key']}"  # <-- ΝΕΟ
         qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
         
         item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
@@ -2079,7 +2076,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         all_dates_check = set()
         for idx_chk, row_chk in filtered_df_check.iterrows():
             item_id_chk = str(row_chk["ID"])
-            u_key_chk = f"{item_id_chk}_{idx_chk}"
+            u_key_chk = f"{row_chk['u_key']}"  # <-- ΝΕΟ
             for t_chk in st.session_state.get("tasks_store", {}).get(u_key_chk, []):
                 if t_chk.get("task") and t_chk["task"] != "- Επιλογή Εργασίας -" and t_chk.get("date"):
                     all_dates_check.add(t_chk["date"])
@@ -2520,7 +2517,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
         
         for idx, r in filtered_p.iterrows():
             item_id = str(r["ID"])
-            u_key = f"{item_id}_{idx}"
+            u_key = f"{r['u_key']}"  # <-- ΝΕΟ
             qty = int(r["Ποσότητα"]) if str(r["Ποσότητα"]).isdigit() else 1
             
             item_tasks = st.session_state.get("tasks_store", {}).get(u_key, [])
@@ -2675,7 +2672,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     filtered_p_items = procurement_df[procurement_df["Project"] == p_name]
                     for idx_t, r_t in filtered_p_items.iterrows():
                         item_id_t = str(r_t["ID"])
-                        u_key_t = f"{item_id_t}_{idx_t}"
+                        u_key_t = f"{r_t['u_key']}"  # <-- ΝΕΟ
                         qty_t = int(r_t["Ποσότητα"]) if str(r_t["Ποσότητα"]).isdigit() else 1
                         for tt in st.session_state["tasks_store"].get(u_key_t, []):
                             if tt.get("task") and tt["task"] != "- Επιλογή Εργασίας -" and not tt.get("done", False):
@@ -2715,7 +2712,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                     all_users_in_proj = set()
                     for idx_u, r_u in filtered_p_items.iterrows():
                         item_id_u = str(r_u["ID"])
-                        u_key_u = f"{item_id_u}_{idx_u}"
+                        u_key_u = f"{r_u['u_key']}"  # <-- ΝΕΟ
                         for tt in st.session_state["tasks_store"].get(u_key_u, []):
                             if tt.get("task") and tt["task"] != "- Επιλογή Εργασίας -":
                                 for uu in tt.get("users", []):
@@ -2819,7 +2816,7 @@ def render_master_view(procurement_df, tasks_database, team_database, availabili
     
     for idx, row in procurement_df.iterrows():
         item_id = str(row["ID"])
-        unique_key = f"{item_id}_{idx}"
+        unique_key = f"{row['u_key']}"  # <-- ΝΕΟ
         project_name = str(row["Project"])
 
         if project_name not in active_projects_set:
