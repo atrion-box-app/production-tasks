@@ -1198,15 +1198,20 @@ def save_all_assignments_to_sheet():
                 item_to_project[str(r["ID"])] = str(r["Project"])
 
         for u_key, t_list in st.session_state.get("tasks_store", {}).items():
-            # Βρίσκουμε τη γραμμή του procurement_df με βάση το u_key
-            matched_row = st.session_state.procurement_df[st.session_state.procurement_df["u_key"] == u_key]
-            if matched_row.empty:
-                continue
+            # Το u_key ΕΙΝΑΙ το Item_ID. Δεν χρειάζεται να ψάξουμε το u_key στο dataframe.
+            item_id = strip_all_fields(str(u_key))
             
-            _r = matched_row.iloc[0]
-            item_id = strip_all_fields(str(_r["ID"]))
-            proj_name = strip_all_fields(str(_r["Project"]))
-            mat_name = strip_all_fields(str(_r["Υλικό / Προϊόν"]))
+            # Ψάχνουμε το project και το material με βάση το ID
+            proc_df = st.session_state.get("procurement_df", pd.DataFrame())
+            matched_row = proc_df[proc_df["ID"].astype(str) == item_id]
+            
+            proj_name = "-"
+            mat_name = ""
+            if not matched_row.empty:
+                _r = matched_row.iloc[0]
+                proj_name = strip_all_fields(str(_r["Project"]))
+                mat_name = strip_all_fields(str(_r["Υλικό / Προϊόν"]))
+            
             for t in t_list:
                 if t.get("task") and t.get("task") != "- Επιλογή Εργασίας -":
                     task_users = t.get("users", [])
