@@ -2564,6 +2564,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
             "Κατάσταση": "OK Shipped" if is_shipped else "ΕΝΕΡΓΟ"
         })
 
+    import pandas as pd
     dash_df = pd.DataFrame(dashboard_data)
 
     st.markdown(f"### {section_title}")
