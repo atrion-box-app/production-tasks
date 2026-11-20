@@ -6623,7 +6623,7 @@ def main():
     page = st.session_state.page
 
     if page == "📅 Τα Tasks Μου":
-        render_my_tasks(procurement_df, tasks_database, team_database, availability_database, incoming_df)
+        render_my_tasks(procurement_df, tasks_database, team_members_list, availability_dict, incoming_df)
     if page == "📦 Projects":
         render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df)
     elif page == "📦 Παραλαβές":
