@@ -2952,25 +2952,58 @@ def render_my_tasks(procurement_df, tasks_database, team_database, availability_
     c2.metric("Εκκρεμείς Ώρες", f"{round(total_hours, 1)}h")
     c3.metric("Ολοκληρωμένα", sum(1 for t in my_tasks if t["done"]))
     
+    # --- ΝΕΟ: Φίλτρα και Ομαδοποίηση ανά Project ---
+    col_f1, col_f2 = st.columns([1, 1])
+    with col_f1:
+        project_filter = st.selectbox(
+            "Φίλτρο Project:", 
+            ["Όλα τα Projects"] + sorted(list(set(t["project"] for t in my_tasks)))
+        )
+    with col_f2:
+        date_filter = st.selectbox(
+            "Φίλτρο Ημερομηνίας:", 
+            ["Όλες οι ημερομηνίες", "Σήμερα", "Αύριο", "Καθυστερημένα (Πριν το Σήμερα)"]
+        )
+
+    # Εφαρμογή φίλτρων
+    filtered_tasks = my_tasks
+    if project_filter != "Όλα τα Projects":
+        filtered_tasks = [t for t in filtered_tasks if t["project"] == project_filter]
+    
+    if date_filter == "Σήμερα":
+        filtered_tasks = [t for t in filtered_tasks if t["date"] == today]
+    elif date_filter == "Αύριο":
+        filtered_tasks = [t for t in filtered_tasks if t["date"] == tomorrow]
+    elif date_filter == "Καθυστερημένα (Πριν το Σήμερα)":
+        filtered_tasks = [t for t in filtered_tasks if t["date"] < today]
+
+    # Υπολογισμός συνολικών ωρών για τα φιλτραρισμένα tasks
+    total_hours = sum(t["hours"] for t in filtered_tasks if not t["done"])
+
     st.divider()
-    
-    any_shown = False
-    for group_name, group_tasks in groups.items():
-        if not group_tasks:
-            continue
-        any_shown = True
-        
-        group_hours = sum(t["hours"] for t in group_tasks)
-        st.markdown(f"### {group_name} ({len(group_tasks)} tasks · {round(group_hours, 1)}h)")
-        
-        for t in group_tasks:
-            _render_my_task_card(t, procurement_df, tasks_database)
-        
-        st.divider()
-    
-    if not any_shown:
-        st.success("🎉 Δεν έχεις εκκρεμείς εργασίες! Μπράβο!")
-    
+
+    if not filtered_tasks:
+        st.info("Δεν βρέθηκαν tasks με αυτά τα φίλτρα.")
+    else:
+        # Ομαδοποίηση ανά Project
+        tasks_by_project = {}
+        for t in filtered_tasks:
+            proj = t["project"]
+            if proj not in tasks_by_project:
+                tasks_by_project[proj] = []
+            tasks_by_project[proj].append(t)
+
+        # Εμφάνιση ανά Project
+        for proj_name, proj_tasks in sorted(tasks_by_project.items()):
+            proj_hours = sum(t["hours"] for t in proj_tasks if not t["done"])
+            st.markdown(f"### 📦 {proj_name} ({len(proj_tasks)} tasks · {round(proj_hours, 1)}h)")
+            
+            # Εμφάνιση των tasks του συγκεκριμένου project
+            for t in sorted(proj_tasks, key=lambda x: x["date"]):
+                _render_my_task_card(t, procurement_df, tasks_database)
+            
+            st.divider()
+
     # Save button
     if st.button("💾 Αποθήκευση Αλλαγών", type="primary", use_container_width=True, key="save_my_tasks"):
         if save_all_assignments_to_sheet():
