@@ -2780,6 +2780,7 @@ def render_my_tasks(procurement_df, tasks_database, team_database, availability_
     Ομαδοποιημένες: Καθυστερημένα / Σήμερα / Αύριο / Εβδομάδα / Αργότερα.
     """
     current_user = st.session_state.get("username", "")
+    is_admin = current_user in ["admin", "manager", "operator"]
     
     # Map login username σε clean name (π.χ. "maria@atrionartgifts.com" → "Μαρία")
     # Αν το username είναι email, ψάχνουμε το όνομα στο team_members_list
@@ -2837,8 +2838,11 @@ def render_my_tasks(procurement_df, tasks_database, team_database, availability_
                 u == current_user or u == user_display_name or u == current_user.split("@")[0]
                 for u in t_users
             )
-            if not is_mine:
+            
+            # --- ΝΕΟ: Αν δεν είναι admin και δεν είναι δικό του, προσπέρασέ το ---
+            if not is_admin and not is_mine:
                 continue
+            # ------------------------------------------------------------------
             
             auto_time = tasks_database.get(t["task"], 0.0)
             eff_qty = t.get("task_qty", qty)
@@ -2879,8 +2883,11 @@ def render_my_tasks(procurement_df, tasks_database, team_database, availability_
                 u == current_user or u == user_display_name or u == current_user.split("@")[0]
                 for u in t_users
             )
-            if not is_mine:
+            
+            # --- ΝΕΟ: Αν δεν είναι admin και δεν είναι δικό του, προσπέρασέ το ---
+            if not is_admin and not is_mine:
                 continue
+            # ------------------------------------------------------------------
             
             auto_time = tasks_database.get(t_data["task"], 0.0)
             eff_qty = t_data.get("task_qty", 1)
