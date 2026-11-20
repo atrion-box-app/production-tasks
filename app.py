@@ -6665,30 +6665,30 @@ def main():
 
     if page == "📅 Τα Tasks Μου":
         render_my_tasks(procurement_df, tasks_database, team_members_list, availability_database, incoming_df)
-    if page == "📦 Projects":
+    elif page == "📦 Projects":
         render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df)
-    elif page == "📦 Παραλαβές":
+    elif page == "📥 Παραλαβές":
         render_incoming(procurement_df, tasks_database, team_database, incoming_df)
-    elif page == "📋 Master View":
+    elif page == "🔧 Master View":
         render_master_view(procurement_df, tasks_database, team_database, availability_database, incoming_df)
-    elif page == "🗓️ Daily Plan":
+    elif page == "📅 Daily Plan":
         render_daily_plan(procurement_df, tasks_database, team_database, availability_database)
-    elif page == "👤 Technician":
+    elif page == "🛠️ Technician":
         render_technician(procurement_df, tasks_database, team_database, availability_database)
-    elif page == "📆 Projection":
+    elif page == "📋 Projection":
         render_projection(procurement_df, tasks_database, team_database, availability_database)
-    elif page == "📝 Daily Report":
+    elif page == "📊 Daily Report":
         render_daily_report(procurement_df, tasks_database, team_database, availability_database)
-    elif page == "📆 Team Calendar":
+    elif page == "📅 Team Calendar":
         render_team_calendar(procurement_df, tasks_database, team_database, availability_database, incoming_df)
     elif page == "👥 Ομάδα":
         render_team_members(team_members_list, availability_database, availability_overrides)
-    elif page == "📊 Location Dashboard":
+    elif page == "📍 Location Dashboard":
         render_location_dashboard(procurement_df, tasks_database, team_members_list, 
                                    availability_database, availability_overrides, incoming_df)
-    elif page == "🚨 Εκκρεμότητες":
+    elif page == "🔴 Εκκρεμότητες":
         render_pending_partial(procurement_df, team_members_list)
-    elif page == "📊 Database":
+    elif page == "🗄️ Database":
         render_database(tasks_database, team_database, availability_database)
     elif page == "⚙️ Settings":
         render_settings()
