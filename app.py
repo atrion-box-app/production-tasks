@@ -907,10 +907,6 @@ def load_all_data(version=0):
         st.warning(f"Could not load Availability_Weekly: {e}")
         for day in WEEKDAYS_GREEK.values():
             availability_dict[day] = {m: 6.0 for m in team_member_names}
-    except Exception as e:
-        st.warning(f"Could not load Availability_Weekly: {e}")
-        for day in WEEKDAYS_GREEK.values():
-            availability_dict[day] = {m: 6.0 for m in team_member_names}
     
     for day in WEEKDAYS_GREEK.values():
         if day not in availability_dict:
@@ -1283,9 +1279,9 @@ def save_all_assignments_to_sheet():
         rows = deduped_rows
 
         sheet.clear()
-        time.sleep(0.5)
+        time.sleep(0.2)
         sheet.update(range_name="A1", values=rows)
-        time.sleep(0.5)
+        time.sleep(0.2)
         st.session_state.last_save = datetime.now()
         
         st.session_state["_has_unsaved_changes"] = False
@@ -2568,10 +2564,7 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
             "Κατάσταση": "OK Shipped" if is_shipped else "ΕΝΕΡΓΟ"
         })
 
-    # === ΟΡΙΣΤΙΚΗ ΔΙΟΡΘΩΣΗ ===
-    import pandas as pandas_lib
-    dash_df = pandas_lib.DataFrame(locals().get('dashboard_data', []))
-    # ==========================
+    dash_df = pd.DataFrame(dashboard_data)
 
     st.markdown(f"### {section_title}")
     st.caption(f"Εμφανίζονται **{len(projects_to_show)}** projects")
@@ -2778,6 +2771,258 @@ def render_projects(procurement_df, tasks_database, team_database, availability_
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
                 use_container_width=True
             )
+
+# --- RENDER MY TASKS VIEW ---
+def render_my_tasks(procurement_df, tasks_database, team_database, availability_database, incoming_df):
+    """
+    Προσωπική σελίδα: δείχνει μόνο τις εργασίες του συνδεδεμένου χρήστη.
+    Ομαδοποιημένες: Καθυστερημένα / Σήμερα / Αύριο / Εβδομάδα / Αργότερα.
+    """
+    current_user = st.session_state.get("username", "")
+    
+    # Map login username σε clean name (π.χ. "maria@atrionartgifts.com" → "Μαρία")
+    # Αν το username είναι email, ψάχνουμε το όνομα στο team_members_list
+    user_display_name = current_user
+    team_members_list = st.session_state.get("team_members_list", [])
+    
+    # Αν είναι email, προσπαθούμε να βρούμε το αντίστοιχο όνομα
+    if "@" in current_user:
+        # Ψάχνουμε αν υπάρχει μέλος που το όνομά του ταιριάζει με το email prefix
+        email_prefix = current_user.split("@")[0].lower()
+        for m in team_members_list:
+            m_name = m.get("name", "").lower()
+            # Π.χ. "maria" ταιριάζει με "Μαρία" — δύσκολο, οπότε απλά δείχνουμε όλα
+            if email_prefix in m_name or m_name in email_prefix:
+                user_display_name = m.get("name", current_user)
+                break
+    
+    st.header(f"📅 Τα Tasks Μου — {user_display_name}")
+    st.caption("Οι εργασίες σου ομαδοποιημένες κατά προτεραιότητα")
+    
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+    week_end = today + timedelta(days=7)
+    
+    # Location filter
+    current_location = st.session_state.get("_location_filter", LOCATION_ALL)
+    if current_location != LOCATION_ALL:
+        procurement_df = procurement_df[
+            procurement_df["Project"].apply(lambda p: detect_location(p) == current_location)
+        ].copy()
+    
+    # Συλλογή όλων των tasks του χρήστη
+    my_tasks = []
+    
+    # 1. Item tasks
+    for idx, row in procurement_df.iterrows():
+        item_id = str(row["ID"])
+        unique_key = f"{item_id}_{idx}"
+        project_name = str(row["Project"])
+        material = str(row["Υλικό / Προϊόν"])
+        qty = int(row["Ποσότητα"]) if str(row["Ποσότητα"]).isdigit() else 1
+        
+        item_tasks = st.session_state.get("tasks_store", {}).get(unique_key, [])
+        for t_idx, t in enumerate(item_tasks):
+            if not t.get("task") or t["task"] == "- Επιλογή Εργασίας -":
+                continue
+            
+            t_users = t.get("users", [])
+            if not t_users:
+                t_users = [t.get("user", "")]
+            
+            # Έλεγχος αν ο χρήστης είναι σε αυτούς τους users
+            # (συμπεριλαμβάνουμε και το display name)
+            is_mine = any(
+                u == current_user or u == user_display_name or u == current_user.split("@")[0]
+                for u in t_users
+            )
+            if not is_mine:
+                continue
+            
+            auto_time = tasks_database.get(t["task"], 0.0)
+            eff_qty = t.get("task_qty", qty)
+            num_users = max(len(t_users), 1)
+            hrs = (auto_time * eff_qty / 60) / num_users
+            
+            my_tasks.append({
+                "type": "item",
+                "u_key": unique_key,
+                "t_idx": t_idx,
+                "project": project_name,
+                "material": material,
+                "task": t["task"],
+                "date": t.get("date", today),
+                "done": t.get("done", False),
+                "is_partial": t.get("is_partial", False),
+                "done_qty": t.get("done_qty", 0),
+                "total_qty": t.get("total_qty", 0),
+                "hours": hrs,
+                "proc_status": str(row["Status Procurement"]),
+            })
+    
+    # 2. Project tasks (PROJ_ prefix)
+    for p_key, p_tasks_list in st.session_state.get("tasks_store", {}).items():
+        if not p_key.startswith("PROJ_"):
+            continue
+        proj_name = p_key.replace("PROJ_", "")
+        
+        for t_data in p_tasks_list:
+            if not t_data.get("task"):
+                continue
+            
+            t_users = t_data.get("users", [])
+            if not t_users:
+                t_users = [t_data.get("user", "")]
+            
+            is_mine = any(
+                u == current_user or u == user_display_name or u == current_user.split("@")[0]
+                for u in t_users
+            )
+            if not is_mine:
+                continue
+            
+            auto_time = tasks_database.get(t_data["task"], 0.0)
+            eff_qty = t_data.get("task_qty", 1)
+            num_users = max(len(t_users), 1)
+            hrs = (auto_time * eff_qty / 60) / num_users
+            
+            my_tasks.append({
+                "type": "project",
+                "p_key": p_key,
+                "task_name": t_data["task"],
+                "project": proj_name,
+                "material": "-",
+                "task": t_data["task"],
+                "date": t_data.get("date", today),
+                "done": t_data.get("done", False),
+                "is_partial": t_data.get("is_partial", False),
+                "done_qty": t_data.get("done_qty", 0),
+                "total_qty": t_data.get("total_qty", 0),
+                "hours": hrs,
+                "proc_status": "READY",
+            })
+    
+    # Φίλτρο: μόνο εκκρεμή (αν δεν πειράξει ο χρήστης)
+    col_f1, col_f2 = st.columns([1, 3])
+    with col_f1:
+        show_done = st.checkbox("Δείξε και ολοκληρωμένα", value=False, key="mytasks_show_done")
+    with col_f2:
+        st.caption(f"Σύνολο: **{len(my_tasks)}** εργασίες")
+    
+    if not show_done:
+        my_tasks = [t for t in my_tasks if not t["done"]]
+    
+    # Ομαδοποίηση
+    groups = {
+        "🔴 Καθυστερημένα": [],
+        "🟡 Σήμερα": [],
+        "🟢 Αύριο": [],
+        "🔵 Αυτή την εβδομάδα": [],
+        "⚪ Αργότερα": [],
+    }
+    
+    for t in my_tasks:
+        t_date = t["date"]
+        if not isinstance(t_date, date):
+            t_date = today
+        if t_date < today:
+            groups["🔴 Καθυστερημένα"].append(t)
+        elif t_date == today:
+            groups["🟡 Σήμερα"].append(t)
+        elif t_date == tomorrow:
+            groups["🟢 Αύριο"].append(t)
+        elif t_date <= week_end:
+            groups["🔵 Αυτή την εβδομάδα"].append(t)
+        else:
+            groups["⚪ Αργότερα"].append(t)
+    
+    # Εμφάνιση
+    total_hours = sum(t["hours"] for t in my_tasks if not t["done"])
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Εκκρεμή Tasks", sum(1 for t in my_tasks if not t["done"]))
+    c2.metric("Εκκρεμείς Ώρες", f"{round(total_hours, 1)}h")
+    c3.metric("Ολοκληρωμένα", sum(1 for t in my_tasks if t["done"]))
+    
+    st.divider()
+    
+    any_shown = False
+    for group_name, group_tasks in groups.items():
+        if not group_tasks:
+            continue
+        any_shown = True
+        
+        group_hours = sum(t["hours"] for t in group_tasks)
+        st.markdown(f"### {group_name} ({len(group_tasks)} tasks · {round(group_hours, 1)}h)")
+        
+        for t in group_tasks:
+            _render_my_task_card(t, procurement_df, tasks_database)
+        
+        st.divider()
+    
+    if not any_shown:
+        st.success("🎉 Δεν έχεις εκκρεμείς εργασίες! Μπράβο!")
+    
+    # Save button
+    if st.button("💾 Αποθήκευση Αλλαγών", type="primary", use_container_width=True, key="save_my_tasks"):
+        if save_all_assignments_to_sheet():
+            st.success("✅ Οι αλλαγές αποθηκεύτηκαν.")
+            st.rerun()
+        else:
+            st.error("❌ Σφάλμα κατά την αποθήκευση.")
+
+
+def _render_my_task_card(t, procurement_df, tasks_database):
+    """Render μιας κάρτας task στη σελίδα 'Τα Tasks Μου'."""
+    
+    # Partial display
+    if t["is_partial"] and t["total_qty"] > 0:
+        pct = int((t["done_qty"] / t["total_qty"]) * 100)
+        progress_badge = f"🔄 {t['done_qty']}/{t['total_qty']} ({pct}%)"
+    elif t["done"]:
+        progress_badge = "✅ Ολοκληρωμένο"
+    else:
+        progress_badge = "⏳ Εκκρεμές"
+    
+    proc_warning = ""
+    if t["proc_status"] not in ["OK STOCK", "RECEIVED", "READY"]:
+        proc_warning = f'<span style="background:#fff3cd;color:#856404;padding:2px 6px;border-radius:4px;font-size:10px;">⚠️ {t["proc_status"]}</span>'
+    
+    material_display = t["material"][:40] + ("..." if len(t["material"]) > 40 else "")
+    
+    with st.container(border=True):
+        col_info, col_actions = st.columns([4, 1])
+        
+        with col_info:
+            st.markdown(
+                f'<div style="font-size:11px;color:#666;">{t["project"]}</div>'
+                f'<div style="font-size:14px;font-weight:700;margin:3px 0;">{t["task"]}</div>'
+                f'<div style="font-size:12px;color:#555;">📦 {material_display}</div>'
+                f'<div style="font-size:11px;color:#888;margin-top:4px;">'
+                f'📅 {t["date"].strftime("%d/%m/%Y")} · ⏱️ {round(t["hours"], 1)}h · {progress_badge} {proc_warning}'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        
+        with col_actions:
+            if t["type"] == "item":
+                chk_key = f"mytasks_done_{t['u_key']}_{t['t_idx']}"
+                current_done = t["done"]
+                new_done = st.checkbox("Done", value=current_done, key=chk_key)
+                if new_done != current_done:
+                    st.session_state["tasks_store"][t["u_key"]][t["t_idx"]]["done"] = new_done
+                    mark_unsaved_changes()
+                    st.rerun()
+            else:
+                chk_key = f"mytasks_proj_{t['p_key']}_{t['task_name']}"
+                current_done = t["done"]
+                new_done = st.checkbox("Done", value=current_done, key=chk_key)
+                if new_done != current_done:
+                    if t["p_key"] in st.session_state.get("project_tasks_store", {}):
+                        if t["task_name"] in st.session_state["project_tasks_store"][t["p_key"]]:
+                            st.session_state["project_tasks_store"][t["p_key"]][t["task_name"]]["done"] = new_done
+                            mark_unsaved_changes()
+                            st.rerun()
 
 # --- RENDER MASTER VIEW ---
 def render_master_view(procurement_df, tasks_database, team_database, availability_database, incoming_df):
@@ -6301,14 +6546,14 @@ def main():
         
         st.markdown("### 📋 Navigation")
         pages_list = [
-            "📦 Projects", "📦 Παραλαβές", "📋 Master View", "🗓️ Daily Plan",
-            "👤 Technician", "📆 Projection", "📝 Daily Report", "📆 Team Calendar",
-            "👥 Ομάδα", "📊 Location Dashboard", "🚨 Εκκρεμότητες", "📊 Database", "⚙️ Settings"
+            "📅 Τα Tasks Μου", "📦 Projects", "📥 Παραλαβές", "🔧 Master View", "📅 Daily Plan",
+            "🛠️ Technician", "📋 Projection", "📊 Daily Report", "📅 Team Calendar",
+            "👥 Ομάδα", "📍 Location Dashboard", "🔴 Εκκρεμότητες", "🗄️ Database", "⚙️ Settings"
         ]
-        
-        current_page = st.session_state.get("page", "📦 Projects")
+                
+        current_page = st.session_state.get("page", "📅 Τα Tasks Μου")
         if current_page not in pages_list:
-            current_page = "📦 Projects"
+            current_page = "📅 Τα Tasks Μου"
         page_index = pages_list.index(current_page)
 
         page = st.radio(
@@ -6376,7 +6621,9 @@ def main():
             logout()
 
     page = st.session_state.page
-    
+
+    if page == "📅 Τα Tasks Μου":
+        render_my_tasks(procurement_df, tasks_database, team_database, availability_dict, incoming_df)
     if page == "📦 Projects":
         render_projects(procurement_df, tasks_database, team_database, availability_database, incoming_df)
     elif page == "📦 Παραλαβές":
